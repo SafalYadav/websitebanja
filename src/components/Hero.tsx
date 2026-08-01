@@ -13,7 +13,10 @@ import BrowserPreview from "./BrowserPreview";
 
 export default function Hero() {
   return (
-    <section className="relative overflow-hidden bg-black pt-36 pb-24">
+    <section
+  id="home"
+  className="relative overflow-hidden bg-black pt-36 pb-24"
+>
 
       {/* Background Blur */}
 

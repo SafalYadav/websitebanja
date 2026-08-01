@@ -10,8 +10,10 @@ import {
 
 export default function Footer() {
   return (
-    <footer className="relative overflow-hidden border-t border-white/10 bg-black">
-
+    <footer
+  id="footer"
+  className="relative overflow-hidden border-t border-white/10 bg-black"
+>
       <div className="absolute left-1/2 top-0 h-[350px] w-[350px] -translate-x-1/2 rounded-full bg-violet-600/10 blur-[120px]" />
 
       <div className="relative mx-auto max-w-7xl px-6 py-20">

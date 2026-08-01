@@ -34,7 +34,7 @@ export default function Navbar() {
           </a>
 
           <a
-            href="#"
+            href="features"
             className="text-sm font-medium text-zinc-400 transition hover:text-white"
           >
             Templates
@@ -48,7 +48,7 @@ export default function Navbar() {
           </a>
 
           <a
-            href="#"
+            href="pricing"
             className="text-sm font-medium text-zinc-400 transition hover:text-white"
           >
             FAQ
