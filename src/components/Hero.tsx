@@ -1,6 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
+import { useRouter } from "next/navigation";
 import {
   ArrowRight,
   Play,
@@ -12,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import BrowserPreview from "./BrowserPreview";
 
 export default function Hero() {
+  const router = useRouter();
   return (
     <section
   id="home"
@@ -148,16 +150,14 @@ export default function Hero() {
               className="mt-10 flex flex-wrap gap-5"
             >
 
-              <Button
-                size="lg"
-                className="rounded-2xl bg-gradient-to-r from-blue-600 via-violet-600 to-purple-600 px-8 py-7 text-lg shadow-xl transition hover:scale-105"
-              >
-
-                🚀 Start Building
-
-                <ArrowRight className="ml-2 h-5 w-5" />
-
-              </Button>
+            <Button
+  size="lg"
+  onClick={() => router.push("/builder")}
+  className="rounded-2xl bg-gradient-to-r from-blue-600 via-violet-600 to-purple-600 px-8 py-7 text-lg shadow-xl transition hover:scale-105"
+>
+  🚀 Start Building
+  <ArrowRight className="ml-2 h-5 w-5" />
+</Button>
 
               <Button
                 size="lg"

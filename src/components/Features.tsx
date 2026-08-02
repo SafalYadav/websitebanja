@@ -1,6 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
+import { useRouter } from "next/navigation";
 import {
   Sparkles,
   Wand2,
@@ -44,6 +45,7 @@ const features = [
 ];
 
 export default function Features() {
+  const router = useRouter();
   return (
  <section
   id="features"
@@ -206,9 +208,12 @@ export default function Features() {
 
               <div className="mt-10 flex flex-wrap items-center justify-center gap-5">
 
-                <button className="rounded-2xl bg-gradient-to-r from-blue-600 via-violet-600 to-purple-600 px-8 py-4 text-lg font-semibold text-white shadow-xl transition hover:scale-105">
-                  🚀 Start Building
-                </button>
+             <button
+  onClick={() => router.push("/builder")}
+  className="rounded-2xl bg-gradient-to-r from-blue-600 via-violet-600 to-purple-600 px-8 py-4 text-lg font-semibold text-white shadow-xl transition hover:scale-105"
+>
+  🚀 Start Building
+</button>
 
                 <button className="rounded-2xl border border-white/10 bg-white/5 px-8 py-4 text-lg font-semibold text-white backdrop-blur-xl transition hover:bg-white/10">
                   View Templates

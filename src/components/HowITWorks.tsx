@@ -1,6 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
+import { useRouter } from "next/navigation";
 import {
   Sparkles,
   PencilLine,
@@ -41,6 +42,7 @@ const steps = [
 ];
 
 export default function HowItWorks() {
+  const router = useRouter();
   return (
     <section
   id="how-it-works"
@@ -175,9 +177,12 @@ export default function HowItWorks() {
             No coding. No hassle.
           </p>
 
-          <button className="mt-10 rounded-2xl bg-gradient-to-r from-blue-600 via-violet-600 to-purple-600 px-8 py-4 font-semibold text-white transition hover:scale-105">
-            🚀 Start Building
-          </button>
+         <button
+  onClick={() => router.push("/builder")}
+  className="mt-10 rounded-2xl bg-gradient-to-r from-blue-600 via-violet-600 to-purple-600 px-8 py-4 font-semibold text-white transition hover:scale-105"
+>
+  🚀 Start Building
+</button>
         </motion.div>
 
       </div>

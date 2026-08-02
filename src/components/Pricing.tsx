@@ -2,6 +2,7 @@
 
 import { motion } from "framer-motion";
 import { Check, Sparkles } from "lucide-react";
+import { useRouter } from "next/navigation";
 
 const plans = [
   {
@@ -46,6 +47,7 @@ const plans = [
 ];
 
 export default function Pricing() {
+  const router = useRouter();
   return (
     <section
   id="pricing"
@@ -157,16 +159,17 @@ export default function Pricing() {
               </div>
 
               <button
-                className={`mt-10 w-full rounded-2xl py-4 font-semibold transition ${
-                  plan.featured
-                    ? "bg-gradient-to-r from-blue-600 via-violet-600 to-purple-600 text-white hover:scale-[1.02]"
-                    : "border border-white/10 bg-white/5 text-white hover:bg-white/10"
-                }`}
-              >
-                {plan.featured
-                  ? "🚀 Get Started"
-                  : "Choose Plan"}
-              </button>
+  onClick={() => router.push("/builder")}
+  className={`mt-10 w-full rounded-2xl py-4 font-semibold transition ${
+    plan.featured
+      ? "bg-gradient-to-r from-blue-600 via-violet-600 to-purple-600 text-white hover:scale-[1.02]"
+      : "border border-white/10 bg-white/5 text-white hover:bg-white/10"
+  }`}
+>
+  {plan.featured
+    ? "🚀 Get Started"
+    : "Choose Plan"}
+</button>
 
             </motion.div>
           ))}
@@ -196,9 +199,12 @@ export default function Pricing() {
                 need more powerful features.
               </p>
 
-              <button className="mt-10 rounded-2xl bg-gradient-to-r from-blue-600 via-violet-600 to-purple-600 px-8 py-4 font-semibold text-white shadow-xl transition hover:scale-105">
-                🚀 Start Building Free
-              </button>
+             <button
+  onClick={() => router.push("/builder")}
+  className="mt-10 rounded-2xl bg-gradient-to-r from-blue-600 via-violet-600 to-purple-600 px-8 py-4 font-semibold text-white shadow-xl transition hover:scale-105"
+>
+  🚀 Start Building Free
+</button>
 
             </div>
 
