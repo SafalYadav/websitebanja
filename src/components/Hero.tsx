@@ -152,7 +152,7 @@ export default function Hero() {
 
             <Button
   size="lg"
-  onClick={() => router.push("/builder")}
+  onClick={() => router.push("/dashboard")}
   className="rounded-2xl bg-gradient-to-r from-blue-600 via-violet-600 to-purple-600 px-8 py-7 text-lg shadow-xl transition hover:scale-105"
 >
   🚀 Start Building

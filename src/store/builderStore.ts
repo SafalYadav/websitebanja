@@ -1,5 +1,7 @@
 import { create } from "zustand";
 
+import type { Project } from "@/types/project";
+
 interface BuilderState {
   // Project
   projectId: string;
@@ -25,6 +27,7 @@ interface BuilderState {
 
   // Project Actions
   setProjectId: (value: string) => void;
+  hydrateFromProject: (project: Project) => void;
 
   // Business Actions
   setBusinessName: (value: string) => void;
@@ -71,6 +74,24 @@ export const useBuilderStore = create<BuilderState>((set) => ({
 
   // Project Actions
   setProjectId: (value) => set({ projectId: value }),
+
+  hydrateFromProject: (project) =>
+    set({
+      projectId: project.id,
+      businessName: project.business_name ?? "",
+      category: project.category ?? "",
+      description: project.description ?? "",
+      targetAudience: project.target_audience ?? "",
+      style: project.style ?? "",
+      primaryColor: project.primary_color ?? "",
+      secondaryColor: project.secondary_color ?? "",
+      phone: project.phone ?? "",
+      email: project.email ?? "",
+      website: project.website ?? "",
+      instagram: project.instagram ?? "",
+      facebook: project.facebook ?? "",
+      address: project.address ?? "",
+    }),
 
   // Business Actions
   setBusinessName: (value) => set({ businessName: value }),

@@ -209,7 +209,7 @@ export default function Features() {
               <div className="mt-10 flex flex-wrap items-center justify-center gap-5">
 
              <button
-  onClick={() => router.push("/builder")}
+  onClick={() => router.push("/dashboard")}
   className="rounded-2xl bg-gradient-to-r from-blue-600 via-violet-600 to-purple-600 px-8 py-4 text-lg font-semibold text-white shadow-xl transition hover:scale-105"
 >
   🚀 Start Building

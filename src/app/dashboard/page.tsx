@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { signOut } from "@/lib/auth";
+import { editorRoute } from "@/lib/editorRoutes";
 import { createProject } from "@/lib/projects";
 
 export default function Dashboard() {
@@ -35,7 +36,7 @@ export default function Dashboard() {
         return;
       }
 
-      router.push(`/editor/${data.id}`);
+      router.push(editorRoute(data.id));
     } catch (err) {
       console.error(err);
       alert("Something went wrong");

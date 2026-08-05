@@ -159,7 +159,7 @@ export default function Pricing() {
               </div>
 
               <button
-  onClick={() => router.push("/builder")}
+  onClick={() => router.push("/dashboard")}
   className={`mt-10 w-full rounded-2xl py-4 font-semibold transition ${
     plan.featured
       ? "bg-gradient-to-r from-blue-600 via-violet-600 to-purple-600 text-white hover:scale-[1.02]"
@@ -200,7 +200,7 @@ export default function Pricing() {
               </p>
 
              <button
-  onClick={() => router.push("/builder")}
+  onClick={() => router.push("/dashboard")}
   className="mt-10 rounded-2xl bg-gradient-to-r from-blue-600 via-violet-600 to-purple-600 px-8 py-4 font-semibold text-white shadow-xl transition hover:scale-105"
 >
   🚀 Start Building Free
