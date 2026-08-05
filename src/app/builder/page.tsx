@@ -1,5 +1,7 @@
 "use client";
 
+import { useRouter } from "next/navigation";
+
 import BuilderLayout from "@/components/builder/BuilderLayout";
 import ProgressBar from "@/components/builder/ProgressBar";
 import StepNavigation from "@/components/builder/StepNavigation";
@@ -7,7 +9,63 @@ import InputField from "@/components/builder/InputField";
 import SelectField from "@/components/builder/SelectField";
 import TextAreaField from "@/components/builder/TextAreaField";
 
+import { useBuilderStore } from "@/store/builderStore";
+import { updateProject } from "@/lib/projects";
+
 export default function BuilderPage() {
+  const router = useRouter();
+
+  const {
+    projectId,
+
+    businessName,
+    category,
+    description,
+    targetAudience,
+
+    setBusinessName,
+    setCategory,
+    setDescription,
+    setTargetAudience,
+  } = useBuilderStore();
+
+  async function handleNext() {
+    console.log("========== BUILDER DEBUG ==========");
+    console.log("Project ID:", projectId);
+
+    console.log({
+      businessName,
+      category,
+      description,
+      targetAudience,
+    });
+
+    if (!projectId) {
+      alert("❌ Project not found");
+      return;
+    }
+
+    const { data, error } = await updateProject(projectId, {
+      business_name: businessName,
+      category,
+      description,
+      target_audience: targetAudience,
+    });
+
+    console.log("Supabase Response:", data);
+    console.log("Supabase Error:", error);
+
+    if (error) {
+      alert(error.message);
+      return;
+    }
+
+    console.log("✅ Data Saved Successfully");
+
+    alert("✅ Data Saved Successfully");
+return;
+  }
+
   return (
     <BuilderLayout
       title="Business Details 🚀"
@@ -16,14 +74,17 @@ export default function BuilderPage() {
       <ProgressBar step={0} />
 
       <div className="space-y-8">
-
         <InputField
           label="Business Name"
           placeholder="e.g. Sharma Restaurant"
+          value={businessName}
+          onChange={(e) => setBusinessName(e.target.value)}
         />
 
         <SelectField
           label="Business Category"
+          value={category}
+          onChange={(e) => setCategory(e.target.value)}
           options={[
             "Restaurant",
             "Cafe",
@@ -40,20 +101,21 @@ export default function BuilderPage() {
         />
 
         <TextAreaField
-  label="Describe Your Business"
-  placeholder="Describe your business..."
-/>
+          label="Describe Your Business"
+          placeholder="Describe your business..."
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+        />
 
         <InputField
           label="Target Audience"
           placeholder="Students, Families, Professionals..."
+          value={targetAudience}
+          onChange={(e) => setTargetAudience(e.target.value)}
         />
-
       </div>
 
-      <StepNavigation
-        next="/builder/branding"
-      />
+      <StepNavigation onNext={handleNext} />
     </BuilderLayout>
   );
 }

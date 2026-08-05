@@ -3,8 +3,20 @@
 import BuilderLayout from "@/components/builder/BuilderLayout";
 import ProgressBar from "@/components/builder/ProgressBar";
 import StepNavigation from "@/components/builder/StepNavigation";
+import { useBuilderStore } from "@/store/builderStore";
 
 export default function ReviewPage() {
+  const {
+    businessName,
+    category,
+    style,
+    primaryColor,
+    secondaryColor,
+    phone,
+    email,
+    address,
+  } = useBuilderStore();
+
   return (
     <BuilderLayout
       title="Review & Generate 🚀"
@@ -15,48 +27,65 @@ export default function ReviewPage() {
       <div className="space-y-6">
 
         <div className="rounded-2xl border border-white/10 bg-black/30 p-6">
-          <h2 className="mb-4 text-xl font-semibold">
+
+          <h2 className="mb-6 text-xl font-semibold">
             Business Summary
           </h2>
 
-          <div className="space-y-3 text-zinc-300">
+          <div className="space-y-4 text-zinc-300">
 
             <div className="flex justify-between">
               <span>Business</span>
-              <span>Sharma Restaurant</span>
+              <span>{businessName || "Not Provided"}</span>
             </div>
 
             <div className="flex justify-between">
               <span>Category</span>
-              <span>Restaurant</span>
+              <span>{category || "Not Selected"}</span>
             </div>
 
             <div className="flex justify-between">
               <span>Style</span>
-              <span>Luxury</span>
+              <span>{style || "Not Selected"}</span>
             </div>
 
             <div className="flex justify-between">
               <span>Primary Color</span>
-              <span>Blue</span>
+              <span>{primaryColor || "Not Selected"}</span>
             </div>
 
             <div className="flex justify-between">
-              <span>Content Sections</span>
-              <span>9 Selected</span>
+              <span>Secondary Color</span>
+              <span>{secondaryColor || "Not Selected"}</span>
+            </div>
+
+            <div className="flex justify-between">
+              <span>Phone</span>
+              <span>{phone || "Not Provided"}</span>
+            </div>
+
+            <div className="flex justify-between">
+              <span>Email</span>
+              <span>{email || "Not Provided"}</span>
+            </div>
+
+            <div className="flex justify-between">
+              <span>Address</span>
+              <span>{address || "Not Provided"}</span>
             </div>
 
             <div className="flex justify-between">
               <span>Logo</span>
-              <span>✅ Uploaded</span>
+              <span>Coming Soon 🚧</span>
             </div>
 
             <div className="flex justify-between">
               <span>Images</span>
-              <span>✅ Uploaded</span>
+              <span>Coming Soon 🚧</span>
             </div>
 
           </div>
+
         </div>
 
       </div>

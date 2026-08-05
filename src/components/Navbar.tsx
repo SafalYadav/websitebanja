@@ -1,13 +1,14 @@
 "use client";
 
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { getLenis } from "@/components/SmoothScroll";
 import { Menu, X } from "lucide-react";
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { supabase } from "@/lib/supabase";
+import { signOut } from "@/lib/auth";
 
 const scrollTo = (target: string) => {
-  
   getLenis()?.scrollTo(target, {
     duration: 0.45,
     offset: -90,
@@ -17,13 +18,40 @@ const scrollTo = (target: string) => {
 
 export default function Navbar() {
   const router = useRouter();
-    const [isOpen, setIsOpen] = useState(false);
+
+  const [isOpen, setIsOpen] = useState(false);
+  const [loggedIn, setLoggedIn] = useState(false);
+
+  useEffect(() => {
+    async function checkSession() {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      setLoggedIn(!!session);
+    }
+
+    checkSession();
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_, session) => {
+      setLoggedIn(!!session);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  async function handleLogout() {
+    await signOut();
+    setLoggedIn(false);
+    router.push("/");
+  }
+
   return (
     <header className="fixed top-0 left-0 z-50 w-full border-b border-white/10 bg-black/60 backdrop-blur-xl">
       <div className="mx-auto flex h-20 max-w-7xl items-center justify-between px-6">
-
         {/* Logo */}
-
         <button
           onClick={() => scrollTo("#home")}
           className="flex cursor-pointer items-center gap-3"
@@ -43,10 +71,8 @@ export default function Navbar() {
           </div>
         </button>
 
-        {/* Navigation */}
-
+        {/* Desktop Navigation */}
         <nav className="hidden items-center gap-10 md:flex">
-
           <button
             onClick={() => scrollTo("#features")}
             className="text-sm font-medium text-zinc-400 transition hover:text-white"
@@ -74,94 +100,148 @@ export default function Navbar() {
           >
             FAQ
           </button>
-
         </nav>
 
         {/* Desktop Buttons */}
+        <div className="hidden items-center gap-3 md:flex">
+          {loggedIn ? (
+            <>
+              <Button
+                variant="ghost"
+                onClick={() => router.push("/dashboard")}
+                className="text-white hover:bg-white/10"
+              >
+                Dashboard
+              </Button>
 
-<div className="hidden items-center gap-3 md:flex">
-  <Button
-    variant="ghost"
-    className="text-white hover:bg-white/10"
-  >
-    Login
-  </Button>
+              <Button
+                onClick={handleLogout}
+                className="rounded-xl bg-red-600 hover:bg-red-700"
+              >
+                Logout
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button
+                variant="ghost"
+                onClick={() => router.push("/login")}
+                className="text-white hover:bg-white/10"
+              >
+                Login
+              </Button>
 
-  <Button
-  onClick={() => router.push("/builder")}
-  className="rounded-xl bg-gradient-to-r from-blue-600 via-violet-600 to-purple-600 px-6 shadow-lg transition hover:scale-105"
->
-  Start Free
-</Button>
-</div>
+              <Button
+                onClick={() => router.push("/signup")}
+                className="rounded-xl bg-gradient-to-r from-blue-600 via-violet-600 to-purple-600 px-6 shadow-lg transition hover:scale-105"
+              >
+                Start Free
+              </Button>
+            </>
+          )}
+        </div>
 
-{/* Mobile Menu Button */}
-
-<button
-  onClick={() => setIsOpen(!isOpen)}
-  className="rounded-xl p-2 text-white transition hover:bg-white/10 md:hidden"
->
-  {isOpen ? <X size={26} /> : <Menu size={26} />}
-</button>
-
+        {/* Mobile Menu */}
+        <button
+          onClick={() => setIsOpen(!isOpen)}
+          className="rounded-xl p-2 text-white transition hover:bg-white/10 md:hidden"
+        >
+          {isOpen ? <X size={26} /> : <Menu size={26} />}
+        </button>
       </div>
+
       {isOpen && (
-  <div className="absolute left-0 top-20 w-full border-b border-white/10 bg-black/95 backdrop-blur-2xl md:hidden">
-    <div className="flex flex-col gap-6 p-6">
+        <div className="absolute left-0 top-20 w-full border-b border-white/10 bg-black/95 backdrop-blur-2xl md:hidden">
+          <div className="flex flex-col gap-6 p-6">
+            <button
+              onClick={() => {
+                scrollTo("#features");
+                setIsOpen(false);
+              }}
+              className="text-left text-lg text-white"
+            >
+              Features
+            </button>
 
-      <button
-        onClick={() => {
-          scrollTo("#features");
-          setIsOpen(false);
-        }}
-        className="text-left text-lg text-white"
-      >
-        Features
-      </button>
+            <button
+              onClick={() => {
+                scrollTo("#templates");
+                setIsOpen(false);
+              }}
+              className="text-left text-lg text-white"
+            >
+              Templates
+            </button>
 
-      <button
-        onClick={() => {
-          scrollTo("#templates");
-          setIsOpen(false);
-        }}
-        className="text-left text-lg text-white"
-      >
-        Templates
-      </button>
+            <button
+              onClick={() => {
+                scrollTo("#pricing");
+                setIsOpen(false);
+              }}
+              className="text-left text-lg text-white"
+            >
+              Pricing
+            </button>
 
-      <button
-        onClick={() => {
-          scrollTo("#pricing");
-          setIsOpen(false);
-        }}
-        className="text-left text-lg text-white"
-      >
-        Pricing
-      </button>
+            <button
+              onClick={() => {
+                scrollTo("#faq");
+                setIsOpen(false);
+              }}
+              className="text-left text-lg text-white"
+            >
+              FAQ
+            </button>
 
-      <button
-        onClick={() => {
-          scrollTo("#faq");
-          setIsOpen(false);
-        }}
-        className="text-left text-lg text-white"
-      >
-        FAQ
-      </button>
+            {loggedIn ? (
+              <>
+                <Button
+                  onClick={() => {
+                    router.push("/dashboard");
+                    setIsOpen(false);
+                  }}
+                  className="w-full"
+                >
+                  Dashboard
+                </Button>
 
-      <Button
-        onClick={() => {
-          scrollTo("#pricing");
-          setIsOpen(false);
-        }}
-        className="w-full rounded-xl bg-gradient-to-r from-blue-600 via-violet-600 to-purple-600"
-      >
-        Start Free
-      </Button>
+                <Button
+                  onClick={async () => {
+                    await handleLogout();
+                    setIsOpen(false);
+                  }}
+                  className="w-full bg-red-600 hover:bg-red-700"
+                >
+                  Logout
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    router.push("/login");
+                    setIsOpen(false);
+                  }}
+                  className="w-full"
+                >
+                  Login
+                </Button>
 
-    </div>
-  </div>
-)}
+                <Button
+                  onClick={() => {
+                    router.push("/signup");
+                    setIsOpen(false);
+                  }}
+                  className="w-full rounded-xl bg-gradient-to-r from-blue-600 via-violet-600 to-purple-600"
+                >
+                  Start Free
+                </Button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </header>
   );
 }
