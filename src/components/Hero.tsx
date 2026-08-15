@@ -1,250 +1,125 @@
 "use client";
 
-import { motion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
 import { useRouter } from "next/navigation";
-import {
-  ArrowRight,
-  Play,
-  Sparkles,
-  Star,
-} from "lucide-react";
-
-import { Button } from "@/components/ui/button";
-import BrowserPreview from "./BrowserPreview";
+import { dashboardRoute } from "@/lib/editorRoutes";
+import { ArrowRight, Sparkles, Zap, ShieldCheck, Globe } from "lucide-react";
+import InteractiveDemo from "@/components/landing/InteractiveDemo";
 
 export default function Hero() {
   const router = useRouter();
+  const shouldReduceMotion = useReducedMotion();
+
+  const scrollTo = (target: string) => {
+    const el = document.querySelector(target);
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  };
+
   return (
-    <section
-  id="home"
-  className="relative overflow-hidden bg-black pt-36 pb-24"
->
-
-      {/* Background Blur */}
-
-      <div className="absolute left-1/2 top-40 h-[550px] w-[550px] -translate-x-1/2 rounded-full bg-violet-700/20 blur-[150px]" />
-
-      <div className="absolute right-20 top-32 h-80 w-80 rounded-full bg-blue-500/10 blur-[140px]" />
-
-      <div className="absolute left-20 bottom-10 h-72 w-72 rounded-full bg-cyan-500/10 blur-[120px]" />
+    <section id="home" className="relative pt-32 pb-20 sm:pt-40 sm:pb-28 overflow-hidden">
+      {/* Ambient background glows */}
+      <div className="pointer-events-none absolute top-1/4 left-1/2 -translate-x-1/2 h-[450px] w-[650px] rounded-full bg-violet-600/10 blur-[140px] dark:bg-violet-600/15" />
+      <div className="pointer-events-none absolute top-20 right-10 h-72 w-72 rounded-full bg-blue-500/10 blur-[120px]" />
+      <div className="pointer-events-none absolute top-40 left-10 h-72 w-72 rounded-full bg-cyan-500/10 blur-[120px]" />
 
       <div className="relative mx-auto max-w-7xl px-6">
-
-        <div className="grid items-center gap-20 lg:grid-cols-2">
-
-          {/* LEFT */}
-
+        {/* Main Hero Header */}
+        <div className="text-center max-w-3xl mx-auto space-y-6">
+          {/* Badge */}
           <motion.div
-            initial={{
-              opacity: 0,
-              y: 40,
-            }}
-            animate={{
-              opacity: 1,
-              y: 0,
-            }}
-            transition={{
-              duration: 0.7,
-            }}
+            initial={shouldReduceMotion ? { opacity: 1 } : { opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3 }}
+            className="inline-flex items-center gap-2 rounded-full border border-violet-200 bg-violet-50/80 px-4 py-1.5 backdrop-blur-md dark:border-violet-800/40 dark:bg-violet-950/40"
           >
-
-            {/* Badge */}
-
-            <motion.div
-              initial={{
-                opacity: 0,
-              }}
-              animate={{
-                opacity: 1,
-              }}
-              transition={{
-                delay: 0.2,
-              }}
-              className="mb-8 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-5 py-2 backdrop-blur-xl"
-            >
-
-              <Sparkles
-                size={16}
-                className="text-violet-400"
-              />
-
-              <span className="text-sm text-zinc-300">
-                AI Powered Website Builder
-              </span>
-
-            </motion.div>
-
-            {/* Heading */}
-
-            <motion.h1
-              initial={{
-                opacity: 0,
-                y: 20,
-              }}
-              animate={{
-                opacity: 1,
-                y: 0,
-              }}
-              transition={{
-                delay: 0.3,
-              }}
-              className="text-6xl font-black leading-none tracking-tight text-white md:text-7xl"
-            >
-
-              Build Your
-
-              <br />
-
-              Business
-
-              <br />
-
-              Website
-
-              <br />
-
-              with{" "}
-
-              <span className="bg-gradient-to-r from-violet-400 via-blue-400 to-cyan-300 bg-clip-text text-transparent">
-                AI
-              </span>
-
-            </motion.h1>
-
-            {/* Description */}
-
-            <motion.p
-              initial={{
-                opacity: 0,
-              }}
-              animate={{
-                opacity: 1,
-              }}
-              transition={{
-                delay: 0.5,
-              }}
-              className="mt-8 max-w-xl text-xl leading-9 text-zinc-400"
-            >
-              Create stunning business websites in minutes.
-
-              No coding.
-
-              No templates.
-
-              Just describe your business and let AI build
-              everything for you.
-            </motion.p>
-
-            {/* Buttons */}
-
-            <motion.div
-              initial={{
-                opacity: 0,
-              }}
-              animate={{
-                opacity: 1,
-              }}
-              transition={{
-                delay: 0.7,
-              }}
-              className="mt-10 flex flex-wrap gap-5"
-            >
-
-            <Button
-  size="lg"
-  onClick={() => router.push("/dashboard")}
-  className="rounded-2xl bg-gradient-to-r from-blue-600 via-violet-600 to-purple-600 px-8 py-7 text-lg shadow-xl transition hover:scale-105"
->
-  🚀 Start Building
-  <ArrowRight className="ml-2 h-5 w-5" />
-</Button>
-
-              <Button
-                size="lg"
-                variant="outline"
-                className="rounded-2xl border-white/10 bg-white/5 px-8 py-7 text-lg text-white backdrop-blur-xl hover:bg-white/10"
-              >
-
-                <Play
-                  size={18}
-                  className="mr-2"
-                />
-
-                Watch Demo
-
-              </Button>
-
-            </motion.div>            {/* Trust */}
-
-            <motion.div
-              initial={{
-                opacity: 0,
-              }}
-              animate={{
-                opacity: 1,
-              }}
-              transition={{
-                delay: 0.9,
-              }}
-              className="mt-10 flex items-center gap-4"
-            >
-
-              <div className="flex">
-
-                {[1, 2, 3, 4, 5].map((item) => (
-                  <Star
-                    key={item}
-                    size={18}
-                    className="fill-yellow-400 text-yellow-400"
-                  />
-                ))}
-
-              </div>
-
-              <p className="text-sm text-zinc-500">
-                Trusted by businesses worldwide
-              </p>
-
-            </motion.div>
-
+            <Sparkles className="h-4 w-4 text-violet-600 dark:text-violet-400" />
+            <span className="text-xs font-semibold tracking-wide text-violet-700 dark:text-violet-300">
+              Next-Gen Autonomous AI Website Builder
+            </span>
           </motion.div>
 
-          {/* RIGHT */}
-
-          <motion.div
-            initial={{
-              opacity: 0,
-              x: 60,
-            }}
-            animate={{
-              opacity: 1,
-              x: 0,
-            }}
-            transition={{
-              duration: 0.8,
-              delay: 0.4,
-            }}
-            className="relative"
+          {/* Headline */}
+          <motion.h1
+            initial={shouldReduceMotion ? { opacity: 1 } : { opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.35, delay: 0.1 }}
+            className="text-4xl sm:text-6xl md:text-7xl font-black tracking-tight text-zinc-900 dark:text-white leading-[1.08]"
           >
+            Describe your business.{" "}
+            <span className="bg-gradient-to-r from-blue-600 via-violet-600 to-indigo-600 bg-clip-text text-transparent">
+              AI builds your website.
+            </span>
+          </motion.h1>
 
-            {/* Glow */}
+          {/* Subtitle */}
+          <motion.p
+            initial={shouldReduceMotion ? { opacity: 1 } : { opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.35, delay: 0.2 }}
+            className="text-base sm:text-xl text-zinc-600 dark:text-zinc-400 leading-relaxed max-w-2xl mx-auto"
+          >
+            Generate complete, multi-section business websites in 60 seconds with bespoke copywriting, palettes, and live visual studio editing. Zero coding or templates required.
+          </motion.p>
 
-            <div className="absolute inset-0 rounded-[40px] bg-gradient-to-r from-violet-500/20 via-blue-500/20 to-cyan-500/20 blur-3xl" />
+          {/* Action CTAs */}
+          <motion.div
+            initial={shouldReduceMotion ? { opacity: 1 } : { opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.35, delay: 0.3 }}
+            className="flex flex-wrap items-center justify-center gap-4 pt-2"
+          >
+            <button
+              type="button"
+              onClick={() => router.push(dashboardRoute())}
+              className="flex items-center gap-2.5 rounded-2xl bg-gradient-to-r from-blue-600 via-violet-600 to-indigo-600 px-8 py-4 text-base font-bold text-white shadow-xl shadow-violet-600/25 transition hover:opacity-95 hover:scale-[1.02] active:scale-[0.98]"
+            >
+              <span>Create Website Free</span>
+              <ArrowRight className="h-5 w-5" />
+            </button>
 
-            <div className="relative">
-              <BrowserPreview />
+            <button
+              type="button"
+              onClick={() => scrollTo("#how-it-works")}
+              className="flex items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-7 py-4 text-base font-semibold text-zinc-800 shadow-sm transition hover:bg-zinc-100 dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+            >
+              See How It Works
+            </button>
+          </motion.div>
+
+          {/* Key Value Points */}
+          <motion.div
+            initial={shouldReduceMotion ? { opacity: 1 } : { opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.4, delay: 0.4 }}
+            className="flex flex-wrap items-center justify-center gap-6 pt-4 text-xs font-medium text-zinc-500 dark:text-zinc-400"
+          >
+            <div className="flex items-center gap-2">
+              <Zap className="h-4 w-4 text-amber-500" />
+              <span>Instant 60s Generation</span>
             </div>
-
+            <div className="flex items-center gap-2">
+              <Globe className="h-4 w-4 text-blue-500" />
+              <span>1-Click Global Publishing</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <ShieldCheck className="h-4 w-4 text-emerald-500" />
+              <span>No Credit Card Required</span>
+            </div>
           </motion.div>
-
         </div>
 
+        {/* Live Interactive Product Demo Showcase */}
+        <motion.div
+          initial={shouldReduceMotion ? { opacity: 1 } : { opacity: 0, y: 30 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.35 }}
+          className="mt-14"
+        >
+          <InteractiveDemo />
+        </motion.div>
       </div>
-
-      {/* Bottom Fade */}
-
-      <div className="pointer-events-none absolute bottom-0 left-0 h-40 w-full bg-gradient-to-b from-transparent to-black" />
-
     </section>
   );
 }

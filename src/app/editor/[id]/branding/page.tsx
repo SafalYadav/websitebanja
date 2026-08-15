@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 
 import BuilderLayout from "@/components/builder/BuilderLayout";
@@ -10,7 +11,7 @@ import SelectField from "@/components/builder/SelectField";
 import UploadField from "@/components/builder/UploadField";
 
 import { editorRoute } from "@/lib/editorRoutes";
-import { updateProject } from "@/lib/projects";
+import { useProjectAutosave } from "@/hooks/useProjectAutosave";
 import { useBuilderStore } from "@/store/builderStore";
 
 export default function BrandingPage() {
@@ -26,38 +27,63 @@ export default function BrandingPage() {
     setSecondaryColor,
   } = useBuilderStore();
 
+  const [styleError, setStyleError] = useState<string | null>(null);
+  const [primaryColorError, setPrimaryColorError] = useState<string | null>(null);
+  const [secondaryColorError, setSecondaryColorError] = useState<string | null>(null);
+
+  const { saveNow } = useProjectAutosave(projectId, { style, primary_color: primaryColor, secondary_color: secondaryColor });
+
   async function handleNext() {
-    if (!projectId) {
-      alert("Project not found");
-      return;
+    let hasError = false;
+
+    if (!style.trim()) {
+      setStyleError("Please select a website design style.");
+      hasError = true;
+    } else {
+      setStyleError(null);
     }
 
-    const { error } = await updateProject(projectId, {
-      style,
-      primary_color: primaryColor,
-      secondary_color: secondaryColor,
-    });
-
-    if (error) {
-      alert(error.message);
-      return;
+    if (!primaryColor.trim()) {
+      setPrimaryColorError("Primary brand color is required.");
+      hasError = true;
+    } else {
+      setPrimaryColorError(null);
     }
 
-    router.push(editorRoute(projectId, "content"));
+    if (!secondaryColor.trim()) {
+      setSecondaryColorError("Secondary brand color is required.");
+      hasError = true;
+    } else {
+      setSecondaryColorError(null);
+    }
+
+    if (hasError) return;
+
+    try {
+      await saveNow();
+      router.push(editorRoute(projectId, "content"));
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Unable to save project.");
+    }
   }
 
   return (
     <BuilderLayout
-      title="Branding 🎨"
-      description="Customize your website branding."
+      title="Brand & Visual Identity"
+      description="Choose your aesthetic tone and brand color accents."
     >
       <ProgressBar step={1} />
 
-      <div className="space-y-8">
+      <div className="space-y-6">
         <SelectField
-          label="Website Style"
+          label="Visual Aesthetic Style"
+          required
           value={style}
-          onChange={(e) => setStyle(e.target.value)}
+          error={styleError ?? undefined}
+          onChange={(e) => {
+            setStyle(e.target.value);
+            if (styleError) setStyleError(null);
+          }}
           options={[
             "Modern",
             "Minimal",
@@ -68,23 +94,43 @@ export default function BrandingPage() {
           ]}
         />
 
-        <InputField
-          label="Primary Brand Color"
-          placeholder="e.g. Blue"
-          value={primaryColor}
-          onChange={(e) => setPrimaryColor(e.target.value)}
-        />
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <InputField
+            label="Primary Brand Color"
+            placeholder="e.g. #2563eb or Royal Blue"
+            required
+            value={primaryColor}
+            error={primaryColorError ?? undefined}
+            onChange={(e) => {
+              setPrimaryColor(e.target.value);
+              if (primaryColorError) setPrimaryColorError(null);
+            }}
+            onBlur={() => {
+              if (!primaryColor.trim()) setPrimaryColorError("Primary brand color is required.");
+              else setPrimaryColorError(null);
+            }}
+          />
 
-        <InputField
-          label="Secondary Brand Color"
-          placeholder="e.g. White"
-          value={secondaryColor}
-          onChange={(e) => setSecondaryColor(e.target.value)}
-        />
+          <InputField
+            label="Secondary Brand Color"
+            placeholder="e.g. #7c3aed or Violet"
+            required
+            value={secondaryColor}
+            error={secondaryColorError ?? undefined}
+            onChange={(e) => {
+              setSecondaryColor(e.target.value);
+              if (secondaryColorError) setSecondaryColorError(null);
+            }}
+            onBlur={() => {
+              if (!secondaryColor.trim()) setSecondaryColorError("Secondary brand color is required.");
+              else setSecondaryColorError(null);
+            }}
+          />
+        </div>
 
-        <UploadField label="Upload Logo" />
+        <UploadField label="Brand Logo (Optional)" />
 
-        <UploadField label="Upload Business Images" multiple />
+        <UploadField label="Business Media & Photos (Optional)" multiple />
       </div>
 
       <StepNavigation

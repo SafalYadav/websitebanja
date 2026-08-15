@@ -1,22 +1,12 @@
-export interface WebsitePromptData {
+import type { AiWorkspace, PlanningInput } from "@/types/aiWorkspace";
+
+export type WebsitePromptData = Partial<Omit<PlanningInput, "projectId">> & {
   businessName: string;
   category: string;
   description: string;
-  targetAudience: string;
+};
 
-  style: string;
-  primaryColor: string;
-  secondaryColor: string;
-
-  phone: string;
-  email: string;
-  website: string;
-  instagram: string;
-  facebook: string;
-  address: string;
-}
-
-export function buildWebsitePrompt(data: WebsitePromptData) {
+export function buildWebsitePrompt(data: WebsitePromptData, workspace: AiWorkspace) {
   return `
 You are WebsiteBanja AI.
 
@@ -45,6 +35,14 @@ Facebook: ${data.facebook}
 Address: ${data.address}
 
 ==========================
+AI ENGINEERING WORKSPACE
+==========================
+
+Read and follow every planning document before producing website content:
+
+${Object.entries(workspace).map(([path, content]) => `### ${path}\n${content}`).join("\n\n")}
+
+==========================
 RULES
 ==========================
 
@@ -63,6 +61,7 @@ JSON FORMAT
 ==========================
 
 {
+  "sectionOrder": ["hero", "about", "services", "features", "faq", "contact", "footer"],
   "hero": {
     "title": "",
     "subtitle": "",
@@ -91,9 +90,9 @@ JSON FORMAT
     }
   ],
   "contact": {
-    "phone": "${data.phone}",
-    "email": "${data.email}",
-    "address": "${data.address}"
+    "phone": "${data.phone ?? ""}",
+    "email": "${data.email ?? ""}",
+    "address": "${data.address ?? ""}"
   },
   "footer": {
     "copyright": "© ${new Date().getFullYear()} ${data.businessName}. All Rights Reserved."

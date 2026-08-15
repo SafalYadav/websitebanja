@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 
-import { editorRoute, type EditorStep } from "@/lib/editorRoutes";
+import { dashboardRoute, editorRoute, type EditorStep } from "@/lib/editorRoutes";
 import { useBuilderStore } from "@/store/builderStore";
 
 interface BuilderRedirectProps {
@@ -20,7 +20,7 @@ export default function BuilderRedirect({ step }: BuilderRedirectProps) {
       return;
     }
 
-    router.replace("/dashboard");
+    router.replace(dashboardRoute());
   }, [projectId, router, step]);
 
   return null;

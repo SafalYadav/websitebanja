@@ -1,10 +1,14 @@
 import { create } from "zustand";
-
-import type { Project } from "@/types/project";
+import type { Project, OnboardingMode } from "@/types/project";
 
 interface BuilderState {
   // Project
   projectId: string;
+
+  // Onboarding Mode & Prompt
+  onboardingMode: OnboardingMode;
+  userPrompt: string;
+  selectedFeatures: string[];
 
   // Business
   businessName: string;
@@ -25,9 +29,26 @@ interface BuilderState {
   facebook: string;
   address: string;
 
+  // WhatsApp
+  whatsappNumber: string;
+  whatsappMessage: string;
+  whatsappEnabled: boolean;
+
+  // Publishing
+  isPublished: boolean;
+  publicSlug: string | null;
+  setIsPublished: (value: boolean) => void;
+  setPublicSlug: (value: string | null) => void;
+
   // Project Actions
   setProjectId: (value: string) => void;
   hydrateFromProject: (project: Project) => void;
+
+  // Onboarding Mode Actions
+  setOnboardingMode: (value: OnboardingMode) => void;
+  setUserPrompt: (value: string) => void;
+  setSelectedFeatures: (value: string[]) => void;
+  toggleFeature: (feature: string) => void;
 
   // Business Actions
   setBusinessName: (value: string) => void;
@@ -47,11 +68,21 @@ interface BuilderState {
   setInstagram: (value: string) => void;
   setFacebook: (value: string) => void;
   setAddress: (value: string) => void;
+
+  // WhatsApp Actions
+  setWhatsappNumber: (value: string) => void;
+  setWhatsappMessage: (value: string) => void;
+  setWhatsappEnabled: (value: boolean) => void;
 }
 
 export const useBuilderStore = create<BuilderState>((set) => ({
   // Project
   projectId: "",
+
+  // Onboarding Mode & Prompt
+  onboardingMode: "prompt",
+  userPrompt: "",
+  selectedFeatures: ["whatsapp", "contact_form", "testimonials", "google_maps"],
 
   // Business
   businessName: "",
@@ -72,12 +103,24 @@ export const useBuilderStore = create<BuilderState>((set) => ({
   facebook: "",
   address: "",
 
+  // WhatsApp
+  whatsappNumber: "",
+  whatsappMessage: "Hi, I found your website and would like to know more about your services.",
+  whatsappEnabled: true,
+
+  // Publishing
+  isPublished: false,
+  publicSlug: null,
+
   // Project Actions
   setProjectId: (value) => set({ projectId: value }),
 
   hydrateFromProject: (project) =>
     set({
       projectId: project.id,
+      onboardingMode: project.onboarding_mode ?? "prompt",
+      userPrompt: project.user_prompt ?? "",
+      selectedFeatures: project.selected_features ?? ["whatsapp", "contact_form", "testimonials", "google_maps"],
       businessName: project.business_name ?? "",
       category: project.category ?? "",
       description: project.description ?? "",
@@ -91,7 +134,23 @@ export const useBuilderStore = create<BuilderState>((set) => ({
       instagram: project.instagram ?? "",
       facebook: project.facebook ?? "",
       address: project.address ?? "",
+      whatsappNumber: project.whatsapp_number ?? project.phone ?? "",
+      whatsappMessage: project.whatsapp_message ?? "Hi, I found your website and would like to know more about your services.",
+      whatsappEnabled: project.whatsapp_enabled ?? true,
+      isPublished: project.is_published ?? false,
+      publicSlug: project.public_slug ?? null,
     }),
+
+  // Onboarding Mode Actions
+  setOnboardingMode: (value) => set({ onboardingMode: value }),
+  setUserPrompt: (value) => set({ userPrompt: value }),
+  setSelectedFeatures: (value) => set({ selectedFeatures: value }),
+  toggleFeature: (feature) =>
+    set((state) => ({
+      selectedFeatures: state.selectedFeatures.includes(feature)
+        ? state.selectedFeatures.filter((f) => f !== feature)
+        : [...state.selectedFeatures, feature],
+    })),
 
   // Business Actions
   setBusinessName: (value) => set({ businessName: value }),
@@ -111,4 +170,13 @@ export const useBuilderStore = create<BuilderState>((set) => ({
   setInstagram: (value) => set({ instagram: value }),
   setFacebook: (value) => set({ facebook: value }),
   setAddress: (value) => set({ address: value }),
+
+  // WhatsApp Actions
+  setWhatsappNumber: (value) => set({ whatsappNumber: value }),
+  setWhatsappMessage: (value) => set({ whatsappMessage: value }),
+  setWhatsappEnabled: (value) => set({ whatsappEnabled: value }),
+
+  // Publishing Actions
+  setIsPublished: (value) => set({ isPublished: value }),
+  setPublicSlug: (value) => set({ publicSlug: value }),
 }));

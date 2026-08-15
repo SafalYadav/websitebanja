@@ -37,14 +37,12 @@ export interface Footer {
 export interface WebsiteData {
   hero: Hero;
   about: About;
-
   services: Service[];
-
   features: Feature[];
-
   faq: FAQ[];
-
   contact: Contact;
-
   footer: Footer;
+
+  sectionOrder?: string[];
+  [key: string]: Hero | About | Service[] | Feature[] | FAQ[] | Contact | Footer | string[] | undefined;
 }

@@ -1,234 +1,92 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { useRouter } from "next/navigation";
 import {
-  Sparkles,
-  Wand2,
-  Globe,
-  Zap,
-  Rocket,
-  ShieldCheck,
+  PenTool,
+  Palette,
+  Layers,
+  Smartphone,
+  Globe2,
+  Search,
 } from "lucide-react";
 
-const features = [
+const FEATURES = [
   {
-    icon: Wand2,
-    title: "AI Website Generation",
-    desc: "Describe your business in one sentence and AI instantly builds your website.",
+    icon: PenTool,
+    title: "AI Copywriter Engine",
+    description: "Generates industry-specific headlines, value propositions, feature descriptions, and calls-to-action that actually convert visitors.",
   },
   {
-    icon: Globe,
-    title: "Beautiful Responsive Design",
-    desc: "Every website works perfectly on mobile, tablet and desktop.",
+    icon: Palette,
+    title: "Dynamic Palette Engine",
+    description: "Applies harmonized brand color palettes, font pairings, and contrast tokens tailored to your business identity.",
   },
   {
-    icon: Zap,
-    title: "Lightning Fast",
-    desc: "Optimized performance with Next.js and modern technologies.",
+    icon: Layers,
+    title: "Section Drag-and-Drop Studio",
+    description: "Effortlessly reorder, duplicate, delete, and add new sections (Hero, About, Services, Features, FAQ, Contact, Footer).",
   },
   {
-    icon: Rocket,
-    title: "One Click Publish",
-    desc: "Launch your business website within minutes without coding.",
+    icon: Smartphone,
+    title: "Multi-Device Responsive Canvas",
+    description: "Preview and test your website fluidly across Desktop, Tablet, and Mobile viewports with zero layout shifts.",
   },
   {
-    icon: ShieldCheck,
-    title: "SEO Optimized",
-    desc: "Built with clean structure for better Google rankings.",
+    icon: Globe2,
+    title: "1-Click Global Publishing",
+    description: "Launch directly to a fast, secure public URL with zero server management, global CDN caching, and SSL certificates.",
   },
   {
-    icon: Sparkles,
-    title: "Premium Templates",
-    desc: "Modern templates crafted for restaurants, gyms, salons and more.",
+    icon: Search,
+    title: "Built-In SEO & Social Cards",
+    description: "Automatic title tags, meta descriptions, and OpenGraph social share previews pre-configured for search engines.",
   },
 ];
 
 export default function Features() {
-  const router = useRouter();
   return (
- <section
-  id="features"
-  className="relative overflow-hidden bg-black py-32"
->
-
-      <div className="absolute left-1/2 top-20 h-[450px] w-[450px] -translate-x-1/2 rounded-full bg-violet-600/10 blur-[140px]" />
-
-      <div className="relative mx-auto max-w-7xl px-6">
-
-        <motion.div
-          initial={{ opacity: 0, y: 40 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          transition={{ duration: .6 }}
-          viewport={{ once: true }}
-          className="mx-auto max-w-3xl text-center"
-        >
-
-          <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-5 py-2 backdrop-blur-xl">
-
-            <Sparkles className="h-4 w-4 text-violet-400" />
-
-            <span className="text-sm text-zinc-300">
-              Powerful Features
-            </span>
-
-          </div>
-
-          <h2 className="mt-8 text-5xl font-black text-white md:text-6xl">
-
-            Everything You Need
-
-            <br />
-
-            To Build Faster
-
+    <section id="features" className="py-24 px-6 relative">
+      <div className="mx-auto max-w-7xl">
+        <div className="text-center max-w-3xl mx-auto mb-16 space-y-4">
+          <span className="text-xs font-bold uppercase tracking-wider text-violet-600 dark:text-violet-400 bg-violet-50 dark:bg-violet-950/60 border border-violet-200/60 dark:border-violet-800/40 px-3.5 py-1.5 rounded-full inline-block">
+            Engineered For Excellence
+          </span>
+          <h2 className="text-3xl sm:text-5xl font-black tracking-tight text-zinc-900 dark:text-white">
+            Everything you need to launch a world-class website
           </h2>
-
-          <p className="mx-auto mt-8 max-w-2xl text-lg leading-8 text-zinc-400">
-
-            WebsiteBanja combines AI, modern design and
-            automation to help any business launch a
-            professional website in minutes.
-
+          <p className="text-sm sm:text-base text-zinc-600 dark:text-zinc-400">
+            Professional AI architecture under the hood, intuitive visual controls on top.
           </p>
+        </div>
 
-        </motion.div>
-
-        <div className="mt-24 grid gap-8 md:grid-cols-2 xl:grid-cols-3">        
-             {features.map((feature, index) => {
-            const Icon = feature.icon;
-
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {FEATURES.map((feat, idx) => {
+            const Icon = feat.icon;
             return (
               <motion.div
-                key={feature.title}
-                initial={{
-                  opacity: 0,
-                  y: 30,
-                }}
-                whileInView={{
-                  opacity: 1,
-                  y: 0,
-                }}
-                transition={{
-                  duration: 0.5,
-                  delay: index * 0.1,
-                }}
-                viewport={{
-                  once: true,
-                }}
-                whileHover={{
-                  y: -8,
-                }}
-                className="group relative overflow-hidden rounded-3xl border border-white/10 bg-white/[0.03] p-8 backdrop-blur-xl"
+                key={feat.title}
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ duration: 0.4, delay: idx * 0.08 }}
+                className="rounded-3xl border border-zinc-200/80 bg-white/70 p-7 shadow-xs backdrop-blur-md dark:border-white/10 dark:bg-zinc-900/40 hover:shadow-md hover:border-violet-300 dark:hover:border-violet-500/30 transition group"
               >
-
-                {/* Glow */}
-
-                <div className="absolute inset-0 opacity-0 transition duration-500 group-hover:opacity-100">
-
-                  <div className="absolute -top-24 left-1/2 h-52 w-52 -translate-x-1/2 rounded-full bg-violet-500/20 blur-[90px]" />
-
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-violet-100 text-violet-700 dark:bg-violet-950/60 dark:text-violet-400 mb-5 transition group-hover:scale-105">
+                  <Icon className="h-6 w-6" />
                 </div>
 
-                {/* Icon */}
-
-                <div className="relative z-10 mb-8 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-600 via-violet-600 to-purple-600 shadow-xl">
-
-                  <Icon className="h-8 w-8 text-white" />
-
-                </div>
-
-                {/* Title */}
-
-                <h3 className="relative z-10 text-2xl font-bold text-white">
-
-                  {feature.title}
-
+                <h3 className="text-lg font-bold text-zinc-900 dark:text-white mb-2">
+                  {feat.title}
                 </h3>
 
-                {/* Description */}
-
-                <p className="relative z-10 mt-5 leading-8 text-zinc-400">
-
-                  {feature.desc}
-
+                <p className="text-xs sm:text-sm text-zinc-600 dark:text-zinc-400 leading-relaxed">
+                  {feat.description}
                 </p>
-
-                {/* Bottom line */}
-
-                <div className="relative z-10 mt-8 h-[2px] w-0 bg-gradient-to-r from-blue-500 via-violet-500 to-cyan-400 transition-all duration-500 group-hover:w-full" />
-
               </motion.div>
             );
-          })}/div   </div>
-
-        {/* Bottom CTA */}
-
-        <motion.div
-          initial={{
-            opacity: 0,
-            y: 40,
-          }}
-          whileInView={{
-            opacity: 1,
-            y: 0,
-          }}
-          transition={{
-            duration: 0.6,
-            delay: 0.2,
-          }}
-          viewport={{
-            once: true,
-          }}
-          className="mt-28"
-        >
-
-          <div className="relative overflow-hidden rounded-[32px] border border-white/10 bg-gradient-to-br from-zinc-900 via-zinc-950 to-black p-12">
-
-            {/* Background Glow */}
-
-            <div className="absolute left-1/2 top-1/2 h-80 w-80 -translate-x-1/2 -translate-y-1/2 rounded-full bg-violet-600/20 blur-[140px]" />
-
-            <div className="relative z-10 text-center">
-
-              <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-3xl bg-gradient-to-r from-blue-600 via-violet-600 to-cyan-500 shadow-2xl">
-
-                <Rocket className="h-10 w-10 text-white" />
-
-              </div>
-
-              <h2 className="mt-8 text-4xl font-black text-white md:text-5xl">
-                Ready to Launch Your Website?
-              </h2>
-
-              <p className="mx-auto mt-6 max-w-2xl text-lg leading-8 text-zinc-400">
-                Build your complete business website in minutes using AI.
-                No coding. No design skills. Just describe your business.
-              </p>
-
-              <div className="mt-10 flex flex-wrap items-center justify-center gap-5">
-
-             <button
-  onClick={() => router.push("/dashboard")}
-  className="rounded-2xl bg-gradient-to-r from-blue-600 via-violet-600 to-purple-600 px-8 py-4 text-lg font-semibold text-white shadow-xl transition hover:scale-105"
->
-  🚀 Start Building
-</button>
-
-                <button className="rounded-2xl border border-white/10 bg-white/5 px-8 py-4 text-lg font-semibold text-white backdrop-blur-xl transition hover:bg-white/10">
-                  View Templates
-                </button>
-
-              </div>
-
-            </div>
-
-          </div>
-
-        </motion.div>
-
+          })}
+        </div>
       </div>
-
     </section>
   );
 }

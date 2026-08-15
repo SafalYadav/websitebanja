@@ -1,203 +1,133 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Sparkles } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { dashboardRoute } from "@/lib/editorRoutes";
+import { ArrowRight, ExternalLink } from "lucide-react";
 
-const templates = [
+const SHOWCASE_ITEMS = [
   {
-    title: "Restaurant",
-    emoji: "🍔",
-    color: "from-orange-500 to-red-500",
+    title: "Artisan Coffee Roasters",
+    category: "Food & Beverage",
+    tagline: "Single-origin micro-lots roasted with precision and sustainability.",
+    accent: "#d97706",
+    sections: ["Hero with Bean Showcase", "Roast Profiles", "Tasting Notes", "Visit Cafe"],
   },
   {
-    title: "Cafe",
-    emoji: "☕",
-    color: "from-amber-500 to-yellow-500",
+    title: "Apex Fitness & Performance",
+    category: "Health & Fitness",
+    tagline: "High-intensity athletic training and personalized nutrition coaching.",
+    accent: "#ef4444",
+    sections: ["Dynamic Video Hero", "Class Schedules", "Trainer Bios", "Free Trial Pass"],
   },
   {
-    title: "Gym",
-    emoji: "💪",
-    color: "from-zinc-700 to-zinc-900",
+    title: "Vanguard Legal Advisory",
+    category: "Professional Services",
+    tagline: "Corporate law, intellectual property, and venture financings.",
+    accent: "#3b82f6",
+    sections: ["Trust Hero", "Practice Areas", "Partner Profiles", "Case Evaluation"],
   },
   {
-    title: "Salon",
-    emoji: "💇",
-    color: "from-pink-500 to-fuchsia-500",
-  },
-  {
-    title: "Dental",
-    emoji: "🦷",
-    color: "from-cyan-500 to-blue-500",
-  },
-  {
-    title: "Portfolio",
-    emoji: "💼",
-    color: "from-violet-500 to-indigo-600",
+    title: "Lumina Dental Studio",
+    category: "Healthcare",
+    tagline: "Comfort-first preventive and cosmetic dentistry in modern clinics.",
+    accent: "#06b6d4",
+    sections: ["Smile Hero", "Treatments List", "Patient Reviews", "Book Online"],
   },
 ];
 
 export default function Templates() {
+  const router = useRouter();
+
   return (
-   <section
-  id="templates"
-  className="relative overflow-hidden bg-[#050505] py-32"
->
-
-      <div className="absolute left-1/2 top-24 h-[450px] w-[450px] -translate-x-1/2 rounded-full bg-violet-600/10 blur-[150px]" />
-
-      <div className="relative mx-auto max-w-7xl px-6">
-
-        <motion.div
-          initial={{ opacity: 0, y: 40 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          transition={{ duration: .6 }}
-          viewport={{ once: true }}
-          className="mx-auto max-w-3xl text-center"
-        >
-
-          <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-5 py-2">
-
-            <Sparkles className="h-4 w-4 text-violet-400"/>
-
-            <span className="text-sm text-zinc-300">
-              AI Templates
+    <section id="showcase" className="py-24 px-6 relative">
+      <div className="mx-auto max-w-7xl">
+        <div className="flex flex-col md:flex-row md:items-end justify-between mb-16 gap-6">
+          <div className="max-w-2xl space-y-4">
+            <span className="text-xs font-bold uppercase tracking-wider text-violet-600 dark:text-violet-400 bg-violet-50 dark:bg-violet-950/60 border border-violet-200/60 dark:border-violet-800/40 px-3.5 py-1.5 rounded-full inline-block">
+              Infinite Possibilities
             </span>
-
+            <h2 className="text-3xl sm:text-5xl font-black tracking-tight text-zinc-900 dark:text-white">
+              Generated for any industry
+            </h2>
+            <p className="text-sm sm:text-base text-zinc-600 dark:text-zinc-400">
+              No generic cookie-cutter templates. Every website is synthesized uniquely from your business profile.
+            </p>
           </div>
 
-          <h2 className="mt-8 text-5xl font-black text-white md:text-6xl">
+          <button
+            type="button"
+            onClick={() => router.push(dashboardRoute())}
+            className="inline-flex items-center gap-2 rounded-xl bg-violet-600 px-5 py-3 text-sm font-semibold text-white shadow-md shadow-violet-600/20 hover:bg-violet-700 transition"
+          >
+            <span>Build Your Own</span>
+            <ArrowRight className="h-4 w-4" />
+          </button>
+        </div>
 
-            Ready Made
-
-            <br/>
-
-            Business Templates
-
-          </h2>
-
-          <p className="mx-auto mt-8 max-w-2xl text-lg leading-8 text-zinc-400">
-
-            Choose any business category and let AI
-            build your complete website within minutes.
-
-          </p>
-
-        </motion.div>
-
-        <div className="mt-20 grid gap-8 md:grid-cols-2 xl:grid-cols-3"></div>
-                  {templates.map((template, index) => (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          {SHOWCASE_ITEMS.map((item, idx) => (
             <motion.div
-              key={template.title}
-              initial={{ opacity: 0, y: 30 }}
+              key={item.title}
+              initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
-              transition={{
-                duration: 0.5,
-                delay: index * 0.1,
-              }}
               viewport={{ once: true }}
-              whileHover={{
-                y: -10,
-                scale: 1.02,
-              }}
-              className="group relative overflow-hidden rounded-3xl border border-white/10 bg-zinc-900/70 backdrop-blur-xl"
+              transition={{ duration: 0.4, delay: idx * 0.1 }}
+              className="rounded-3xl border border-zinc-200/80 bg-white/70 p-6 sm:p-8 shadow-xs backdrop-blur-md dark:border-white/10 dark:bg-zinc-900/40 hover:shadow-lg transition flex flex-col justify-between"
             >
-
-              {/* Glow */}
-
-              <div
-                className={`absolute inset-0 bg-gradient-to-br ${template.color} opacity-0 blur-3xl transition duration-500 group-hover:opacity-20`}
-              />
-
-              {/* Fake Browser */}
-
-              <div className="relative h-64 overflow-hidden">
-
-                <div className="flex items-center gap-2 border-b border-white/10 bg-zinc-950 px-4 py-3">
-
-                  <div className="h-3 w-3 rounded-full bg-red-500" />
-                  <div className="h-3 w-3 rounded-full bg-yellow-500" />
-                  <div className="h-3 w-3 rounded-full bg-green-500" />
-
-                </div>
-
-                <div
-                  className={`flex h-full items-center justify-center bg-gradient-to-br ${template.color}`}
-                >
-
-                  <div className="text-center">
-
-                    <div className="text-6xl">
-                      {template.emoji}
-                    </div>
-
-                    <h3 className="mt-4 text-3xl font-black text-white">
-                      {template.title}
-                    </h3>
-
+              <div>
+                <div className="flex items-center justify-between gap-4 mb-4">
+                  <span
+                    className="text-xs font-bold uppercase tracking-wider px-3 py-1 rounded-full"
+                    style={{
+                      backgroundColor: `${item.accent}15`,
+                      color: item.accent,
+                    }}
+                  >
+                    {item.category}
+                  </span>
+                  <div className="flex items-center gap-1 text-xs text-zinc-400">
+                    <span>Autonomous AI Build</span>
+                    <ExternalLink className="h-3 w-3" />
                   </div>
-
                 </div>
 
-              </div>
+                <h3 className="text-2xl font-bold text-zinc-900 dark:text-white mb-2">
+                  {item.title}
+                </h3>
 
-              {/* Bottom */}
-
-              <div className="p-6">
-
-                <h4 className="text-2xl font-bold text-white">
-                  {template.title} Website
-                </h4>
-
-                <p className="mt-3 leading-7 text-zinc-400">
-                  AI generates a beautiful website specially
-                  crafted for your {template.title.toLowerCase()} business.
+                <p className="text-sm text-zinc-600 dark:text-zinc-400 leading-relaxed mb-6">
+                  {item.tagline}
                 </p>
 
-                <button className="mt-6 rounded-xl bg-white px-5 py-3 font-semibold text-black transition hover:scale-105">
-                  Preview Template →
-                </button>
-
+                {/* Section Structure Chips */}
+                <div className="flex flex-wrap gap-2 mb-6">
+                  {item.sections.map((sec) => (
+                    <span
+                      key={sec}
+                      className="rounded-lg bg-zinc-100 dark:bg-zinc-800 px-2.5 py-1 text-xs font-medium text-zinc-600 dark:text-zinc-300"
+                    >
+                      {sec}
+                    </span>
+                  ))}
+                </div>
               </div>
 
+              <div className="pt-4 border-t border-zinc-200/60 dark:border-white/5 flex items-center justify-between">
+                <span className="text-xs text-zinc-500">Live Production Preview</span>
+                <button
+                  type="button"
+                  onClick={() => router.push(dashboardRoute())}
+                  className="text-xs font-bold text-violet-600 dark:text-violet-400 hover:underline flex items-center gap-1"
+                >
+                  Generate Similar
+                  <ArrowRight className="h-3 w-3" />
+                </button>
+              </div>
             </motion.div>
           ))}
-                  </div>
-
-        {/* Bottom CTA */}
-
-        <motion.div
-          initial={{ opacity: 0, y: 40 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6 }}
-          viewport={{ once: true }}
-          className="mt-24"
-        >
-          <div className="relative overflow-hidden rounded-[32px] border border-white/10 bg-gradient-to-br from-zinc-900 via-zinc-950 to-black p-12">
-
-            <div className="absolute left-1/2 top-1/2 h-96 w-96 -translate-x-1/2 -translate-y-1/2 rounded-full bg-violet-600/20 blur-[160px]" />
-
-            <div className="relative z-10 text-center">
-
-              <h2 className="text-4xl font-black text-white md:text-5xl">
-                100+ AI Templates Coming Soon
-              </h2>
-
-              <p className="mx-auto mt-6 max-w-2xl text-lg leading-8 text-zinc-400">
-                Restaurants, cafes, gyms, salons, doctors,
-                agencies, portfolios, ecommerce and many more.
-              </p>
-
-              <button className="mt-10 rounded-2xl bg-gradient-to-r from-blue-600 via-violet-600 to-purple-600 px-8 py-4 font-semibold text-white shadow-xl transition hover:scale-105">
-                🚀 Explore Templates
-              </button>
-
-            </div>
-
-          </div>
-        </motion.div>
-
-      
-
+        </div>
+      </div>
     </section>
   );
 }

@@ -1,85 +1,65 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-
 import BuilderLayout from "@/components/builder/BuilderLayout";
 import ProgressBar from "@/components/builder/ProgressBar";
 import StepNavigation from "@/components/builder/StepNavigation";
-
 import { editorRoute } from "@/lib/editorRoutes";
-import { getProject, updateProject } from "@/lib/projects";
+import { useProjectAutosave } from "@/hooks/useProjectAutosave";
 import { useBuilderStore } from "@/store/builderStore";
 
 const DEFAULT_SECTIONS = [
-  "Home",
-  "About",
-  "Services",
-  "Gallery",
-  "Pricing",
-  "Testimonials",
-  "FAQ",
-  "Contact",
-  "Blog",
+  { name: "Hero Header", desc: "Eye-catching introduction with strong value proposition" },
+  { name: "About Story", desc: "Your background, mission, and company journey" },
+  { name: "Services", desc: "Detailed breakdown of what you offer" },
+  { name: "Features & Highlights", desc: "Key benefits, technology, and why clients choose you" },
+  { name: "FAQ Accordion", desc: "Clear answers to frequently asked customer questions" },
+  { name: "Contact & Booking", desc: "Direct phone, email, and location information" },
+  { name: "Footer", desc: "Copyright notice, navigation, and social links" },
 ];
 
 export default function ContentPage() {
   const router = useRouter();
   const projectId = useBuilderStore((state) => state.projectId);
+  const { saveNow } = useProjectAutosave(projectId, {
+    json_data: { content_sections: DEFAULT_SECTIONS.map((s) => s.name) },
+  });
 
   async function handleNext() {
-    if (!projectId) {
-      alert("Project not found");
-      return;
+    try {
+      await saveNow();
+      router.push(editorRoute(projectId, "contact"));
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Unable to save project.");
     }
-
-    const { data: project, error: fetchError } = await getProject(projectId);
-
-    if (fetchError) {
-      alert(fetchError.message);
-      return;
-    }
-
-    const existingJson =
-      project?.json_data &&
-      typeof project.json_data === "object" &&
-      !Array.isArray(project.json_data)
-        ? project.json_data
-        : {};
-
-    const { error } = await updateProject(projectId, {
-      json_data: {
-        ...existingJson,
-        content_sections: DEFAULT_SECTIONS,
-      },
-    });
-
-    if (error) {
-      alert(error.message);
-      return;
-    }
-
-    router.push(editorRoute(projectId, "contact"));
   }
 
   return (
     <BuilderLayout
-      title="Website Content 📝"
-      description="Choose the sections you want on your website."
+      title="Website Sections"
+      description="Choose the content sections AI should architect for your website."
     >
       <ProgressBar step={2} />
 
-      <div className="space-y-5">
+      <div className="space-y-3">
         {DEFAULT_SECTIONS.map((section) => (
           <label
-            key={section}
-            className="flex items-center justify-between rounded-2xl border border-white/10 bg-black/30 p-5 transition hover:border-violet-500"
+            key={section.name}
+            className="flex items-center justify-between rounded-2xl border border-zinc-200 bg-zinc-50/70 p-4 sm:p-5 transition hover:border-violet-500/60 hover:bg-violet-50/30 dark:border-white/10 dark:bg-black/30 dark:hover:border-violet-500/50 cursor-pointer"
           >
-            <span className="font-medium">{section}</span>
+            <div>
+              <span className="font-bold text-sm text-zinc-900 dark:text-white block">
+                {section.name}
+              </span>
+              <span className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5 block">
+                {section.desc}
+              </span>
+            </div>
 
             <input
               type="checkbox"
               defaultChecked
-              className="h-5 w-5 accent-violet-600"
+              className="h-5 w-5 rounded-md accent-violet-600 cursor-pointer"
             />
           </label>
         ))}
