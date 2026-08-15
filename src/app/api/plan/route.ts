@@ -19,23 +19,44 @@ function isWorkspace(value: unknown): value is AiWorkspace {
   return AI_WORKSPACE_FILES.every((file) => typeof candidate[file] === "string");
 }
 
+function isValidUpstashUrl(url?: string): boolean {
+  if (!url || url.includes("<") || url.includes(">") || url.includes("your-database")) {
+    return false;
+  }
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "https:" || parsed.protocol === "http:";
+  } catch {
+    return false;
+  }
+}
+
 // Create rate limiters for 3 requests per 7 days
 let userRatelimit: Ratelimit | undefined;
 let ipRatelimit: Ratelimit | undefined;
-if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) {
-  const redis = Redis.fromEnv();
-  userRatelimit = new Ratelimit({
-    redis,
-    limiter: Ratelimit.slidingWindow(3, "7 d"),
-    analytics: true,
-    prefix: "@upstash/ratelimit/user",
-  });
-  ipRatelimit = new Ratelimit({
-    redis,
-    limiter: Ratelimit.slidingWindow(3, "7 d"),
-    analytics: true,
-    prefix: "@upstash/ratelimit/ip",
-  });
+
+if (
+  isValidUpstashUrl(process.env.UPSTASH_REDIS_REST_URL) &&
+  process.env.UPSTASH_REDIS_REST_TOKEN &&
+  !process.env.UPSTASH_REDIS_REST_TOKEN.includes("<")
+) {
+  try {
+    const redis = Redis.fromEnv();
+    userRatelimit = new Ratelimit({
+      redis,
+      limiter: Ratelimit.slidingWindow(3, "7 d"),
+      analytics: true,
+      prefix: "@upstash/ratelimit/user",
+    });
+    ipRatelimit = new Ratelimit({
+      redis,
+      limiter: Ratelimit.slidingWindow(3, "7 d"),
+      analytics: true,
+      prefix: "@upstash/ratelimit/ip",
+    });
+  } catch (err) {
+    console.warn("[RateLimit] Upstash Redis init error:", err);
+  }
 }
 
 export async function POST(request: Request) {
@@ -55,26 +76,24 @@ export async function POST(request: Request) {
     const bypass = shouldBypassRateLimit(ip);
 
     if (userRatelimit && ipRatelimit && !bypass) {
-      const ipResult = await ipRatelimit.limit(`ai_usage_${ip}`);
-      if (!ipResult.success) {
-        return NextResponse.json(
-          { success: false, message: "Free plan limit reached (3 AI requests per 7 days). Please upgrade to continue." },
-          { status: 429 }
-        );
-      }
+      try {
+        const ipResult = await ipRatelimit.limit(`ai_usage_${ip}`);
+        if (!ipResult.success) {
+          return NextResponse.json(
+            { success: false, message: "Free plan limit reached (3 AI requests per 7 days). Please upgrade to continue." },
+            { status: 429 }
+          );
+        }
 
-      const userResult = await userRatelimit.limit(`ai_usage_${user.id}`);
-      if (!userResult.success) {
-        return NextResponse.json(
-          { success: false, message: "Free plan limit reached (3 AI requests per 7 days). Please upgrade to continue." },
-          { status: 429 }
-        );
-      }
-    } else if (!userRatelimit || !ipRatelimit) {
-      if (process.env.NODE_ENV === "production") {
-        console.error("[RateLimit ERROR] Upstash Redis credentials missing in PRODUCTION environment! Rate limiting is unconfigured.");
-      } else {
-        console.warn("[RateLimit] UPSTASH_REDIS_REST_URL is missing. Rate limiting is currently bypassed in local development.");
+        const userResult = await userRatelimit.limit(`ai_usage_${user.id}`);
+        if (!userResult.success) {
+          return NextResponse.json(
+            { success: false, message: "Free plan limit reached (3 AI requests per 7 days). Please upgrade to continue." },
+            { status: 429 }
+          );
+        }
+      } catch (rateLimitErr) {
+        console.warn("[RateLimit Execution ERROR] Proceeding gracefully:", rateLimitErr);
       }
     }
 

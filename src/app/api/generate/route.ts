@@ -14,26 +14,46 @@ let userRatelimitFree: Ratelimit | undefined;
 let userRatelimitPro: Ratelimit | undefined;
 let ipRatelimit: Ratelimit | undefined;
 
-if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) {
-  const redis = Redis.fromEnv();
-  userRatelimitFree = new Ratelimit({
-    redis,
-    limiter: Ratelimit.slidingWindow(3, "7 d"),
-    analytics: true,
-    prefix: "@upstash/ratelimit/user_free",
-  });
-  userRatelimitPro = new Ratelimit({
-    redis,
-    limiter: Ratelimit.slidingWindow(50, "7 d"),
-    analytics: true,
-    prefix: "@upstash/ratelimit/user_pro",
-  });
-  ipRatelimit = new Ratelimit({
-    redis,
-    limiter: Ratelimit.slidingWindow(3, "7 d"),
-    analytics: true,
-    prefix: "@upstash/ratelimit/ip",
-  });
+function isValidUpstashUrl(url?: string): boolean {
+  if (!url || url.includes("<") || url.includes(">") || url.includes("your-database")) {
+    return false;
+  }
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "https:" || parsed.protocol === "http:";
+  } catch {
+    return false;
+  }
+}
+
+if (
+  isValidUpstashUrl(process.env.UPSTASH_REDIS_REST_URL) &&
+  process.env.UPSTASH_REDIS_REST_TOKEN &&
+  !process.env.UPSTASH_REDIS_REST_TOKEN.includes("<")
+) {
+  try {
+    const redis = Redis.fromEnv();
+    userRatelimitFree = new Ratelimit({
+      redis,
+      limiter: Ratelimit.slidingWindow(3, "7 d"),
+      analytics: true,
+      prefix: "@upstash/ratelimit/user_free",
+    });
+    userRatelimitPro = new Ratelimit({
+      redis,
+      limiter: Ratelimit.slidingWindow(50, "7 d"),
+      analytics: true,
+      prefix: "@upstash/ratelimit/user_pro",
+    });
+    ipRatelimit = new Ratelimit({
+      redis,
+      limiter: Ratelimit.slidingWindow(3, "7 d"),
+      analytics: true,
+      prefix: "@upstash/ratelimit/ip",
+    });
+  } catch (err) {
+    console.warn("[RateLimit] Upstash Redis init error in generate:", err);
+  }
 }
 
 export async function POST(req: Request) {
@@ -66,31 +86,35 @@ export async function POST(req: Request) {
     const bypass = shouldBypassRateLimit(ip);
 
     if (!bypass) {
-      if (isPaidPro && userRatelimitPro) {
-        const proResult = await userRatelimitPro.limit(`ai_usage_${user.id}`);
-        if (!proResult.success) {
-          return NextResponse.json(
-            { success: false, message: "Paid Pro limit reached (50 AI requests per 7 days)." },
-            { status: 429 }
-          );
-        }
-      } else if (userRatelimitFree && ipRatelimit) {
-        // Free plan anti-abuse: check both IP limit and User Account limit
-        const ipResult = await ipRatelimit.limit(`ai_usage_${ip}`);
-        if (!ipResult.success) {
-          return NextResponse.json(
-            { success: false, message: "Free plan limit reached (3 AI requests per 7 days). Please upgrade to Paid Pro for higher limits." },
-            { status: 429 }
-          );
-        }
+      try {
+        if (isPaidPro && userRatelimitPro) {
+          const proResult = await userRatelimitPro.limit(`ai_usage_${user.id}`);
+          if (!proResult.success) {
+            return NextResponse.json(
+              { success: false, message: "Paid Pro limit reached (50 AI requests per 7 days)." },
+              { status: 429 }
+            );
+          }
+        } else if (userRatelimitFree && ipRatelimit) {
+          // Free plan anti-abuse: check both IP limit and User Account limit
+          const ipResult = await ipRatelimit.limit(`ai_usage_${ip}`);
+          if (!ipResult.success) {
+            return NextResponse.json(
+              { success: false, message: "Free plan limit reached (3 AI requests per 7 days). Please upgrade to Paid Pro for higher limits." },
+              { status: 429 }
+            );
+          }
 
-        const userResult = await userRatelimitFree.limit(`ai_usage_${user.id}`);
-        if (!userResult.success) {
-          return NextResponse.json(
-            { success: false, message: "Free plan limit reached (3 AI requests per 7 days). Please upgrade to Paid Pro for higher limits." },
-            { status: 429 }
-          );
+          const userResult = await userRatelimitFree.limit(`ai_usage_${user.id}`);
+          if (!userResult.success) {
+            return NextResponse.json(
+              { success: false, message: "Free plan limit reached (3 AI requests per 7 days). Please upgrade to Paid Pro for higher limits." },
+              { status: 429 }
+            );
+          }
         }
+      } catch (rateLimitErr) {
+        console.warn("[RateLimit Execution ERROR in generate] Proceeding gracefully:", rateLimitErr);
       }
     }
 
