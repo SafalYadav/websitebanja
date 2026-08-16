@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { getPreviewLinkData } from "@/lib/projects";
-import { PublicSiteRenderer } from "@/components/preview/PublicSiteRenderer";
+import WebsiteRenderer from "@/components/editor/WebsiteRenderer";
 import type { WebsiteData } from "@/types/website";
 
 export const dynamic = "force-dynamic";
@@ -28,7 +28,8 @@ export default async function PreviewPage({ params }: { params: { id: string } }
 
   return (
     <div className="min-h-screen w-full" style={{ backgroundColor: previewData.theme?.colors?.background || "#ffffff" }}>
-      <PublicSiteRenderer website={previewData} isPreviewMode={false} />
+      <WebsiteRenderer data={previewData} isPublic={true} activePageSlug="" />
     </div>
   );
 }
+
