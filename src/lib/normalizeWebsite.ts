@@ -10,7 +10,10 @@ export interface NormalizedWebsiteData {
   contact: Contact;
   footer: Footer;
   sectionOrder: string[];
-  [key: string]: unknown;
+  navbar?: import("@/types/website").NavbarConfig;
+  pages?: import("@/types/website").WebsitePage[];
+  products?: import("@/types/website").ProductItem[];
+  [key: string]: any;
 }
 
 const DEFAULT_ORDER = ["hero", "about", "services", "features", "faq", "contact", "footer"];
