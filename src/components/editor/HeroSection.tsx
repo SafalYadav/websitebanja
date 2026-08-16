@@ -145,6 +145,7 @@ export default function HeroSection({
                 elementPath={`${sectionKey}.button`}
                 elementType="button"
                 label="Primary Button"
+                value={safeButton}
               >
                 <button
                   type="button"

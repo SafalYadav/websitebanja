@@ -11,6 +11,7 @@ interface EditableElementProps {
   elementPath: string; // e.g. "hero.title" or "services[0].title"
   elementType: ElementType;
   label?: string;
+  value?: string;
   className?: string;
   children: React.ReactNode;
   allowInlineEdit?: boolean;
@@ -22,6 +23,7 @@ export default function EditableElement({
   elementPath,
   elementType,
   label,
+  value,
   className,
   children,
   allowInlineEdit = true,
@@ -41,8 +43,8 @@ export default function EditableElement({
   const [inlineValue, setInlineValue] = useState("");
   const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null);
 
-  // Extract raw text if children is string
-  const currentText = typeof children === "string" ? children : "";
+  // Extract raw text if children is string, or use explicitly provided value
+  const currentText = value !== undefined ? value : typeof children === "string" ? children : "";
 
   useEffect(() => {
     if (isEditingInline && inputRef.current) {
