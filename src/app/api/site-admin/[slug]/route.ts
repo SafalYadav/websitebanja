@@ -56,7 +56,13 @@ export async function GET(
 
     const jsonData = (project.json_data || {}) as WebsiteData;
     const leads = jsonData.leads || [];
-    const products = jsonData.products || [];
+
+    // Fetch products from catalog_items table
+    const { data: catalogItems } = await supabase
+      .from("catalog_items")
+      .select("*")
+      .eq("project_id", project.id);
+    const products = catalogItems || [];
 
     // Fetch site-specific analytics events
     const { data: events } = await supabase
