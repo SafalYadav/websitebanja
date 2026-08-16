@@ -353,28 +353,28 @@ export default function SectionEditor() {
               <div className="flex gap-2">
                 <button
                   type="button"
-                  onClick={() => updateElementValue(selectedElement.elementPath, { ...(website.navbar?.logo || {}), type: "text" })}
-                  className={`flex-1 py-2 text-xs font-bold rounded-lg transition border ${website.navbar?.logo?.type !== "image" ? "bg-violet-600 text-white border-violet-600" : "bg-white text-zinc-700 hover:bg-zinc-50 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:border-white/10"}`}
+                  onClick={() => updateElementValue(selectedElement.elementPath, { ...(website?.navbar?.logo || {}), type: "text" })}
+                  className={`flex-1 py-2 text-xs font-bold rounded-lg transition border ${website?.navbar?.logo?.type !== "image" ? "bg-violet-600 text-white border-violet-600" : "bg-white text-zinc-700 hover:bg-zinc-50 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:border-white/10"}`}
                 >
                   Text Logo
                 </button>
                 <button
                   type="button"
-                  onClick={() => updateElementValue(selectedElement.elementPath, { ...(website.navbar?.logo || {}), type: "image" })}
-                  className={`flex-1 py-2 text-xs font-bold rounded-lg transition border ${website.navbar?.logo?.type === "image" ? "bg-violet-600 text-white border-violet-600" : "bg-white text-zinc-700 hover:bg-zinc-50 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:border-white/10"}`}
+                  onClick={() => updateElementValue(selectedElement.elementPath, { ...(website?.navbar?.logo || {}), type: "image" })}
+                  className={`flex-1 py-2 text-xs font-bold rounded-lg transition border ${website?.navbar?.logo?.type === "image" ? "bg-violet-600 text-white border-violet-600" : "bg-white text-zinc-700 hover:bg-zinc-50 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:border-white/10"}`}
                 >
                   Image Logo
                 </button>
               </div>
 
-              {website.navbar?.logo?.type === "image" ? (
+              {website?.navbar?.logo?.type === "image" ? (
                 <div className="space-y-3 pt-2">
                   <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300">Image Source URL</label>
                   <InputField
                     label=""
                     placeholder="https://images.unsplash.com/..."
-                    value={website.navbar?.logo?.imageUrl || ""}
-                    onChange={(e) => updateElementValue(selectedElement.elementPath, { ...(website.navbar?.logo || {}), imageUrl: e.target.value })}
+                    value={website?.navbar?.logo?.imageUrl || ""}
+                    onChange={(e) => updateElementValue(selectedElement.elementPath, { ...(website?.navbar?.logo || {}), imageUrl: e.target.value })}
                   />
                   <button
                     type="button"
@@ -391,8 +391,8 @@ export default function SectionEditor() {
                   <InputField
                     label=""
                     placeholder="Enter business name..."
-                    value={website.navbar?.logo?.text || ""}
-                    onChange={(e) => updateElementValue(selectedElement.elementPath, { ...(website.navbar?.logo || {}), text: e.target.value })}
+                    value={website?.navbar?.logo?.text || ""}
+                    onChange={(e) => updateElementValue(selectedElement.elementPath, { ...(website?.navbar?.logo || {}), text: e.target.value })}
                   />
                 </div>
               )}

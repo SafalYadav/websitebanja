@@ -185,20 +185,20 @@ export default function WebsiteRenderer({
             }
           }}
         >
-          {website.navbar?.logo?.type === "image" && website.navbar.logo.imageUrl ? (
-            <img src={website.navbar.logo.imageUrl} alt="Logo" className="h-8 max-w-[150px] object-contain" />
+          {website?.navbar?.logo?.type === "image" && website?.navbar?.logo?.imageUrl ? (
+            <img src={website?.navbar?.logo?.imageUrl} alt="Logo" className="h-8 max-w-[150px] object-contain" />
           ) : (
             <>
               <Globe className="h-4 w-4" style={{ color: theme.primary }} />
               <span className="font-extrabold text-xs sm:text-sm tracking-tight" style={{ color: theme.fg }}>
-                {website.navbar?.logo?.text || resolvedBusinessName || "Website"}
+                {website?.navbar?.logo?.text || resolvedBusinessName || "Website"}
               </span>
             </>
           )}
         </div>
 
         <div className="flex items-center gap-1 sm:gap-2">
-          {(website.navbar?.links && website.navbar.links.length > 0 ? website.navbar.links : pages.map(p => ({
+          {(website?.navbar?.links && website?.navbar?.links?.length > 0 ? website?.navbar?.links : pages.map(p => ({
             id: p.id,
             label: p.title,
             action: { type: "page" as const, target: p.slug }
