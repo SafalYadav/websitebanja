@@ -1,12 +1,13 @@
 import { notFound } from "next/navigation";
 import { getPreviewLinkData } from "@/lib/projects";
+import { getCatalogItems } from "@/lib/catalog";
 import WebsiteRenderer from "@/components/editor/WebsiteRenderer";
 import type { WebsiteData } from "@/types/website";
 
 export const dynamic = "force-dynamic";
 
 export default async function PreviewPage({ params }: { params: { id: string } }) {
-  const { data, error, expired } = await getPreviewLinkData(params.id);
+  const { data, error, expired, projectId } = await getPreviewLinkData(params.id);
 
   if (expired) {
     return (
@@ -26,10 +27,16 @@ export default async function PreviewPage({ params }: { params: { id: string } }
   // Inject current theme explicitly for preview (defaulting to system/light if none)
   const previewData = { ...data } as WebsiteData;
   const themeData = (previewData as any).theme;
+  
+  let catalogItems: any[] = [];
+  if (projectId) {
+    const { data: items } = await getCatalogItems(projectId);
+    if (items) catalogItems = items;
+  }
 
   return (
     <div className="min-h-screen w-full" style={{ backgroundColor: themeData?.colors?.background || "#ffffff" }}>
-      <WebsiteRenderer data={previewData} isPublic={true} activePageSlug="" />
+      <WebsiteRenderer data={previewData} catalogItems={catalogItems} isPublic={true} activePageSlug="" />
     </div>
   );
 }

@@ -1,10 +1,12 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Image from "next/image";
 import { useGeneratedWebsiteStore } from "@/store/generatedWebsiteStore";
+import { useBuilderStore } from "@/store/builderStore";
 import ImageMediaModal from "@/components/editor/ImageMediaModal";
-import type { ProductItem } from "@/types/website";
+import type { CatalogItem, CatalogItemInsert, CatalogItemUpdate } from "@/lib/catalog";
+import { getCatalogItems, createCatalogItem, updateCatalogItem } from "@/lib/catalog";
 import {
   X,
   Sparkles,
@@ -17,8 +19,12 @@ import {
   Eye,
   MessageCircle,
   Percent,
+  Calendar,
+  Layers,
+  Trash2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { toast } from "@/store/toastStore";
 
 const SAMPLE_PRESET_IMAGES = [
   "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=800&auto=format&fit=crop&q=80",
@@ -38,62 +44,109 @@ export const CURRENCIES = [
 ];
 
 interface FormProps {
-  initialProduct?: ProductItem | null;
-  onSave: (productData: Omit<ProductItem, "id">) => void;
+  initialProduct?: CatalogItem | null;
+  onSave: (productData: CatalogItemInsert | CatalogItemUpdate) => Promise<void>;
   onClose: () => void;
   isEditing: boolean;
+  projectId: string;
 }
 
-function ProductEditorForm({ initialProduct, onSave, onClose, isEditing }: FormProps) {
+function ProductEditorForm({ initialProduct, onSave, onClose, isEditing, projectId }: FormProps) {
   const [name, setName] = useState(initialProduct?.name || "");
   const [description, setDescription] = useState(initialProduct?.description || "");
+  const [itemType, setItemType] = useState<CatalogItem["item_type"]>(initialProduct?.item_type || "product");
+  
+  // Pricing standard
   const [price, setPrice] = useState<number>(initialProduct?.price ?? 1499);
-  const [originalPrice, setOriginalPrice] = useState<number | undefined>(
-    initialProduct?.originalPrice ?? 1999
-  );
-  const [currencyCode, setCurrencyCode] = useState(initialProduct?.currencyCode || "INR");
-  const [showDiscountBadge, setShowDiscountBadge] = useState<boolean>(
-    initialProduct?.showDiscountBadge ?? true
-  );
+  const [originalPrice, setOriginalPrice] = useState<number | undefined>(initialProduct?.original_price ?? undefined);
+  
+  // Pricing rental
+  const [hourlyPrice, setHourlyPrice] = useState<number | undefined>(initialProduct?.hourly_price ?? undefined);
+  const [dailyPrice, setDailyPrice] = useState<number | undefined>(initialProduct?.daily_price ?? undefined);
+  const [weeklyPrice, setWeeklyPrice] = useState<number | undefined>(initialProduct?.weekly_price ?? undefined);
+  const [monthlyPrice, setMonthlyPrice] = useState<number | undefined>(initialProduct?.monthly_price ?? undefined);
+  
+  const [currencyCode, setCurrencyCode] = useState(initialProduct?.currency_code || "INR");
+  const [showDiscountBadge, setShowDiscountBadge] = useState<boolean>(initialProduct?.show_discount_badge ?? true);
   const [category, setCategory] = useState(initialProduct?.category || "Featured");
   const [badge, setBadge] = useState(initialProduct?.badge || "New");
-  const [image, setImage] = useState(initialProduct?.image || SAMPLE_PRESET_IMAGES[0]);
-  const [status, setStatus] = useState<"active" | "draft" | "out_of_stock">(
-    initialProduct?.status || "active"
-  );
-  const [ctaText, setCtaText] = useState(initialProduct?.ctaText || "Order on WhatsApp");
+  
+  const [images, setImages] = useState<string[]>(initialProduct?.images?.length ? initialProduct.images : (initialProduct?.image ? [initialProduct.image] : [SAMPLE_PRESET_IMAGES[0]]));
+  
+  const [status, setStatus] = useState<"active" | "draft" | "out_of_stock">(initialProduct?.status || "active");
+  const [ctaText, setCtaText] = useState(initialProduct?.cta_text || "Order on WhatsApp");
+  
   const [isMediaModalOpen, setIsMediaModalOpen] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   const discountPercent =
     originalPrice && originalPrice > price
       ? Math.round(((originalPrice - price) / originalPrice) * 100)
       : null;
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!name.trim()) {
       setErrorMsg("Product name is required.");
       return;
     }
-    if (price < 0 || isNaN(price)) {
-      setErrorMsg("Please enter a valid price in INR.");
-      return;
+
+    if (itemType !== "rental") {
+      if (price < 0 || isNaN(price)) {
+        setErrorMsg("Please enter a valid price.");
+        return;
+      }
+    } else {
+      if (!hourlyPrice && !dailyPrice && !weeklyPrice && !monthlyPrice) {
+        setErrorMsg("Please enter at least one rental rate (hourly, daily, weekly, or monthly).");
+        return;
+      }
     }
 
-    onSave({
-      name: name.trim(),
-      description: description.trim(),
-      price: Number(price),
-      originalPrice: originalPrice ? Number(originalPrice) : undefined,
-      currencyCode,
-      showDiscountBadge,
-      category: category.trim() || "General",
-      badge: badge.trim() || undefined,
-      image,
-      status,
-      ctaText: ctaText.trim() || "Order on WhatsApp",
-    });
+    setIsSaving(true);
+    try {
+      const payload: CatalogItemInsert | CatalogItemUpdate = {
+        project_id: projectId,
+        name: name.trim(),
+        description: description.trim(),
+        item_type: itemType,
+        price: itemType !== "rental" ? Number(price) : null,
+        original_price: originalPrice && itemType !== "rental" ? Number(originalPrice) : null,
+        hourly_price: itemType === "rental" && hourlyPrice ? Number(hourlyPrice) : null,
+        daily_price: itemType === "rental" && dailyPrice ? Number(dailyPrice) : null,
+        weekly_price: itemType === "rental" && weeklyPrice ? Number(weeklyPrice) : null,
+        monthly_price: itemType === "rental" && monthlyPrice ? Number(monthlyPrice) : null,
+        currency_code: currencyCode,
+        show_discount_badge: showDiscountBadge,
+        category: category.trim() || "General",
+        badge: badge.trim() || null,
+        images,
+        status,
+        cta_text: ctaText.trim() || "Order on WhatsApp",
+        display_order: initialProduct?.display_order ?? 0,
+      };
+
+      await onSave(payload);
+    } catch (err) {
+      setErrorMsg("Failed to save catalog item.");
+      console.error(err);
+    } finally {
+      setIsSaving(false);
+    }
   };
+
+  const addImage = (url: string) => {
+    if (!images.includes(url)) {
+      setImages([...images, url]);
+    }
+    setIsMediaModalOpen(false);
+  };
+
+  const removeImage = (index: number) => {
+    setImages(images.filter((_, i) => i !== index));
+  };
+
+  const primaryImage = images[0] || SAMPLE_PRESET_IMAGES[0];
 
   return (
     <div className="flex flex-col h-full w-full">
@@ -113,11 +166,11 @@ function ProductEditorForm({ initialProduct, onSave, onClose, isEditing }: FormP
                 <ShoppingBag className="h-3.5 w-3.5" />
               </span>
               <h1 className="text-sm font-black uppercase tracking-wider text-zinc-900 dark:text-white">
-                {isEditing ? "Edit Catalog Item" : "Create New Catalog Product"}
+                {isEditing ? "Edit Catalog Item" : "Create New Catalog Item"}
               </h1>
             </div>
             <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
-              Changes synchronize dynamically with your online store.
+              Changes synchronize dynamically with your database.
             </p>
           </div>
         </div>
@@ -133,10 +186,14 @@ function ProductEditorForm({ initialProduct, onSave, onClose, isEditing }: FormP
           <button
             type="button"
             onClick={handleSubmit}
-            className="flex items-center gap-2 rounded-xl bg-violet-600 px-5 py-2 text-xs font-bold text-white shadow-md shadow-violet-600/20 hover:bg-violet-700 active:scale-95 transition"
+            disabled={isSaving}
+            className={cn(
+              "flex items-center gap-2 rounded-xl bg-violet-600 px-5 py-2 text-xs font-bold text-white shadow-md shadow-violet-600/20 hover:bg-violet-700 active:scale-95 transition",
+              isSaving && "opacity-50 cursor-not-allowed"
+            )}
           >
             <CheckCircle2 className="h-4 w-4" />
-            <span>Save & Publish to Catalog</span>
+            <span>{isSaving ? "Saving..." : "Save Item"}</span>
           </button>
         </div>
       </header>
@@ -152,17 +209,45 @@ function ProductEditorForm({ initialProduct, onSave, onClose, isEditing }: FormP
             </div>
           )}
 
-          {/* Section 1: Product Fundamentals */}
+          {/* Section 1: Item Fundamentals */}
           <div className="rounded-3xl border border-zinc-200 bg-white p-6 dark:border-white/10 dark:bg-zinc-900/60 shadow-xs space-y-5">
             <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 flex items-center gap-1.5">
               <Tag className="h-4 w-4 text-violet-500" />
-              Product Overview
+              Item Overview
             </h3>
 
             <div className="space-y-4">
               <div>
                 <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1.5">
-                  Product Name *
+                  Item Type
+                </label>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                  {[
+                    { id: "product", label: "Product (Sale)" },
+                    { id: "rental", label: "Rental" },
+                    { id: "service", label: "Service" },
+                    { id: "showcase", label: "Showcase (No Price)" },
+                  ].map((type) => (
+                    <button
+                      key={type.id}
+                      type="button"
+                      onClick={() => setItemType(type.id as any)}
+                      className={cn(
+                        "rounded-xl border p-3 text-xs font-bold transition flex items-center justify-center text-center",
+                        itemType === type.id
+                          ? "border-violet-600 bg-violet-50 text-violet-700 dark:bg-violet-500/10 dark:text-violet-400"
+                          : "border-zinc-200 bg-zinc-50 text-zinc-600 hover:bg-zinc-100 dark:border-white/10 dark:bg-zinc-950/60 dark:text-zinc-400"
+                      )}
+                    >
+                      {type.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1.5">
+                  Item Name *
                 </label>
                 <input
                   type="text"
@@ -206,7 +291,7 @@ function ProductEditorForm({ initialProduct, onSave, onClose, isEditing }: FormP
 
               <div>
                 <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1.5">
-                  Detailed Product Description
+                  Detailed Description
                 </label>
                 <textarea
                   rows={4}
@@ -220,21 +305,21 @@ function ProductEditorForm({ initialProduct, onSave, onClose, isEditing }: FormP
           </div>
 
           {/* Section 2: Pricing & Currency */}
-          <div className="rounded-3xl border border-zinc-200 bg-white p-6 dark:border-white/10 dark:bg-zinc-900/60 shadow-xs space-y-5">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 flex items-center gap-1.5">
-              <IndianRupee className="h-4 w-4 text-emerald-500" />
-              Pricing & Currency
-            </h3>
+          {itemType !== "showcase" && (
+            <div className="rounded-3xl border border-zinc-200 bg-white p-6 dark:border-white/10 dark:bg-zinc-900/60 shadow-xs space-y-5">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 flex items-center gap-1.5">
+                <IndianRupee className="h-4 w-4 text-emerald-500" />
+                Pricing & Currency
+              </h3>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div>
+              <div className="mb-4">
                 <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1.5">
                   Currency
                 </label>
                 <select
                   value={currencyCode}
                   onChange={(e) => setCurrencyCode(e.target.value)}
-                  className="w-full rounded-2xl border border-zinc-200 bg-zinc-50/50 px-4 py-3 text-sm font-bold text-zinc-900 outline-none focus:border-violet-500 focus:bg-white dark:border-white/10 dark:bg-zinc-950/60 dark:text-white transition"
+                  className="w-full max-w-xs rounded-2xl border border-zinc-200 bg-zinc-50/50 px-4 py-3 text-sm font-bold text-zinc-900 outline-none focus:border-violet-500 focus:bg-white dark:border-white/10 dark:bg-zinc-950/60 dark:text-white transition"
                 >
                   {CURRENCIES.map(c => (
                     <option key={c.code} value={c.code}>{c.code} ({c.symbol})</option>
@@ -242,65 +327,97 @@ function ProductEditorForm({ initialProduct, onSave, onClose, isEditing }: FormP
                 </select>
               </div>
 
-              <div>
-                <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1.5">
-                  Selling Price *
-                </label>
-                <div className="relative">
-                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-bold text-zinc-400">
-                    {CURRENCIES.find(c => c.code === currencyCode)?.symbol || "₹"}
-                  </span>
-                  <input
-                    type="number"
-                    min="0"
-                    placeholder="1499"
-                    value={price}
-                    onChange={(e) => setPrice(Number(e.target.value))}
-                    className="w-full rounded-2xl border border-zinc-200 bg-zinc-50/50 pl-9 pr-4 py-3 text-sm font-bold text-zinc-900 outline-none focus:border-violet-500 focus:bg-white dark:border-white/10 dark:bg-zinc-950/60 dark:text-white transition"
-                  />
+              {itemType === "rental" ? (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  {[
+                    { label: "Hourly", val: hourlyPrice, set: setHourlyPrice },
+                    { label: "Daily", val: dailyPrice, set: setDailyPrice },
+                    { label: "Weekly", val: weeklyPrice, set: setWeeklyPrice },
+                    { label: "Monthly", val: monthlyPrice, set: setMonthlyPrice },
+                  ].map((rate, i) => (
+                    <div key={i}>
+                      <label className="block text-[11px] font-bold text-zinc-500 dark:text-zinc-400 mb-1.5">
+                        {rate.label} Rate
+                      </label>
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-zinc-400">
+                          {CURRENCIES.find(c => c.code === currencyCode)?.symbol || "₹"}
+                        </span>
+                        <input
+                          type="number"
+                          min="0"
+                          placeholder="0"
+                          value={rate.val || ""}
+                          onChange={(e) => rate.set(e.target.value ? Number(e.target.value) : undefined)}
+                          className="w-full rounded-xl border border-zinc-200 bg-zinc-50/50 pl-7 pr-3 py-2 text-sm font-bold text-zinc-900 outline-none focus:border-violet-500 focus:bg-white dark:border-white/10 dark:bg-zinc-950/60 dark:text-white transition"
+                        />
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1.5">
-                  Original Price
-                </label>
-                <div className="relative">
-                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-bold text-zinc-400">
-                    {CURRENCIES.find(c => c.code === currencyCode)?.symbol || "₹"}
-                  </span>
-                  <input
-                    type="number"
-                    min="0"
-                    placeholder="1999"
-                    value={originalPrice || ""}
-                    onChange={(e) =>
-                      setOriginalPrice(e.target.value ? Number(e.target.value) : undefined)
-                    }
-                    className="w-full rounded-2xl border border-zinc-200 bg-zinc-50/50 pl-9 pr-4 py-3 text-sm text-zinc-900 outline-none focus:border-violet-500 focus:bg-white dark:border-white/10 dark:bg-zinc-950/60 dark:text-white transition"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {discountPercent !== null && discountPercent > 0 && (
-              <div className="flex items-center justify-between rounded-xl bg-zinc-50 p-4 border border-zinc-100 dark:bg-zinc-900/50 dark:border-white/5">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-                    <Percent className="h-4 w-4" />
-                  </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <span className="block text-xs font-bold text-zinc-900 dark:text-white">Discount Badge</span>
-                    <span className="block text-[11px] text-zinc-500">Automatically show a {discountPercent}% OFF badge</span>
+                    <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1.5">
+                      Selling Price *
+                    </label>
+                    <div className="relative">
+                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-bold text-zinc-400">
+                        {CURRENCIES.find(c => c.code === currencyCode)?.symbol || "₹"}
+                      </span>
+                      <input
+                        type="number"
+                        min="0"
+                        placeholder="1499"
+                        value={price}
+                        onChange={(e) => setPrice(Number(e.target.value))}
+                        className="w-full rounded-2xl border border-zinc-200 bg-zinc-50/50 pl-9 pr-4 py-3 text-sm font-bold text-zinc-900 outline-none focus:border-violet-500 focus:bg-white dark:border-white/10 dark:bg-zinc-950/60 dark:text-white transition"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1.5">
+                      Original Price
+                    </label>
+                    <div className="relative">
+                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-bold text-zinc-400">
+                        {CURRENCIES.find(c => c.code === currencyCode)?.symbol || "₹"}
+                      </span>
+                      <input
+                        type="number"
+                        min="0"
+                        placeholder="1999"
+                        value={originalPrice || ""}
+                        onChange={(e) =>
+                          setOriginalPrice(e.target.value ? Number(e.target.value) : undefined)
+                        }
+                        className="w-full rounded-2xl border border-zinc-200 bg-zinc-50/50 pl-9 pr-4 py-3 text-sm text-zinc-900 outline-none focus:border-violet-500 focus:bg-white dark:border-white/10 dark:bg-zinc-950/60 dark:text-white transition"
+                      />
+                    </div>
                   </div>
                 </div>
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input type="checkbox" className="sr-only peer" checked={showDiscountBadge} onChange={(e) => setShowDiscountBadge(e.target.checked)} />
-                  <div className="w-9 h-5 bg-zinc-200 peer-focus:outline-none rounded-full peer dark:bg-zinc-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-zinc-600 peer-checked:bg-emerald-500"></div>
-                </label>
-              </div>
-            )}
-          </div>
+              )}
+
+              {itemType !== "rental" && discountPercent !== null && discountPercent > 0 && (
+                <div className="flex items-center justify-between rounded-xl bg-zinc-50 p-4 border border-zinc-100 dark:bg-zinc-900/50 dark:border-white/5 mt-4">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                      <Percent className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <span className="block text-xs font-bold text-zinc-900 dark:text-white">Discount Badge</span>
+                      <span className="block text-[11px] text-zinc-500">Automatically show a {discountPercent}% OFF badge</span>
+                    </div>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" className="sr-only peer" checked={showDiscountBadge} onChange={(e) => setShowDiscountBadge(e.target.checked)} />
+                    <div className="w-9 h-5 bg-zinc-200 peer-focus:outline-none rounded-full peer dark:bg-zinc-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-zinc-600 peer-checked:bg-emerald-500"></div>
+                  </label>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Section 3: Availability & CTA */}
           <div className="rounded-3xl border border-zinc-200 bg-white p-6 dark:border-white/10 dark:bg-zinc-900/60 shadow-xs space-y-5">
@@ -343,9 +460,48 @@ function ProductEditorForm({ initialProduct, onSave, onClose, isEditing }: FormP
           </div>
         </div>
 
-        {/* Right Preview Card */}
+        {/* Right Preview Card & Image Manager */}
         <div className="hidden lg:flex w-96 flex-col border-l border-zinc-200 bg-white/60 p-6 dark:border-white/10 dark:bg-zinc-900/40 backdrop-blur-xl overflow-y-auto space-y-6 flex-shrink-0">
+          
           <div className="flex items-center justify-between">
+            <span className="text-xs font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 flex items-center gap-1.5">
+              <Layers className="h-4 w-4 text-violet-500" />
+              Image Gallery
+            </span>
+          </div>
+
+          <div className="rounded-3xl border border-zinc-200 bg-white p-5 dark:border-white/10 dark:bg-zinc-900 shadow-xs space-y-3">
+            <button
+              type="button"
+              onClick={() => setIsMediaModalOpen(true)}
+              className="w-full flex items-center justify-center gap-2 rounded-xl bg-violet-600 py-3 text-xs font-bold text-white shadow-md shadow-violet-600/20 hover:bg-violet-700 transition"
+            >
+              <ImageIcon className="h-4 w-4" />
+              <span>Add Images</span>
+            </button>
+
+            <div className="grid grid-cols-2 gap-2 pt-2">
+              {images.map((imgUrl, i) => (
+                <div key={i} className="relative aspect-square rounded-xl overflow-hidden border border-zinc-200 dark:border-white/10 group">
+                  <Image src={imgUrl} alt={`Image ${i+1}`} fill className="object-cover" />
+                  <button
+                    type="button"
+                    onClick={() => removeImage(i)}
+                    className="absolute top-1 right-1 h-6 w-6 rounded-md bg-black/50 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition backdrop-blur-md hover:bg-rose-600"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </button>
+                  {i === 0 && (
+                    <div className="absolute bottom-1 left-1 rounded-md bg-black/60 px-1.5 py-0.5 text-[8px] font-bold text-white uppercase backdrop-blur-md">
+                      Primary
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between pt-4">
             <span className="text-xs font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 flex items-center gap-1.5">
               <Eye className="h-4 w-4 text-violet-500" />
               Live Storefront Preview
@@ -355,7 +511,7 @@ function ProductEditorForm({ initialProduct, onSave, onClose, isEditing }: FormP
           <div className="rounded-3xl border border-zinc-200 bg-white shadow-xl overflow-hidden dark:border-white/10 dark:bg-zinc-900 flex flex-col">
             <div className="relative aspect-4/3 w-full bg-zinc-100 dark:bg-zinc-800 overflow-hidden group">
               <Image
-                src={image}
+                src={primaryImage}
                 alt={name || "Product preview"}
                 fill
                 className="object-cover"
@@ -368,7 +524,7 @@ function ProductEditorForm({ initialProduct, onSave, onClose, isEditing }: FormP
                 </div>
               )}
 
-              {showDiscountBadge && discountPercent !== null && discountPercent > 0 && (
+              {itemType !== "rental" && showDiscountBadge && discountPercent !== null && discountPercent > 0 && (
                 <div className="absolute top-3 right-3 rounded-full bg-emerald-500 px-3 py-1 text-[10px] font-black uppercase tracking-wider text-white shadow-md">
                   {discountPercent}% OFF
                 </div>
@@ -385,11 +541,16 @@ function ProductEditorForm({ initialProduct, onSave, onClose, isEditing }: FormP
 
             <div className="p-5 flex flex-col flex-1 justify-between space-y-4">
               <div>
-                <span className="text-[11px] font-bold text-violet-600 dark:text-violet-400 uppercase tracking-wider block">
-                  {category || "General"}
-                </span>
-                <h4 className="text-base font-bold text-zinc-900 dark:text-white mt-1 line-clamp-1">
-                  {name || "Untitled Product Pro"}
+                <div className="flex justify-between items-center">
+                  <span className="text-[11px] font-bold text-violet-600 dark:text-violet-400 uppercase tracking-wider block">
+                    {category || "General"}
+                  </span>
+                  <span className="text-[9px] font-bold text-zinc-400 bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 rounded-full uppercase tracking-wider">
+                    {itemType}
+                  </span>
+                </div>
+                <h4 className="text-base font-bold text-zinc-900 dark:text-white mt-2 line-clamp-1">
+                  {name || "Untitled Item"}
                 </h4>
                 <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1.5 line-clamp-2 leading-relaxed">
                   {description || "High-precision craftsmanship tailored for modern lifestyle."}
@@ -397,17 +558,35 @@ function ProductEditorForm({ initialProduct, onSave, onClose, isEditing }: FormP
               </div>
 
               <div>
-                <div className="flex items-baseline gap-2 mb-3">
-                  <span className="text-xl font-black text-zinc-900 dark:text-white">
-                    {CURRENCIES.find(c => c.code === currencyCode)?.symbol || "₹"}
-                    {price.toLocaleString(CURRENCIES.find(c => c.code === currencyCode)?.locale || "en-IN")}
-                  </span>
-                  {originalPrice && originalPrice > price && (
-                    <span className="text-xs text-zinc-400 line-through">
-                      {CURRENCIES.find(c => c.code === currencyCode)?.symbol || "₹"}
-                      {originalPrice.toLocaleString(CURRENCIES.find(c => c.code === currencyCode)?.locale || "en-IN")}
-                    </span>
-                  )}
+                <div className="flex items-baseline gap-2 mb-3 flex-wrap">
+                  {itemType === "rental" ? (
+                    <>
+                      {dailyPrice ? (
+                        <span className="text-lg font-black text-zinc-900 dark:text-white">
+                          {CURRENCIES.find(c => c.code === currencyCode)?.symbol || "₹"}{dailyPrice}/day
+                        </span>
+                      ) : hourlyPrice ? (
+                        <span className="text-lg font-black text-zinc-900 dark:text-white">
+                          {CURRENCIES.find(c => c.code === currencyCode)?.symbol || "₹"}{hourlyPrice}/hr
+                        </span>
+                      ) : (
+                        <span className="text-sm font-bold text-zinc-400">Ask for pricing</span>
+                      )}
+                    </>
+                  ) : itemType !== "showcase" ? (
+                    <>
+                      <span className="text-xl font-black text-zinc-900 dark:text-white">
+                        {CURRENCIES.find(c => c.code === currencyCode)?.symbol || "₹"}
+                        {price.toLocaleString(CURRENCIES.find(c => c.code === currencyCode)?.locale || "en-IN")}
+                      </span>
+                      {originalPrice && originalPrice > price && (
+                        <span className="text-xs text-zinc-400 line-through">
+                          {CURRENCIES.find(c => c.code === currencyCode)?.symbol || "₹"}
+                          {originalPrice.toLocaleString(CURRENCIES.find(c => c.code === currencyCode)?.locale || "en-IN")}
+                        </span>
+                      )}
+                    </>
+                  ) : null}
                 </div>
 
                 <div className="w-full flex items-center justify-center gap-2 rounded-xl bg-emerald-600 py-2.5 text-xs font-bold text-white shadow-xs">
@@ -418,51 +597,15 @@ function ProductEditorForm({ initialProduct, onSave, onClose, isEditing }: FormP
             </div>
           </div>
 
-          {/* Media Replacement Controls */}
-          <div className="rounded-3xl border border-zinc-200 bg-white p-5 dark:border-white/10 dark:bg-zinc-900 shadow-xs space-y-3">
-            <span className="text-xs font-bold text-zinc-700 dark:text-zinc-300 block">
-              Product Photography
-            </span>
-
-            <button
-              type="button"
-              onClick={() => setIsMediaModalOpen(true)}
-              className="w-full flex items-center justify-center gap-2 rounded-xl bg-violet-600 py-3 text-xs font-bold text-white shadow-md shadow-violet-600/20 hover:bg-violet-700 transition"
-            >
-              <ImageIcon className="h-4 w-4" />
-              <span>Browse Unsplash & Upload</span>
-            </button>
-
-            <div className="grid grid-cols-5 gap-1.5 pt-2">
-              {SAMPLE_PRESET_IMAGES.map((imgUrl, i) => (
-                <button
-                  key={i}
-                  type="button"
-                  onClick={() => setImage(imgUrl)}
-                  className={cn(
-                    "relative aspect-square rounded-xl overflow-hidden border-2 transition",
-                    image === imgUrl
-                      ? "border-violet-600 scale-105 shadow-md"
-                      : "border-transparent opacity-60 hover:opacity-100"
-                  )}
-                >
-                  <Image src={imgUrl} alt="Preset thumbnail" fill className="object-cover" />
-                </button>
-              ))}
-            </div>
-          </div>
         </div>
       </div>
 
       {isMediaModalOpen && (
         <ImageMediaModal
           isOpen={isMediaModalOpen}
-          currentUrl={image}
+          currentUrl={primaryImage}
           onClose={() => setIsMediaModalOpen(false)}
-          onSelectImage={(newUrl) => {
-            setImage(newUrl);
-            setIsMediaModalOpen(false);
-          }}
+          onSelectImage={addImage}
         />
       )}
     </div>
@@ -471,37 +614,60 @@ function ProductEditorForm({ initialProduct, onSave, onClose, isEditing }: FormP
 
 export default function ProductFullScreenEditor() {
   const {
-    website,
     isProductFullScreenEditorOpen,
     editingProductId,
     closeProductEditor,
-    addProduct,
-    updateProduct,
   } = useGeneratedWebsiteStore();
+  const { projectId } = useBuilderStore();
+
+  const [initialProduct, setInitialProduct] = useState<CatalogItem | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    async function load() {
+      if (editingProductId && projectId) {
+        setIsLoading(true);
+        const { data } = await getCatalogItems(projectId);
+        const match = data?.find(d => d.id === editingProductId);
+        if (match) setInitialProduct(match);
+        setIsLoading(false);
+      } else {
+        setInitialProduct(null);
+        setIsLoading(false);
+      }
+    }
+    load();
+  }, [editingProductId, projectId]);
 
   if (!isProductFullScreenEditorOpen) return null;
 
-  const existing = editingProductId && website?.products
-    ? (website.products as ProductItem[]).find((p) => p.id === editingProductId) || null
-    : null;
-
-  const handleSave = (productData: Omit<ProductItem, "id">) => {
+  const handleSave = async (productData: CatalogItemInsert | CatalogItemUpdate) => {
     if (editingProductId) {
-      updateProduct(editingProductId, productData);
+      await updateCatalogItem(editingProductId, productData as CatalogItemUpdate);
     } else {
-      addProduct(productData);
+      await createCatalogItem(productData as CatalogItemInsert);
     }
+    toast.success("Saved to catalog");
     closeProductEditor();
   };
+
+  if (isLoading) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-100 dark:bg-zinc-950 animate-in fade-in">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-violet-600 border-r-transparent"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-slate-100 dark:bg-zinc-950 animate-in fade-in duration-200 select-none overflow-hidden">
       <ProductEditorForm
         key={editingProductId || "new"}
-        initialProduct={existing}
+        initialProduct={initialProduct}
         isEditing={Boolean(editingProductId)}
         onSave={handleSave}
         onClose={closeProductEditor}
+        projectId={projectId!}
       />
     </div>
   );

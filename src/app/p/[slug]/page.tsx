@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import WebsiteRenderer from "@/components/editor/WebsiteRenderer";
 import Logo from "@/components/brand/Logo";
 import { getProjectBySlug } from "@/lib/projects";
+import { getCatalogItems } from "@/lib/catalog";
 import type { Metadata } from "next";
 import type { WebsiteData } from "@/types/website";
 
@@ -44,11 +45,13 @@ export default async function PublicWebsitePage({
   }
 
   const websiteData = project.json_data as WebsiteData;
+  const { data: catalogItems } = await getCatalogItems(project.id);
 
   return (
     <main className="min-h-screen relative">
       <WebsiteRenderer
         data={websiteData}
+        catalogItems={catalogItems || undefined}
         pColor={project.primary_color}
         sColor={project.secondary_color}
         brandStyle={project.style}

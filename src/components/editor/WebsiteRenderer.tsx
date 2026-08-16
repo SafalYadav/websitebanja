@@ -49,6 +49,7 @@ const SECTION_LABELS: Record<string, string> = {
 
 interface WebsiteRendererProps {
   data?: WebsiteData;
+  catalogItems?: any[]; // We will pass CatalogItem[] here
   pColor?: string | null;
   sColor?: string | null;
   brandStyle?: string | null;
@@ -61,6 +62,7 @@ interface WebsiteRendererProps {
 
 export default function WebsiteRenderer({
   data,
+  catalogItems,
   pColor,
   sColor,
   brandStyle,
@@ -71,6 +73,7 @@ export default function WebsiteRenderer({
   publicSlug,
 }: WebsiteRendererProps) {
   const storeWebsite = useGeneratedWebsiteStore((state) => state.website);
+  const projectId = useBuilderStore((state) => state.projectId);
   const storePrimaryColor = useBuilderStore((state) => state.primaryColor);
   const storeSecondaryColor = useBuilderStore((state) => state.secondaryColor);
   const storeStyle = useBuilderStore((state) => state.style);
@@ -86,6 +89,19 @@ export default function WebsiteRenderer({
   const isPreviewMode = useGeneratedWebsiteStore((state) => state.isPreviewMode);
   const activePageId = useGeneratedWebsiteStore((state) => state.activePageId);
   const setActivePage = useGeneratedWebsiteStore((state) => state.setActivePage);
+  const [fetchedCatalog, setFetchedCatalog] = React.useState<any[]>([]);
+
+  React.useEffect(() => {
+    if (!isPublic && projectId && !catalogItems) {
+      import("@/lib/catalog").then((mod) => {
+        mod.getCatalogItems(projectId).then(({ data }) => {
+          if (data) setFetchedCatalog(data);
+        });
+      });
+    }
+  }, [isPublic, projectId, catalogItems]);
+
+  const finalCatalogItems = catalogItems || fetchedCatalog;
 
   const rawWebsite = data || storeWebsite;
   const primaryColor = pColor !== undefined ? pColor : storePrimaryColor;
@@ -138,8 +154,17 @@ export default function WebsiteRenderer({
 
   const activeSectionOrder = activePage?.sectionOrder || website.sectionOrder || [];
 
+  const handleSwitchPage = (slug: string) => {
+    if (!setActivePage) return;
+    // target can be empty string for home page
+    const targetPage = pages.find((p) => p.slug === slug || (slug === "home" && p.isHome));
+    if (targetPage) {
+      setActivePage(targetPage.id);
+    }
+  };
+
   return (
-    <WebsiteUIContext.Provider value={{ publicSlug, onSwitchPage: !isPublic ? setActivePage : undefined }}>
+    <WebsiteUIContext.Provider value={{ publicSlug, onSwitchPage: !isPublic ? handleSwitchPage : undefined }}>
       <div
         className="wb-website-root min-h-full w-full transition-colors duration-300 relative"
       style={{
@@ -301,11 +326,12 @@ export default function WebsiteRenderer({
           }
           case "products":
           case "catalog": {
-            const productsData = (rawSectionData || website.productsSection || website.products) as ProductsSectionData | ProductItem[];
+            const productsData = (rawSectionData || website.productsSection) as ProductsSectionData;
             content = (
               <ProductsSection
                 sectionKey={key}
                 data={productsData}
+                catalogItems={finalCatalogItems}
                 whatsappNumber={storeWhatsappNumber || storePhone}
                 isPublic={isPublic}
               />

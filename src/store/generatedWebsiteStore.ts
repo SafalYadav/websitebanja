@@ -80,12 +80,6 @@ interface GeneratedWebsiteState {
   updateElementValue: (elementPath: string, newValue: unknown) => void;
   setButtonAction: (elementPath: string, action: ButtonActionConfig) => void;
 
-  // E-Commerce Catalog Operations
-  addProduct: (product: Omit<ProductItem, "id">) => void;
-  updateProduct: (productId: string, updates: Partial<ProductItem>) => void;
-  deleteProduct: (productId: string) => void;
-  reorderProducts: (products: ProductItem[]) => void;
-
   // Undo / Redo
   undo: () => void;
   redo: () => void;
@@ -737,116 +731,6 @@ export const useGeneratedWebsiteStore = create<GeneratedWebsiteState>((set, get)
 
     const newHistory = [...history.slice(0, historyIndex + 1), newWebsite];
 
-    set({
-      website: newWebsite,
-      history: newHistory,
-      historyIndex: newHistory.length - 1,
-    });
-  },
-
-  addProduct: (product) => {
-    const { website, history, historyIndex } = get();
-    if (!website) return;
-
-    const newProduct: ProductItem = {
-      ...product,
-      id: `prod_${Date.now()}`,
-    };
-
-    const currentProducts = (website.products as ProductItem[] | undefined) || [];
-    const updatedProducts = [newProduct, ...currentProducts];
-
-    const newWebsite = {
-      ...website,
-      products: updatedProducts,
-    };
-
-    if (website.productsSection) {
-      newWebsite.productsSection = {
-        ...website.productsSection,
-        products: updatedProducts,
-      };
-    }
-
-    const newHistory = [...history.slice(0, historyIndex + 1), newWebsite];
-    set({
-      website: newWebsite,
-      history: newHistory,
-      historyIndex: newHistory.length - 1,
-    });
-  },
-
-  updateProduct: (productId, updates) => {
-    const { website, history, historyIndex } = get();
-    if (!website) return;
-
-    const currentProducts = (website.products as ProductItem[] | undefined) || [];
-    const updatedProducts = currentProducts.map((p) => (p.id === productId ? { ...p, ...updates } : p));
-
-    const newWebsite = {
-      ...website,
-      products: updatedProducts,
-    };
-
-    if (website.productsSection) {
-      newWebsite.productsSection = {
-        ...website.productsSection,
-        products: updatedProducts,
-      };
-    }
-
-    const newHistory = [...history.slice(0, historyIndex + 1), newWebsite];
-    set({
-      website: newWebsite,
-      history: newHistory,
-      historyIndex: newHistory.length - 1,
-    });
-  },
-
-  deleteProduct: (productId) => {
-    const { website, history, historyIndex } = get();
-    if (!website) return;
-
-    const currentProducts = (website.products as ProductItem[] | undefined) || [];
-    const updatedProducts = currentProducts.filter((p) => p.id !== productId);
-
-    const newWebsite = {
-      ...website,
-      products: updatedProducts,
-    };
-
-    if (website.productsSection) {
-      newWebsite.productsSection = {
-        ...website.productsSection,
-        products: updatedProducts,
-      };
-    }
-
-    const newHistory = [...history.slice(0, historyIndex + 1), newWebsite];
-    set({
-      website: newWebsite,
-      history: newHistory,
-      historyIndex: newHistory.length - 1,
-    });
-  },
-
-  reorderProducts: (products) => {
-    const { website, history, historyIndex } = get();
-    if (!website) return;
-
-    const newWebsite = {
-      ...website,
-      products,
-    };
-
-    if (website.productsSection) {
-      newWebsite.productsSection = {
-        ...website.productsSection,
-        products,
-      };
-    }
-
-    const newHistory = [...history.slice(0, historyIndex + 1), newWebsite];
     set({
       website: newWebsite,
       history: newHistory,

@@ -85,18 +85,32 @@ export interface Footer {
 
 export interface ProductItem {
   id: string;
+  project_id?: string;
   name: string;
   description: string;
-  price: number;
-  originalPrice?: number;
-  currencyCode?: string; // e.g. "INR", "USD", "EUR"
-  showDiscountBadge?: boolean;
-  image: string;
+  item_type?: "product" | "rental" | "service" | "showcase";
   category: string;
   status: "active" | "draft" | "out_of_stock";
+  images: string[];
+  
+  // Backwards compatibility with old `image` field
+  image?: string;
+  
+  price: number;
+  originalPrice?: number;
+  currencyCode?: string;
+  showDiscountBadge?: boolean;
+  
+  hourly_price?: number;
+  daily_price?: number;
+  weekly_price?: number;
+  monthly_price?: number;
+  
   ctaText?: string;
   ctaLink?: string;
   buttonAction?: ButtonActionConfig;
+  
+  display_order?: number;
   badge?: string;
 }
 
@@ -163,7 +177,6 @@ export interface WebsiteData {
   faq: FAQ[];
   contact: Contact;
   footer: Footer;
-  products?: ProductItem[];
   productsSection?: ProductsSectionData;
 
   // Global Branding & Navigation

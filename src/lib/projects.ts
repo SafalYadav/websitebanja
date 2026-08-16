@@ -264,19 +264,19 @@ export async function generatePreviewLink(projectId: string, jsonData: Record<st
   return { previewId: data?.id || null, error };
 }
 
-export async function getPreviewLinkData(previewId: string): Promise<{ data: Record<string, unknown> | null; error: Error | null; expired: boolean }> {
+export async function getPreviewLinkData(previewId: string): Promise<{ data: Record<string, unknown> | null; error: Error | null; expired: boolean; projectId: string | null }> {
   const { data, error } = await supabase
     .from("preview_links")
-    .select("json_data, expires_at")
+    .select("json_data, expires_at, project_id")
     .eq("id", previewId)
     .single();
 
-  if (error || !data) return { data: null, error, expired: false };
+  if (error || !data) return { data: null, error, expired: false, projectId: null };
 
   const isExpired = new Date() > new Date(data.expires_at);
   if (isExpired) {
-    return { data: null, error: new Error("Preview link has expired"), expired: true };
+    return { data: null, error: new Error("Preview link has expired"), expired: true, projectId: null };
   }
 
-  return { data: data.json_data, error: null, expired: false };
+  return { data: data.json_data, error: null, expired: false, projectId: data.project_id };
 }

@@ -88,7 +88,8 @@ function setDeepValue(obj: Record<string, unknown>, path: string, value: unknown
 
 export function executeStudioActions(
   website: WebsiteData,
-  actions: StudioAiAction[]
+  actions: StudioAiAction[],
+  activePageId?: string
 ): { updatedWebsite: WebsiteData; appliedSummaries: string[] } {
   let current = JSON.parse(JSON.stringify(website)) as WebsiteData;
   const appliedSummaries: string[] = [];
@@ -134,7 +135,7 @@ export function executeStudioActions(
 
           const resolvedTarget =
             actionType === "scroll"
-              ? resolveSemanticSectionTarget(rawTarget, current.sectionOrder)
+              ? resolveSemanticSectionTarget(rawTarget, activePageId && current.pages?.find(p => p.id === activePageId)?.sectionOrder || current.sectionOrder || [])
               : actionType === "url"
               ? sanitizeActionUrl(rawTarget)
               : rawTarget;
@@ -154,7 +155,8 @@ export function executeStudioActions(
         case "set_button_scroll_target": {
           const buttonPath = String(act.payload.path || "hero.button");
           const rawTarget = String(act.payload.target || "contact");
-          const resolvedSection = resolveSemanticSectionTarget(rawTarget, current.sectionOrder);
+          const activeOrder = activePageId && current.pages?.find(p => p.id === activePageId)?.sectionOrder || current.sectionOrder || [];
+          const resolvedSection = resolveSemanticSectionTarget(rawTarget, activeOrder);
           const basePath = buttonPath.replace(/\.button$/, "");
 
           const actionConfig: ButtonActionConfig = {
@@ -317,16 +319,33 @@ export function executeStudioActions(
           }
 
           current[newKey] = defaultData as never;
-          current.sectionOrder = [...currentOrder, newKey];
+          
+          if (activePageId && current.pages) {
+            const pageIndex = current.pages.findIndex(p => p.id === activePageId);
+            if (pageIndex !== -1) {
+              current.pages[pageIndex].sectionOrder = [...(current.pages[pageIndex].sectionOrder || []), newKey];
+            }
+          } else {
+            current.sectionOrder = [...currentOrder, newKey];
+          }
+          
           appliedSummaries.push(act.summary || `Added ${sectionType} section`);
           break;
         }
 
         case "delete_section": {
           const rawKey = String(act.payload.sectionKey || "").toLowerCase();
-          const resolvedKey = resolveSemanticSectionTarget(rawKey, current.sectionOrder || []);
-          if (resolvedKey && current.sectionOrder) {
-            current.sectionOrder = current.sectionOrder.filter((k) => k !== resolvedKey);
+          const activeOrder = activePageId && current.pages?.find(p => p.id === activePageId)?.sectionOrder || current.sectionOrder || [];
+          const resolvedKey = resolveSemanticSectionTarget(rawKey, activeOrder);
+          if (resolvedKey) {
+            if (activePageId && current.pages) {
+              const pageIndex = current.pages.findIndex(p => p.id === activePageId);
+              if (pageIndex !== -1) {
+                current.pages[pageIndex].sectionOrder = (current.pages[pageIndex].sectionOrder || []).filter((k) => k !== resolvedKey);
+              }
+            } else if (current.sectionOrder) {
+              current.sectionOrder = current.sectionOrder.filter((k) => k !== resolvedKey);
+            }
             delete current[resolvedKey];
             appliedSummaries.push(act.summary || `Removed ${resolvedKey} section`);
           }
@@ -336,7 +355,14 @@ export function executeStudioActions(
         case "reorder_sections": {
           const newOrder = act.payload.newOrder as string[];
           if (Array.isArray(newOrder) && newOrder.length > 0) {
-            current.sectionOrder = newOrder;
+            if (activePageId && current.pages) {
+              const pageIndex = current.pages.findIndex(p => p.id === activePageId);
+              if (pageIndex !== -1) {
+                current.pages[pageIndex].sectionOrder = newOrder;
+              }
+            } else {
+              current.sectionOrder = newOrder;
+            }
             appliedSummaries.push(act.summary || `Reordered website sections`);
           }
           break;
@@ -358,8 +384,16 @@ export function executeStudioActions(
             const currentProds = (current.products as ProductItem[] | undefined) || [];
             current.products = [newProd, ...currentProds];
 
-            if (!current.sectionOrder?.some((k) => k.startsWith("products") || k.startsWith("catalog"))) {
-              current.sectionOrder = [...(current.sectionOrder || []), "products"];
+            const activeOrder = activePageId && current.pages?.find(p => p.id === activePageId)?.sectionOrder || current.sectionOrder || [];
+            if (!activeOrder.some((k) => k.startsWith("products") || k.startsWith("catalog"))) {
+              if (activePageId && current.pages) {
+                const pageIndex = current.pages.findIndex(p => p.id === activePageId);
+                if (pageIndex !== -1) {
+                  current.pages[pageIndex].sectionOrder = [...(current.pages[pageIndex].sectionOrder || []), "products"];
+                }
+              } else {
+                current.sectionOrder = [...(current.sectionOrder || []), "products"];
+              }
               current.productsSection = {
                 title: "Featured Offerings",
                 subtitle: "Explore our collection.",

@@ -28,6 +28,7 @@ export default function AiStudioAssistant() {
   const setWebsite = useGeneratedWebsiteStore((state) => state.setWebsite);
   const undo = useGeneratedWebsiteStore((state) => state.undo);
   const selectedElement = useGeneratedWebsiteStore((state) => state.selectedElement);
+  const activePageId = useGeneratedWebsiteStore((state) => state.activePageId);
 
   const businessName = useBuilderStore((state) => state.businessName);
   const category = useBuilderStore((state) => state.category);
@@ -67,9 +68,39 @@ export default function AiStudioAssistant() {
         throw new Error(data.details || data.error || "Failed to execute AI modification.");
       }
 
+      // Intercept catalog actions to write directly to DB
+      const projectId = useBuilderStore.getState().projectId;
+      if (projectId) {
+        const { createCatalogItem, updateCatalogItem } = await import("@/lib/catalog");
+        for (const act of (data.actions || []) as StudioAiAction[]) {
+          if (act.action === "add_product") {
+            const product = act.payload.product as any;
+            if (product && product.name) {
+              await createCatalogItem({
+                project_id: projectId,
+                name: product.name,
+                item_type: "product",
+                price: Number(product.price) || 0,
+                description: product.description || "",
+                category: product.category || "General",
+                status: "active",
+                images: product.image ? [product.image] : [],
+              });
+            }
+          } else if (act.action === "update_product") {
+            const productId = String(act.payload.productId);
+            const updates = act.payload.updates as any;
+            if (productId && updates) {
+              await updateCatalogItem(productId, updates);
+            }
+          }
+        }
+      }
+
       const { updatedWebsite, appliedSummaries } = executeStudioActions(
         website,
-        data.actions || []
+        data.actions || [],
+        activePageId || undefined
       );
 
       setWebsite(updatedWebsite);

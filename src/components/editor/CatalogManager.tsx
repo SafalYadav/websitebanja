@@ -1,9 +1,11 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Image from "next/image";
 import { useGeneratedWebsiteStore } from "@/store/generatedWebsiteStore";
-import type { ProductItem } from "@/types/website";
+import { useBuilderStore } from "@/store/builderStore";
+import { getCatalogItems, deleteCatalogItem } from "@/lib/catalog";
+import type { CatalogItem } from "@/lib/catalog";
 import {
   Plus,
   ShoppingBag,
@@ -12,9 +14,11 @@ import {
   Search,
   X,
   Layers,
+  RefreshCw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CURRENCIES } from "@/components/editor/ProductFullScreenEditor";
+import { toast } from "@/store/toastStore";
 
 export default function CatalogManager() {
   const {
@@ -22,16 +26,44 @@ export default function CatalogManager() {
     isCatalogModalOpen,
     setIsCatalogModalOpen,
     openProductEditor,
-    deleteProduct,
     addSection,
   } = useGeneratedWebsiteStore();
+  const { projectId } = useBuilderStore();
 
+  const [products, setProducts] = useState<CatalogItem[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
 
+  const loadCatalog = async () => {
+    if (!projectId) return;
+    setIsLoading(true);
+    const { data, error } = await getCatalogItems(projectId);
+    if (!error && data) {
+      setProducts(data);
+    }
+    setIsLoading(false);
+  };
+
+  useEffect(() => {
+    if (isCatalogModalOpen) {
+      loadCatalog();
+    }
+  }, [isCatalogModalOpen, projectId]);
+
+  const handleDelete = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this item?")) return;
+    const { error } = await deleteCatalogItem(id);
+    if (error) {
+      toast.error("Failed to delete item");
+    } else {
+      toast.success("Item deleted");
+      loadCatalog();
+    }
+  };
+
   if (!isCatalogModalOpen) return null;
 
-  const products: ProductItem[] = (website?.products as ProductItem[] | undefined) || [];
   const categories = Array.from(new Set(products.map((p) => p.category || "General")));
 
   const filteredProducts = products.filter((p) => {
@@ -68,11 +100,19 @@ export default function CatalogManager() {
           <div className="flex items-center gap-3">
             <button
               type="button"
+              onClick={loadCatalog}
+              className="flex items-center justify-center h-8 w-8 rounded-xl bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700 transition"
+              title="Refresh"
+            >
+              <RefreshCw className={cn("h-4 w-4", isLoading && "animate-spin")} />
+            </button>
+            <button
+              type="button"
               onClick={() => openProductEditor(null)}
               className="flex items-center gap-1.5 rounded-xl bg-violet-600 px-4 py-2 text-xs font-bold text-white shadow-md shadow-violet-600/20 hover:bg-violet-700 active:scale-95 transition"
             >
               <Plus className="h-4 w-4" />
-              <span>Add Product</span>
+              <span>Add Item</span>
             </button>
 
             <button
@@ -92,7 +132,7 @@ export default function CatalogManager() {
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-400" />
             <input
               type="text"
-              placeholder="Search products by title or description..."
+              placeholder="Search catalog by title or description..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full rounded-xl border border-zinc-200 bg-zinc-50 pl-9 pr-4 py-2 text-xs text-zinc-900 placeholder-zinc-400 outline-none focus:border-violet-500 dark:border-white/10 dark:bg-zinc-950 dark:text-white"
@@ -134,7 +174,7 @@ export default function CatalogManager() {
         {!hasProductsSection && (
           <div className="bg-amber-500/10 border-b border-amber-500/20 px-6 py-2.5 flex items-center justify-between text-xs text-amber-700 dark:text-amber-300">
             <span>
-              The <strong>Products Catalog Section</strong> is not currently visible on your website canvas.
+              The <strong>Catalog Section</strong> is not currently visible on your website canvas.
             </span>
             <button
               type="button"
@@ -142,7 +182,7 @@ export default function CatalogManager() {
               className="flex items-center gap-1 font-bold text-violet-600 dark:text-violet-400 hover:underline"
             >
               <Layers className="h-3.5 w-3.5" />
-              Add Products Section to Page
+              Add Catalog Section to Page
             </button>
           </div>
         )}
@@ -154,11 +194,11 @@ export default function CatalogManager() {
               <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-violet-600/10 text-violet-600 dark:bg-violet-500/20 dark:text-violet-400 mb-3">
                 <ShoppingBag className="h-7 w-7" />
               </div>
-              <h3 className="text-sm font-bold text-zinc-900 dark:text-white">No products found</h3>
+              <h3 className="text-sm font-bold text-zinc-900 dark:text-white">No items found</h3>
               <p className="text-xs text-zinc-500 max-w-sm mt-1 mb-5">
                 {products.length === 0
-                  ? "Start selling by adding your first product to your online catalog."
-                  : "No products matched your search or category filter."}
+                  ? "Start building your catalog by adding your first item."
+                  : "No items matched your search or category filter."}
               </p>
               <button
                 type="button"
@@ -166,13 +206,15 @@ export default function CatalogManager() {
                 className="flex items-center gap-2 rounded-xl bg-violet-600 px-5 py-2.5 text-xs font-bold text-white shadow-md shadow-violet-600/20 hover:bg-violet-700 transition"
               >
                 <Plus className="h-4 w-4" />
-                <span>Create New Product</span>
+                <span>Create New Item</span>
               </button>
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {filteredProducts.map((product) => {
                 const isOutOfStock = product.status === "out_of_stock";
+                const displayImage = product.images?.[0] || product.image || "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=800&auto=format&fit=crop&q=80";
+                
                 return (
                   <div
                     key={product.id}
@@ -181,7 +223,7 @@ export default function CatalogManager() {
                     {/* Thumbnail & Badges */}
                     <div className="relative aspect-4/3 w-full rounded-xl overflow-hidden bg-zinc-100 dark:bg-zinc-800 mb-3">
                       <Image
-                        src={product.image || "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=800&auto=format&fit=crop&q=80"}
+                        src={displayImage}
                         alt={product.name}
                         fill
                         className="object-cover transition group-hover:scale-105"
@@ -197,6 +239,11 @@ export default function CatalogManager() {
                           <span className="rounded-md bg-rose-600 px-2 py-1 text-[10px] font-bold text-white uppercase">
                             Out of Stock
                           </span>
+                        </div>
+                      )}
+                      {product.item_type && (
+                        <div className="absolute bottom-2 right-2 rounded-md bg-black/50 backdrop-blur-xs px-2 py-0.5 text-[9px] font-bold text-white uppercase">
+                          {product.item_type}
                         </div>
                       )}
                     </div>
@@ -226,15 +273,24 @@ export default function CatalogManager() {
 
                       <div className="flex items-center justify-between pt-2 border-t border-zinc-100 dark:border-white/5">
                         <div className="flex items-baseline gap-1.5">
-                          <span className="text-sm font-black text-zinc-900 dark:text-white">
-                            {CURRENCIES.find(c => c.code === product.currencyCode)?.symbol || "₹"}
-                            {product.price.toLocaleString(CURRENCIES.find(c => c.code === product.currencyCode)?.locale || "en-IN")}
-                          </span>
-                          {product.originalPrice && product.originalPrice > product.price && (
-                            <span className="text-[10px] text-zinc-400 line-through">
-                              {CURRENCIES.find(c => c.code === product.currencyCode)?.symbol || "₹"}
-                              {product.originalPrice.toLocaleString(CURRENCIES.find(c => c.code === product.currencyCode)?.locale || "en-IN")}
+                          {product.item_type === 'rental' ? (
+                            <span className="text-xs font-black text-zinc-900 dark:text-white">
+                              {CURRENCIES.find(c => c.code === product.currency_code)?.symbol || "₹"}
+                              {product.daily_price ? `${product.daily_price}/day` : product.hourly_price ? `${product.hourly_price}/hr` : "Ask for price"}
                             </span>
+                          ) : (
+                            <>
+                              <span className="text-sm font-black text-zinc-900 dark:text-white">
+                                {CURRENCIES.find(c => c.code === product.currency_code)?.symbol || "₹"}
+                                {product.price?.toLocaleString(CURRENCIES.find(c => c.code === product.currency_code)?.locale || "en-IN")}
+                              </span>
+                              {product.original_price && product.price && product.original_price > product.price && (
+                                <span className="text-[10px] text-zinc-400 line-through">
+                                  {CURRENCIES.find(c => c.code === product.currency_code)?.symbol || "₹"}
+                                  {product.original_price.toLocaleString(CURRENCIES.find(c => c.code === product.currency_code)?.locale || "en-IN")}
+                                </span>
+                              )}
+                            </>
                           )}
                         </div>
 
@@ -244,15 +300,15 @@ export default function CatalogManager() {
                             type="button"
                             onClick={() => openProductEditor(product.id)}
                             className="flex h-7 w-7 items-center justify-center rounded-lg bg-zinc-100 text-zinc-700 hover:bg-violet-50 hover:text-violet-600 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700 transition"
-                            title="Edit Product Details"
+                            title="Edit Item Details"
                           >
                             <Edit2 className="h-3.5 w-3.5" />
                           </button>
                           <button
                             type="button"
-                            onClick={() => deleteProduct(product.id)}
+                            onClick={() => handleDelete(product.id)}
                             className="flex h-7 w-7 items-center justify-center rounded-lg bg-zinc-100 text-zinc-700 hover:bg-rose-50 hover:text-rose-600 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700 transition"
-                            title="Delete Product"
+                            title="Delete Item"
                           >
                             <Trash2 className="h-3.5 w-3.5" />
                           </button>
