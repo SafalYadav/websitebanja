@@ -142,6 +142,7 @@ export type ElementType =
   | "link"
   | "product"
   | "section"
+  | "logo"
   | "page";
 
 export interface ElementSelection {
