@@ -4,7 +4,7 @@ import { Ratelimit } from "@upstash/ratelimit";
 import { Redis } from "@upstash/redis";
 import { openai } from "@/lib/openai";
 import { buildWebsitePrompt } from "@/lib/prompts";
-import { shouldBypassRateLimit } from "@/lib/rateLimit";
+import { shouldBypassRateLimit, checkMemoryRateLimit } from "@/lib/rateLimit";
 import { validateBusinessInputs } from "@/lib/validation";
 import { trackAnalyticsEvent } from "@/lib/analytics";
 import type { AiWorkspace } from "@/types/aiWorkspace";
@@ -109,6 +109,24 @@ export async function POST(req: Request) {
           if (!userResult.success) {
             return NextResponse.json(
               { success: false, message: "Free plan limit reached (3 AI requests per 7 days). Please upgrade to Paid Pro for higher limits." },
+              { status: 429 }
+            );
+          }
+        } else {
+          // In-memory rate limiting fallback
+          const limit = isPaidPro ? 50 : 3;
+          const ipCheck = checkMemoryRateLimit(`ip_${ip}`, limit);
+          if (!ipCheck.success) {
+            return NextResponse.json(
+              { success: false, message: `${isPaidPro ? "Paid Pro" : "Free"} plan limit reached (${limit} AI requests per 7 days).` },
+              { status: 429 }
+            );
+          }
+
+          const userCheck = checkMemoryRateLimit(`user_${user.id}`, limit);
+          if (!userCheck.success) {
+            return NextResponse.json(
+              { success: false, message: `${isPaidPro ? "Paid Pro" : "Free"} plan limit reached (${limit} AI requests per 7 days).` },
               { status: 429 }
             );
           }

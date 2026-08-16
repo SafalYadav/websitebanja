@@ -5,7 +5,7 @@ import { Redis } from "@upstash/redis";
 
 import { openai } from "@/lib/openai";
 import { buildPlanningPrompt } from "@/lib/planningPrompts";
-import { shouldBypassRateLimit } from "@/lib/rateLimit";
+import { shouldBypassRateLimit, checkMemoryRateLimit } from "@/lib/rateLimit";
 import { validateBusinessInputs } from "@/lib/validation";
 import { AI_WORKSPACE_FILES, type AiWorkspace, type PlanningInput } from "@/types/aiWorkspace";
 
@@ -94,6 +94,23 @@ export async function POST(request: Request) {
         }
       } catch (rateLimitErr) {
         console.warn("[RateLimit Execution ERROR] Proceeding gracefully:", rateLimitErr);
+      }
+    } else if (!bypass) {
+      // In-memory rate limiting fallback
+      const ipCheck = checkMemoryRateLimit(`ip_${ip}`, 3);
+      if (!ipCheck.success) {
+        return NextResponse.json(
+          { success: false, message: "Free plan limit reached (3 AI requests per 7 days). Please upgrade to continue." },
+          { status: 429 }
+        );
+      }
+
+      const userCheck = checkMemoryRateLimit(`user_${user.id}`, 3);
+      if (!userCheck.success) {
+        return NextResponse.json(
+          { success: false, message: "Free plan limit reached (3 AI requests per 7 days). Please upgrade to continue." },
+          { status: 429 }
+        );
       }
     }
 

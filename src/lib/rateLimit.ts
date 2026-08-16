@@ -1,6 +1,39 @@
 /**
- * Server-side rate limiting helper functions.
+ * Server-side rate limiting helper functions with in-memory fallback.
  */
+
+// In-memory sliding window fallback store (active if Upstash is not configured)
+interface RateLimitRecord {
+  count: number;
+  resetAt: number;
+}
+
+const memoryStore = new Map<string, RateLimitRecord>();
+
+/**
+ * Checks in-memory rate limiting when Upstash Redis is not available.
+ * Default: 3 requests per 7 days rolling window.
+ */
+export function checkMemoryRateLimit(
+  key: string,
+  limit: number = 3,
+  windowMs: number = 7 * 24 * 60 * 60 * 1000
+): { success: boolean; remaining: number } {
+  const now = Date.now();
+  const record = memoryStore.get(key);
+
+  if (!record || now > record.resetAt) {
+    memoryStore.set(key, { count: 1, resetAt: now + windowMs });
+    return { success: true, remaining: limit - 1 };
+  }
+
+  if (record.count >= limit) {
+    return { success: false, remaining: 0 };
+  }
+
+  record.count += 1;
+  return { success: true, remaining: limit - record.count };
+}
 
 /**
  * Checks if the request should bypass rate limiting.
@@ -8,18 +41,14 @@
  * In production, this function ALWAYS returns false regardless of environment variables.
  */
 export function shouldBypassRateLimit(ip: string): boolean {
-  // CRITICAL SECURITY ENFORCEMENT: Never bypass in production
   if (process.env.NODE_ENV !== "development") {
     return false;
   }
 
-  // 1. Explicit development bypass flag
   if (process.env.RATE_LIMIT_DEV_BYPASS === "true" || process.env.RATE_LIMIT_DEV_BYPASS === "1") {
-    console.info(`[RateLimit] Development bypass active via RATE_LIMIT_DEV_BYPASS=true (client IP: ${ip})`);
     return true;
   }
 
-  // 2. IP-specific development bypass list
   const rawBypassIps = process.env.RATE_LIMIT_BYPASS_IPS;
   if (!rawBypassIps) {
     return false;
@@ -32,15 +61,9 @@ export function shouldBypassRateLimit(ip: string): boolean {
 
   const cleanIp = ip.trim().toLowerCase();
 
-  const isMatched = allowedIps.some((allowed) => {
+  return allowedIps.some((allowed) => {
     if (allowed === cleanIp) return true;
     if (allowed === "localhost" && (cleanIp === "127.0.0.1" || cleanIp === "::1")) return true;
     return false;
   });
-
-  if (isMatched) {
-    console.info(`[RateLimit] Development bypass active for matching IP: ${ip}`);
-  }
-
-  return isMatched;
 }
