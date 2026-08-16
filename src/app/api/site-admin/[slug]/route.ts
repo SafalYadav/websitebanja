@@ -161,16 +161,31 @@ export async function PATCH(
     } else if (action === "delete_lead" && leadId) {
       currentJson.leads = (currentJson.leads || []).filter((l) => l.id !== leadId);
     } else if (action === "toggle_product_status" && productId) {
-      currentJson.products = (currentJson.products || []).map((p) =>
-        p.id === productId ? { ...p, status: p.status === "active" ? "out_of_stock" : "active" } : p
-      );
+      // Fetch product first to check current status
+      const { data: existing } = await supabase
+        .from("catalog_items")
+        .select("status")
+        .eq("id", productId)
+        .single();
+      
+      if (existing) {
+        await supabase
+          .from("catalog_items")
+          .update({ status: existing.status === "active" ? "out_of_stock" : "active" })
+          .eq("id", productId);
+      }
     } else if (action === "add_product" && newProduct) {
-      const created: ProductItem = {
-        ...newProduct,
-        id: `prod_${Date.now()}`,
+      await supabase.from("catalog_items").insert({
+        project_id: project.id,
+        name: newProduct.name,
+        description: newProduct.description || "",
+        price: Number(newProduct.price) || 0,
+        original_price: newProduct.originalPrice ? Number(newProduct.originalPrice) : null,
         status: newProduct.status || "active",
-      };
-      currentJson.products = [created, ...(currentJson.products || [])];
+        category: newProduct.category || "General",
+        item_type: newProduct.itemType || "product",
+        images: newProduct.image ? [newProduct.image] : [],
+      });
     } else if (updates) {
       Object.assign(currentJson, updates);
     }
