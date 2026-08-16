@@ -1,10 +1,16 @@
-import type { WebsiteData, ProductItem } from "@/types/website";
+import type { WebsiteData, ProductItem, ButtonActionConfig, ButtonActionType } from "@/types/website";
+import { sanitizeActionUrl } from "@/lib/buttonActions";
 
 export interface StudioAiAction {
   action:
     | "update_text"
     | "replace_image"
     | "update_button"
+    | "set_button_action"
+    | "set_button_scroll_target"
+    | "set_button_whatsapp"
+    | "set_button_external_url"
+    | "set_button_call"
     | "add_section"
     | "delete_section"
     | "reorder_sections"
@@ -74,6 +80,84 @@ export function executeStudioActions(
           break;
         }
 
+        case "set_button_action": {
+          const buttonPath = String(act.payload.path || "hero.button");
+          const actionType = String(act.payload.type || "scroll") as ButtonActionType;
+          const target = String(act.payload.target || "contact");
+          const label = act.payload.label ? String(act.payload.label) : undefined;
+
+          const actionConfig: ButtonActionConfig = {
+            type: actionType,
+            target: actionType === "url" ? sanitizeActionUrl(target) : target,
+            label,
+          };
+
+          const basePath = buttonPath.replace(/\.button$/, "");
+          current = setDeepValue(current as unknown as Record<string, unknown>, `${basePath}.buttonAction`, actionConfig) as unknown as WebsiteData;
+          appliedSummaries.push(act.summary || `Configured button action: ${actionType} -> ${target}`);
+          break;
+        }
+
+        case "set_button_scroll_target": {
+          const buttonPath = String(act.payload.path || "hero.button");
+          const sectionTarget = String(act.payload.target || "contact").replace(/^#/, "");
+          const basePath = buttonPath.replace(/\.button$/, "");
+
+          const actionConfig: ButtonActionConfig = {
+            type: "scroll",
+            target: sectionTarget,
+          };
+
+          current = setDeepValue(current as unknown as Record<string, unknown>, `${basePath}.buttonAction`, actionConfig) as unknown as WebsiteData;
+          appliedSummaries.push(act.summary || `Configured button to scroll to ${sectionTarget} section`);
+          break;
+        }
+
+        case "set_button_whatsapp": {
+          const buttonPath = String(act.payload.path || "hero.button");
+          const phone = String(act.payload.phone || current.contact?.phone || "+919876543210");
+          const basePath = buttonPath.replace(/\.button$/, "");
+
+          const actionConfig: ButtonActionConfig = {
+            type: "whatsapp",
+            target: phone,
+          };
+
+          current = setDeepValue(current as unknown as Record<string, unknown>, `${basePath}.buttonAction`, actionConfig) as unknown as WebsiteData;
+          appliedSummaries.push(act.summary || `Configured button to open WhatsApp (${phone})`);
+          break;
+        }
+
+        case "set_button_external_url": {
+          const buttonPath = String(act.payload.path || "hero.button");
+          const url = sanitizeActionUrl(String(act.payload.url || "#"));
+          const basePath = buttonPath.replace(/\.button$/, "");
+
+          const actionConfig: ButtonActionConfig = {
+            type: "url",
+            target: url,
+          };
+
+          current = setDeepValue(current as unknown as Record<string, unknown>, `${basePath}.buttonAction`, actionConfig) as unknown as WebsiteData;
+          appliedSummaries.push(act.summary || `Configured button to navigate to ${url}`);
+          break;
+        }
+
+        case "set_button_call": {
+          const buttonPath = String(act.payload.path || "hero.button");
+          const phone = String(act.payload.phone || current.contact?.phone || "+919876543210");
+          const basePath = buttonPath.replace(/\.button$/, "");
+
+          const actionConfig: ButtonActionConfig = {
+            type: "call",
+            target: phone,
+          };
+
+          current = setDeepValue(current as unknown as Record<string, unknown>, `${basePath}.buttonAction`, actionConfig) as unknown as WebsiteData;
+          appliedSummaries.push(act.summary || `Configured button to dial ${phone}`);
+          break;
+        }
+
         case "add_section": {
           const sectionType = String(act.payload.sectionType || "features");
           const customData = act.payload.data;
@@ -86,7 +170,7 @@ export function executeStudioActions(
               defaultData = {
                 title: "Featured Collection",
                 subtitle: "Explore our bestselling curated selection of products.",
-                products: [],
+                products: current.products || [],
               };
             } else if (sectionType === "features") {
               defaultData = [
@@ -107,11 +191,26 @@ export function executeStudioActions(
         }
 
         case "delete_section": {
-          const sectionKey = String(act.payload.sectionKey || "");
+          const sectionKey = String(act.payload.sectionKey || "").toLowerCase();
           if (sectionKey && current.sectionOrder) {
-            current.sectionOrder = current.sectionOrder.filter((k) => k !== sectionKey);
-            delete current[sectionKey];
-            appliedSummaries.push(act.summary || `Removed ${sectionKey} section`);
+            // Find exact or prefix match (e.g. "faq" matches "faq_123" or "faq")
+            const targetKey = current.sectionOrder.find(
+              (k) => k.toLowerCase() === sectionKey || k.toLowerCase().startsWith(sectionKey)
+            );
+            if (targetKey) {
+              current.sectionOrder = current.sectionOrder.filter((k) => k !== targetKey);
+              delete current[targetKey];
+              appliedSummaries.push(act.summary || `Removed ${targetKey} section`);
+            }
+          }
+          break;
+        }
+
+        case "reorder_sections": {
+          const newOrder = act.payload.newOrder as string[];
+          if (Array.isArray(newOrder) && newOrder.length > 0) {
+            current.sectionOrder = newOrder;
+            appliedSummaries.push(act.summary || `Reordered website sections`);
           }
           break;
         }
@@ -123,8 +222,11 @@ export function executeStudioActions(
               ...product,
               id: product.id || `prod_${Date.now()}`,
               price: Number(product.price) || 0,
+              originalPrice: product.originalPrice ? Number(product.originalPrice) : undefined,
               image: product.image || "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=800&auto=format&fit=crop&q=80",
               status: product.status || "active",
+              category: product.category || "General",
+              ctaText: product.ctaText || "Order on WhatsApp",
             };
             const currentProds = (current.products as ProductItem[] | undefined) || [];
             current.products = [newProd, ...currentProds];
@@ -138,7 +240,7 @@ export function executeStudioActions(
                 products: current.products,
               };
             }
-            appliedSummaries.push(act.summary || `Added product: ${newProd.name}`);
+            appliedSummaries.push(act.summary || `Added product: ${newProd.name} (₹${newProd.price})`);
           }
           break;
         }

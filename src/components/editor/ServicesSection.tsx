@@ -4,6 +4,7 @@ import { motion, useReducedMotion } from "framer-motion";
 import { Wrench, Sparkles, ArrowRight, Layers, Cpu, Gem } from "lucide-react";
 import ImageWithFallback from "@/components/ui/ImageWithFallback";
 import EditableElement from "@/components/editor/EditableElement";
+import { handleButtonActionClick } from "@/lib/buttonActions";
 import type { Service } from "@/types/website";
 
 const SERVICE_ICONS = [Wrench, Sparkles, Layers, Cpu, Gem];
@@ -164,10 +165,14 @@ export default function ServicesSection({
                 </div>
 
                 {/* Footer Action */}
-                <div className="px-7 pb-6 pt-3 border-t border-[var(--wb-border)] flex items-center justify-between text-xs font-bold text-[var(--wb-primary)]">
+                <button
+                  type="button"
+                  onClick={(e) => handleButtonActionClick(service.buttonAction, "contact", e)}
+                  className="px-7 pb-6 pt-3 border-t border-[var(--wb-border)] flex items-center justify-between text-xs font-bold text-[var(--wb-primary)] cursor-pointer text-left"
+                >
                   <span>Explore Offering</span>
                   <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
-                </div>
+                </button>
               </motion.article>
             );
           })}

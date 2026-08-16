@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { WebsiteData, ElementSelection, ProductItem } from "@/types/website";
+import type { WebsiteData, ElementSelection, ProductItem, ButtonActionConfig } from "@/types/website";
 
 export type ViewportMode = "desktop" | "tablet" | "mobile";
 export type StudioTab = "layers" | "elements" | "catalog" | "ai" | "theme";
@@ -12,6 +12,15 @@ interface GeneratedWebsiteState {
   activeStudioTab: StudioTab;
   isPreviewMode: boolean;
   viewportMode: ViewportMode;
+
+  // Right Inspector Panel UX Controls
+  isRightPanelOpen: boolean;
+  rightPanelWidth: number;
+
+  // Catalog & Product Full-Screen Workspace
+  isCatalogModalOpen: boolean;
+  isProductFullScreenEditorOpen: boolean;
+  editingProductId: string | null;
 
   // History for Undo/Redo
   history: WebsiteData[];
@@ -26,6 +35,13 @@ interface GeneratedWebsiteState {
   setIsPreviewMode: (value: boolean) => void;
   setViewportMode: (mode: ViewportMode) => void;
 
+  // Panel & Window Handlers
+  setIsRightPanelOpen: (isOpen: boolean) => void;
+  setRightPanelWidth: (width: number) => void;
+  setIsCatalogModalOpen: (isOpen: boolean) => void;
+  openProductEditor: (productId?: string | null) => void;
+  closeProductEditor: () => void;
+
   // Section Operations
   updateWebsiteSection: (section: string, data: WebsiteData[keyof WebsiteData]) => void;
   addSection: (sectionType: string) => void;
@@ -35,6 +51,7 @@ interface GeneratedWebsiteState {
 
   // Element-Level Direct Editing
   updateElementValue: (elementPath: string, newValue: unknown) => void;
+  setButtonAction: (elementPath: string, action: ButtonActionConfig) => void;
 
   // E-Commerce Catalog Operations
   addProduct: (product: Omit<ProductItem, "id">) => void;
@@ -50,7 +67,6 @@ interface GeneratedWebsiteState {
 
 const DEFAULT_ORDER = ["hero", "about", "services", "features", "faq", "contact", "footer"];
 
-// Helper: Safely sets a deep value using a path string e.g. "hero.title" or "services[0].title"
 function setDeepValue(obj: Record<string, unknown>, path: string, value: unknown): Record<string, unknown> {
   const root = JSON.parse(JSON.stringify(obj)) as Record<string, unknown>;
   const keys = path.replace(/\[(\w+)\]/g, ".$1").split(".");
@@ -76,6 +92,15 @@ export const useGeneratedWebsiteStore = create<GeneratedWebsiteState>((set, get)
   activeStudioTab: "layers",
   isPreviewMode: false,
   viewportMode: "desktop",
+
+  // Right Inspector starts closed by default for maximum canvas space
+  isRightPanelOpen: false,
+  rightPanelWidth: 380,
+
+  isCatalogModalOpen: false,
+  isProductFullScreenEditorOpen: false,
+  editingProductId: null,
+
   history: [],
   historyIndex: -1,
 
@@ -91,16 +116,46 @@ export const useGeneratedWebsiteStore = create<GeneratedWebsiteState>((set, get)
   },
 
   setIsGenerating: (value) => set({ isGenerating: value }),
-  setSelectedSection: (section) => set({ selectedSection: section }),
+  setSelectedSection: (section) => {
+    set({ selectedSection: section });
+  },
   setSelectedElement: (element) => {
-    set({ selectedElement: element });
-    if (element?.sectionKey) {
-      set({ selectedSection: element.sectionKey });
+    if (element) {
+      set({
+        selectedElement: element,
+        selectedSection: element.sectionKey || get().selectedSection,
+        isRightPanelOpen: true, // Automatically open right panel on click
+      });
+    } else {
+      set({
+        selectedElement: null,
+      });
     }
   },
-  setActiveStudioTab: (tab) => set({ activeStudioTab: tab }),
+  setActiveStudioTab: (tab) => {
+    set({ activeStudioTab: tab });
+    if (tab === "catalog") {
+      set({ isCatalogModalOpen: true });
+    }
+  },
   setIsPreviewMode: (value) => set({ isPreviewMode: value }),
   setViewportMode: (mode) => set({ viewportMode: mode }),
+
+  setIsRightPanelOpen: (isOpen) => set({ isRightPanelOpen: isOpen }),
+  setRightPanelWidth: (width) => set({ rightPanelWidth: Math.min(Math.max(width, 300), 650) }),
+  setIsCatalogModalOpen: (isOpen) => set({ isCatalogModalOpen: isOpen }),
+  openProductEditor: (productId = null) =>
+    set({
+      editingProductId: productId,
+      isProductFullScreenEditorOpen: true,
+      isCatalogModalOpen: false,
+    }),
+  closeProductEditor: () =>
+    set({
+      editingProductId: null,
+      isProductFullScreenEditorOpen: false,
+      isCatalogModalOpen: true,
+    }),
 
   updateWebsiteSection: (section, data) => {
     const { website, history, historyIndex } = get();
@@ -120,7 +175,11 @@ export const useGeneratedWebsiteStore = create<GeneratedWebsiteState>((set, get)
     const { website, history, historyIndex, selectedElement } = get();
     if (!website) return;
 
-    const updatedWebsite = setDeepValue(website as unknown as Record<string, unknown>, elementPath, newValue) as unknown as WebsiteData;
+    const updatedWebsite = setDeepValue(
+      website as unknown as Record<string, unknown>,
+      elementPath,
+      newValue
+    ) as unknown as WebsiteData;
     const newHistory = [...history.slice(0, historyIndex + 1), updatedWebsite];
 
     set({
@@ -128,6 +187,28 @@ export const useGeneratedWebsiteStore = create<GeneratedWebsiteState>((set, get)
       history: newHistory,
       historyIndex: newHistory.length - 1,
       selectedElement: selectedElement ? { ...selectedElement, value: newValue } : null,
+    });
+  },
+
+  setButtonAction: (elementPath, action) => {
+    const { website, history, historyIndex } = get();
+    if (!website) return;
+
+    // Determine target path for buttonAction e.g. "hero.buttonAction"
+    const basePath = elementPath.replace(/\.button$/, "");
+    const actionPath = `${basePath}.buttonAction`;
+
+    const updatedWebsite = setDeepValue(
+      website as unknown as Record<string, unknown>,
+      actionPath,
+      action
+    ) as unknown as WebsiteData;
+    const newHistory = [...history.slice(0, historyIndex + 1), updatedWebsite];
+
+    set({
+      website: updatedWebsite,
+      history: newHistory,
+      historyIndex: newHistory.length - 1,
     });
   },
 
@@ -143,6 +224,7 @@ export const useGeneratedWebsiteStore = create<GeneratedWebsiteState>((set, get)
         title: "Welcome to Our Business",
         subtitle: "We deliver exceptional quality, craftsmanship, and dedicated service.",
         button: "Explore Offerings",
+        buttonAction: { type: "scroll", target: "services" },
       };
     } else if (sectionType === "about") {
       defaultData = {
@@ -151,8 +233,16 @@ export const useGeneratedWebsiteStore = create<GeneratedWebsiteState>((set, get)
       };
     } else if (sectionType === "services") {
       defaultData = [
-        { title: "Bespoke Consulting", description: "Tailored strategies for immediate impact." },
-        { title: "Core Execution", description: "High-precision delivery and ongoing optimization." },
+        {
+          title: "Bespoke Consulting",
+          description: "Tailored strategies for immediate impact.",
+          buttonAction: { type: "scroll", target: "contact" },
+        },
+        {
+          title: "Core Execution",
+          description: "High-precision delivery and ongoing optimization.",
+          buttonAction: { type: "scroll", target: "contact" },
+        },
       ];
     } else if (sectionType === "features") {
       defaultData = [
@@ -278,7 +368,6 @@ export const useGeneratedWebsiteStore = create<GeneratedWebsiteState>((set, get)
     });
   },
 
-  // E-Commerce Catalog
   addProduct: (product) => {
     const { website, history, historyIndex } = get();
     if (!website) return;
@@ -291,7 +380,6 @@ export const useGeneratedWebsiteStore = create<GeneratedWebsiteState>((set, get)
     const currentProducts = (website.products as ProductItem[] | undefined) || [];
     const updatedProducts = [newProduct, ...currentProducts];
 
-    // Also update productsSection if active
     const newWebsite = {
       ...website,
       products: updatedProducts,
@@ -419,6 +507,11 @@ export const useGeneratedWebsiteStore = create<GeneratedWebsiteState>((set, get)
       activeStudioTab: "layers",
       isPreviewMode: false,
       viewportMode: "desktop",
+      isRightPanelOpen: false,
+      rightPanelWidth: 380,
+      isCatalogModalOpen: false,
+      isProductFullScreenEditorOpen: false,
+      editingProductId: null,
       history: [],
       historyIndex: -1,
     }),

@@ -5,6 +5,8 @@ import { useGeneratedWebsiteStore } from "@/store/generatedWebsiteStore";
 import InputField from "@/components/builder/InputField";
 import TextAreaField from "@/components/builder/TextAreaField";
 import ImageMediaModal from "@/components/editor/ImageMediaModal";
+import { sanitizeActionUrl } from "@/lib/buttonActions";
+import type { ButtonActionType, ButtonActionConfig, ProductItem } from "@/types/website";
 import {
   Home,
   FileText,
@@ -21,6 +23,11 @@ import {
   X,
   Type,
   MousePointerClick,
+  Compass,
+  Globe,
+  MessageCircle,
+  Mail,
+  ExternalLink,
 } from "lucide-react";
 
 const SECTION_ICONS: Record<string, React.ElementType> = {
@@ -42,13 +49,38 @@ export default function SectionEditor() {
   const selectedElement = useGeneratedWebsiteStore((state) => state.selectedElement);
   const setSelectedElement = useGeneratedWebsiteStore((state) => state.setSelectedElement);
   const updateElementValue = useGeneratedWebsiteStore((state) => state.updateElementValue);
+  const setButtonAction = useGeneratedWebsiteStore((state) => state.setButtonAction);
+  const openProductEditor = useGeneratedWebsiteStore((state) => state.openProductEditor);
+  const setIsRightPanelOpen = useGeneratedWebsiteStore((state) => state.setIsRightPanelOpen);
 
   const [isImageModalOpen, setIsImageModalOpen] = useState(false);
 
   // 1. Element-Level Inspector Mode
   if (selectedElement) {
     const isImage = selectedElement.elementType === "image";
+    const isButton = selectedElement.elementType === "button";
+    const isProduct = selectedElement.elementType === "product";
     const currentValue = typeof selectedElement.value === "string" ? selectedElement.value : "";
+
+    // Extract existing button action if element is a button
+    let existingAction: ButtonActionConfig = { type: "scroll", target: "contact" };
+    if (isButton && website) {
+      if (selectedElement.elementPath.startsWith("hero")) {
+        existingAction = (website.hero?.buttonAction as ButtonActionConfig) || {
+          type: "scroll",
+          target: "services",
+        };
+      }
+    }
+
+    // Available sections on page for scroll-target dropdown
+    const availableSections = (website?.sectionOrder || []).map((key) => {
+      const baseType = key.split("_")[0];
+      return {
+        key,
+        label: baseType.charAt(0).toUpperCase() + baseType.slice(1) + " Section",
+      };
+    });
 
     return (
       <div className="h-full w-full overflow-y-auto p-5 select-none space-y-6">
@@ -56,7 +88,13 @@ export default function SectionEditor() {
         <div className="flex items-center justify-between pb-3 border-b border-zinc-200 dark:border-white/10">
           <div className="flex items-center gap-2">
             <div className="flex h-7 w-7 items-center justify-center rounded-xl bg-violet-600 text-white shadow-xs">
-              {isImage ? <ImageIcon className="h-3.5 w-3.5" /> : <Type className="h-3.5 w-3.5" />}
+              {isImage ? (
+                <ImageIcon className="h-3.5 w-3.5" />
+              ) : isButton ? (
+                <Compass className="h-3.5 w-3.5" />
+              ) : (
+                <Type className="h-3.5 w-3.5" />
+              )}
             </div>
             <div>
               <h2 className="text-xs font-bold uppercase tracking-wider text-zinc-900 dark:text-white">
@@ -70,17 +108,212 @@ export default function SectionEditor() {
 
           <button
             type="button"
-            onClick={() => setSelectedElement(null)}
+            onClick={() => {
+              setSelectedElement(null);
+              setIsRightPanelOpen(false);
+            }}
             className="flex h-6 w-6 items-center justify-center rounded-full text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-white transition"
-            title="Deselect Element"
+            title="Close Panel"
           >
             <X className="h-3.5 w-3.5" />
           </button>
         </div>
 
-        {/* Content Controls */}
+        {/* Dynamic Content Controls */}
         <div className="space-y-4">
-          {isImage ? (
+          {/* Button Element Inspector with Real Action Configuration */}
+          {isButton ? (
+            <div className="space-y-5">
+              <div>
+                <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                  Button Label Text
+                </label>
+                <InputField
+                  label=""
+                  value={currentValue}
+                  onChange={(e) => updateElementValue(selectedElement.elementPath, e.target.value)}
+                />
+              </div>
+
+              {/* Action Destination Configurator */}
+              <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4 dark:border-white/10 dark:bg-zinc-900/60 space-y-3">
+                <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300">
+                  On Click Action
+                </label>
+
+                <div className="grid grid-cols-2 gap-1.5">
+                  {[
+                    { id: "scroll", label: "Scroll Section", icon: Compass },
+                    { id: "whatsapp", label: "WhatsApp", icon: MessageCircle },
+                    { id: "url", label: "Web Link", icon: Globe },
+                    { id: "call", label: "Phone Call", icon: Phone },
+                    { id: "email", label: "Email", icon: Mail },
+                    { id: "none", label: "No Action", icon: X },
+                  ].map((act) => {
+                    const ActIcon = act.icon;
+                    const isSelected = (existingAction.type || "scroll") === act.id;
+                    return (
+                      <button
+                        key={act.id}
+                        type="button"
+                        onClick={() =>
+                          setButtonAction(selectedElement.elementPath, {
+                            type: act.id as ButtonActionType,
+                            target: act.id === "scroll" ? availableSections[0]?.key || "contact" : existingAction.target || "",
+                          })
+                        }
+                        className={`flex items-center gap-2 rounded-xl p-2 text-xs font-bold transition ${
+                          isSelected
+                            ? "bg-violet-600 text-white shadow-xs"
+                            : "bg-white text-zinc-700 hover:bg-zinc-100 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700 border border-zinc-200 dark:border-white/5"
+                        }`}
+                      >
+                        <ActIcon className="h-3.5 w-3.5" />
+                        <span>{act.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Target Configuration Input according to selected action type */}
+                {existingAction.type === "scroll" && (
+                  <div className="pt-2">
+                    <label className="block text-[11px] font-bold text-zinc-600 dark:text-zinc-400 mb-1">
+                      Target Section on Canvas
+                    </label>
+                    <select
+                      value={existingAction.target || "contact"}
+                      onChange={(e) =>
+                        setButtonAction(selectedElement.elementPath, {
+                          ...existingAction,
+                          type: "scroll",
+                          target: e.target.value,
+                        })
+                      }
+                      className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-800 outline-none dark:border-white/10 dark:bg-zinc-800 dark:text-zinc-200"
+                    >
+                      {availableSections.map((sec) => (
+                        <option key={sec.key} value={sec.key}>
+                          {sec.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {existingAction.type === "url" && (
+                  <div className="pt-2">
+                    <label className="block text-[11px] font-bold text-zinc-600 dark:text-zinc-400 mb-1">
+                      External Web URL
+                    </label>
+                    <input
+                      type="url"
+                      placeholder="https://example.com"
+                      value={existingAction.target || ""}
+                      onChange={(e) =>
+                        setButtonAction(selectedElement.elementPath, {
+                          ...existingAction,
+                          type: "url",
+                          target: sanitizeActionUrl(e.target.value),
+                        })
+                      }
+                      className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-900 outline-none dark:border-white/10 dark:bg-zinc-800 dark:text-white"
+                    />
+                  </div>
+                )}
+
+                {existingAction.type === "whatsapp" && (
+                  <div className="pt-2">
+                    <label className="block text-[11px] font-bold text-zinc-600 dark:text-zinc-400 mb-1">
+                      WhatsApp Phone Number
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="+91 98765 43210"
+                      value={existingAction.target || ""}
+                      onChange={(e) =>
+                        setButtonAction(selectedElement.elementPath, {
+                          ...existingAction,
+                          type: "whatsapp",
+                          target: e.target.value,
+                        })
+                      }
+                      className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-900 outline-none dark:border-white/10 dark:bg-zinc-800 dark:text-white"
+                    />
+                  </div>
+                )}
+
+                {existingAction.type === "call" && (
+                  <div className="pt-2">
+                    <label className="block text-[11px] font-bold text-zinc-600 dark:text-zinc-400 mb-1">
+                      Phone Number to Dial
+                    </label>
+                    <input
+                      type="tel"
+                      placeholder="+91 98765 43210"
+                      value={existingAction.target || ""}
+                      onChange={(e) =>
+                        setButtonAction(selectedElement.elementPath, {
+                          ...existingAction,
+                          type: "call",
+                          target: e.target.value,
+                        })
+                      }
+                      className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-900 outline-none dark:border-white/10 dark:bg-zinc-800 dark:text-white"
+                    />
+                  </div>
+                )}
+
+                {existingAction.type === "email" && (
+                  <div className="pt-2">
+                    <label className="block text-[11px] font-bold text-zinc-600 dark:text-zinc-400 mb-1">
+                      Recipient Email Address
+                    </label>
+                    <input
+                      type="email"
+                      placeholder="hello@business.com"
+                      value={existingAction.target || ""}
+                      onChange={(e) =>
+                        setButtonAction(selectedElement.elementPath, {
+                          ...existingAction,
+                          type: "email",
+                          target: e.target.value,
+                        })
+                      }
+                      className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-900 outline-none dark:border-white/10 dark:bg-zinc-800 dark:text-white"
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : isProduct ? (
+            <div className="space-y-4">
+              <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4 dark:border-white/10 dark:bg-zinc-900/60 text-center space-y-3">
+                <div className="flex h-10 w-10 mx-auto items-center justify-center rounded-xl bg-violet-600 text-white">
+                  <ShoppingBag className="h-5 w-5" />
+                </div>
+                <h4 className="text-xs font-bold text-zinc-900 dark:text-white">
+                  Catalog Product Item Selected
+                </h4>
+                <p className="text-xs text-zinc-500">
+                  Open the full-screen e-commerce workspace to edit pricing, discounts, stock, and descriptions.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const match = selectedElement.elementPath.match(/products\[(\d+)\]/);
+                    const idx = match ? Number(match[1]) : 0;
+                    const prod = (website?.products as ProductItem[])?.[idx];
+                    openProductEditor(prod?.id || null);
+                  }}
+                  className="w-full flex items-center justify-center gap-2 rounded-xl bg-violet-600 py-2.5 text-xs font-bold text-white shadow-md shadow-violet-600/20 hover:bg-violet-700 transition"
+                >
+                  <span>Edit in Full-Screen Workspace</span>
+                  <ExternalLink className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            </div>
+          ) : isImage ? (
             <div className="space-y-3">
               <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300">
                 Image Source URL
@@ -147,10 +380,10 @@ export default function SectionEditor() {
           <Sliders className="h-6 w-6" />
         </div>
         <p className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">
-          No Section Selected
+          No Element Selected
         </p>
         <p className="text-xs text-zinc-500 mt-1 max-w-[200px]">
-          Click any section or element on the canvas to inspect and edit.
+          Click any headline, button, image, or section on the canvas to configure.
         </p>
       </div>
     );
@@ -550,6 +783,18 @@ export default function SectionEditor() {
             <span className="text-[10px] text-zinc-400 font-mono">Live Synchronized</span>
           </div>
         </div>
+
+        <button
+          type="button"
+          onClick={() => {
+            setSelectedElement(null);
+            setIsRightPanelOpen(false);
+          }}
+          className="flex h-6 w-6 items-center justify-center rounded-full text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-white transition"
+          title="Close Panel"
+        >
+          <X className="h-3.5 w-3.5" />
+        </button>
       </div>
 
       <div>{renderFields()}</div>

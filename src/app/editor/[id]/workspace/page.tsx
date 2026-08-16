@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef, useCallback } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { cn } from "@/lib/utils";
 
@@ -9,6 +9,8 @@ import EditorSidebar from "@/components/editor/EditorSidebar";
 import WebsiteRenderer from "@/components/editor/WebsiteRenderer";
 import SectionEditor from "@/components/editor/SectionEditor";
 import PublishModal from "@/components/editor/PublishModal";
+import ProductFullScreenEditor from "@/components/editor/ProductFullScreenEditor";
+import CatalogManager from "@/components/editor/CatalogManager";
 
 import { useBuilderStore } from "@/store/builderStore";
 import { useGeneratedWebsiteStore } from "@/store/generatedWebsiteStore";
@@ -49,16 +51,53 @@ export default function WorkspacePage() {
     viewportMode,
     setViewportMode,
     selectedSection,
+    isRightPanelOpen,
+    setIsRightPanelOpen,
+    rightPanelWidth,
+    setRightPanelWidth,
   } = useGeneratedWebsiteStore();
 
   const [isLoading, setIsLoading] = useState(true);
   const [isPublishModalOpen, setIsPublishModalOpen] = useState(false);
   const [mobileTab, setMobileTab] = useState<"canvas" | "layers" | "edit">("canvas");
+  const [isResizing, setIsResizing] = useState(false);
 
   const hasFetchedRef = useRef(false);
 
   // Auto-save any changes to website data back to Supabase
   useProjectAutosave(effectiveProjectId, { json_data: website || undefined });
+
+  // Resizable Right Panel Handlers
+  const handleMouseDownResize = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsResizing(true);
+  };
+
+  const handleMouseMove = useCallback(
+    (e: MouseEvent) => {
+      if (!isResizing) return;
+      const newWidth = window.innerWidth - e.clientX;
+      setRightPanelWidth(newWidth);
+    },
+    [isResizing, setRightPanelWidth]
+  );
+
+  const handleMouseUp = useCallback(() => {
+    if (isResizing) {
+      setIsResizing(false);
+    }
+  }, [isResizing]);
+
+  useEffect(() => {
+    if (isResizing) {
+      window.addEventListener("mousemove", handleMouseMove);
+      window.addEventListener("mouseup", handleMouseUp);
+    }
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, [isResizing, handleMouseMove, handleMouseUp]);
 
   useEffect(() => {
     async function loadWorkspace() {
@@ -148,7 +187,7 @@ export default function WorkspacePage() {
             className={cn(
               "bg-white dark:bg-zinc-950 overflow-y-auto z-20 transition-all",
               // Desktop layout:
-              "hidden lg:block lg:w-[280px] lg:flex-shrink-0 lg:border-r lg:border-zinc-200/80 lg:dark:border-white/10",
+              "hidden lg:block lg:w-80 lg:flex-shrink-0 lg:border-r lg:border-zinc-200/80 lg:dark:border-white/10",
               // Mobile layout when layers tab active:
               mobileTab === "layers" && "fixed inset-x-0 top-16 bottom-16 block z-30 w-full"
             )}
@@ -173,24 +212,36 @@ export default function WorkspacePage() {
           </div>
         </main>
 
-        {/* Right Inspector Panel (Desktop permanent, Mobile switchable) */}
-        {!isPreviewMode && (
+        {/* Right Contextual Inspector Panel (Closed by default, opens on element selection, smoothly resizable) */}
+        {!isPreviewMode && (isRightPanelOpen || mobileTab === "edit") && (
           <aside
             data-lenis-prevent
+            style={{ width: `${rightPanelWidth}px` }}
             className={cn(
-              "bg-white dark:bg-zinc-950 overflow-y-auto z-20 transition-all",
+              "relative bg-white dark:bg-zinc-950 overflow-y-auto z-20 flex flex-col flex-shrink-0 border-l border-zinc-200/80 dark:border-white/10 transition-all",
+              // Resizing transition override
+              isResizing ? "transition-none select-none" : "duration-200",
               // Desktop layout:
-              "hidden lg:block lg:w-[380px] lg:flex-shrink-0 lg:border-l lg:border-zinc-200/80 lg:dark:border-white/10",
+              "hidden lg:flex h-full",
               // Mobile layout when edit tab active:
-              mobileTab === "edit" && "fixed inset-x-0 top-16 bottom-16 block z-30 w-full"
+              mobileTab === "edit" && "fixed inset-x-0 top-16 bottom-16 flex z-30 !w-full"
             )}
           >
+            {/* Drag Handle on Left Border (Desktop only) */}
+            <div
+              onMouseDown={handleMouseDownResize}
+              className="hidden lg:flex absolute left-0 top-0 bottom-0 w-2 -translate-x-1 cursor-col-resize items-center justify-center group hover:bg-violet-500/20 active:bg-violet-500/40 z-30 transition"
+              title="Drag to resize inspector width"
+            >
+              <div className="h-8 w-1 rounded-full bg-zinc-300 dark:bg-zinc-700 opacity-0 group-hover:opacity-100 transition" />
+            </div>
+
             <SectionEditor />
           </aside>
         )}
       </div>
 
-      {/* Mobile Studio Bottom Navigation Bar (Visible on < lg screens when not in fullscreen preview) */}
+      {/* Mobile Studio Bottom Navigation Bar */}
       {!isPreviewMode && (
         <nav className="lg:hidden fixed bottom-0 left-0 right-0 h-16 bg-white/95 dark:bg-zinc-950/95 border-t border-zinc-200 dark:border-white/10 backdrop-blur-xl z-40 flex items-center justify-around px-2">
           <button
@@ -223,7 +274,10 @@ export default function WorkspacePage() {
 
           <button
             type="button"
-            onClick={() => setMobileTab("edit")}
+            onClick={() => {
+              setMobileTab("edit");
+              setIsRightPanelOpen(true);
+            }}
             className={cn(
               "flex flex-col items-center justify-center gap-1 flex-1 py-1.5 rounded-xl transition text-[11px] font-bold relative",
               mobileTab === "edit"
@@ -232,7 +286,7 @@ export default function WorkspacePage() {
             )}
           >
             <Sliders className="h-4 w-4" />
-            <span>Edit</span>
+            <span>Inspector</span>
             {selectedSection && (
               <span className="absolute top-1 right-5 h-2 w-2 rounded-full bg-violet-500" />
             )}
@@ -252,7 +306,6 @@ export default function WorkspacePage() {
       {/* Floating Exit Preview Toolbar */}
       {isPreviewMode && (
         <div className="fixed top-4 sm:top-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 sm:gap-3 rounded-2xl border border-zinc-200/80 bg-white/95 px-3 sm:px-4 py-1.5 sm:py-2 shadow-2xl backdrop-blur-xl dark:border-white/10 dark:bg-zinc-900/95 max-w-[95vw]">
-          {/* Viewport switch in preview (hidden on small phones, available on tablets/desktop) */}
           <div className="hidden sm:flex items-center gap-1 border-r border-zinc-200 pr-2 sm:pr-3 dark:border-white/10">
             <button
               type="button"
@@ -302,6 +355,12 @@ export default function WorkspacePage() {
           </button>
         </div>
       )}
+
+      {/* Floating Product Catalog Workspace Modal */}
+      <CatalogManager />
+
+      {/* Full-Screen E-Commerce Product Workspace Editor */}
+      <ProductFullScreenEditor />
 
       {/* Publish Modal */}
       <PublishModal

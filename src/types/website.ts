@@ -1,8 +1,23 @@
+export type ButtonActionType =
+  | "scroll"
+  | "url"
+  | "whatsapp"
+  | "call"
+  | "email"
+  | "none";
+
+export interface ButtonActionConfig {
+  type: ButtonActionType;
+  target: string; // section key (e.g. "contact", "services", "products"), URL, phone, or email
+  label?: string;
+}
+
 export interface Hero {
   title: string;
   subtitle: string;
   button: string;
   image?: string;
+  buttonAction?: ButtonActionConfig;
 }
 
 export interface About {
@@ -16,6 +31,7 @@ export interface Service {
   description: string;
   icon?: string;
   image?: string;
+  buttonAction?: ButtonActionConfig;
 }
 
 export interface Feature {
@@ -50,6 +66,7 @@ export interface ProductItem {
   status: "active" | "draft" | "out_of_stock";
   ctaText?: string;
   ctaLink?: string;
+  buttonAction?: ButtonActionConfig;
   badge?: string;
 }
 
@@ -72,7 +89,7 @@ export type ElementType =
 
 export interface ElementSelection {
   sectionKey: string;
-  elementPath: string; // e.g. "hero.title", "services[0].description", "products[1].price"
+  elementPath: string; // e.g. "hero.title", "hero.button", "services[0].title"
   elementType: ElementType;
   label?: string;
   value?: unknown;

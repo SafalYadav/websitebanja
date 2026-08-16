@@ -4,11 +4,13 @@ import { motion, useReducedMotion } from "framer-motion";
 import { Sparkles, ArrowRight, Zap, ShieldCheck, Clock } from "lucide-react";
 import ImageWithFallback from "@/components/ui/ImageWithFallback";
 import EditableElement from "@/components/editor/EditableElement";
-import type { Hero } from "@/types/website";
+import { handleButtonActionClick } from "@/lib/buttonActions";
+import type { Hero, ButtonActionConfig } from "@/types/website";
 
 interface HeroSectionProps extends Partial<Hero> {
   sectionKey?: string;
   image?: string;
+  buttonAction?: ButtonActionConfig;
 }
 
 export default function HeroSection({
@@ -17,6 +19,7 @@ export default function HeroSection({
   subtitle,
   button,
   image,
+  buttonAction,
 }: HeroSectionProps) {
   const shouldReduceMotion = useReducedMotion();
 
@@ -142,6 +145,7 @@ export default function HeroSection({
               >
                 <button
                   type="button"
+                  onClick={(e) => handleButtonActionClick(buttonAction, "services", e)}
                   className="group relative inline-flex items-center gap-2 rounded-2xl px-8 py-4 text-sm font-bold text-white shadow-xl transition-all duration-200 hover:scale-[1.03] active:scale-[0.98]"
                   style={{
                     background: "var(--wb-gradient-primary)",
@@ -153,9 +157,10 @@ export default function HeroSection({
                 </button>
               </EditableElement>
 
-              <a
-                href="#contact"
-                className="inline-flex items-center gap-2 rounded-2xl px-7 py-4 text-sm font-semibold transition border backdrop-blur-md hover:bg-black/5 dark:hover:bg-white/10 shadow-sm"
+              <button
+                type="button"
+                onClick={(e) => handleButtonActionClick({ type: "scroll", target: "contact" }, "contact", e)}
+                className="inline-flex items-center gap-2 rounded-2xl px-7 py-4 text-sm font-semibold transition border backdrop-blur-md hover:bg-black/5 dark:hover:bg-white/10 shadow-sm cursor-pointer"
                 style={{
                   backgroundColor: "var(--wb-surface)",
                   borderColor: "var(--wb-border)",
@@ -163,7 +168,7 @@ export default function HeroSection({
                 }}
               >
                 <span>Get in Touch</span>
-              </a>
+              </button>
             </div>
 
             {/* Trust Indicators */}
