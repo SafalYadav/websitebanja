@@ -213,7 +213,7 @@ export default function CatalogManager() {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {filteredProducts.map((product) => {
                 const isOutOfStock = product.status === "out_of_stock";
-                const displayImage = product.images?.[0] || product.image || "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=800&auto=format&fit=crop&q=80";
+                const displayImage = product.images?.[0] || "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=800&auto=format&fit=crop&q=80";
                 
                 return (
                   <div

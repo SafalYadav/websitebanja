@@ -1,5 +1,5 @@
 import { supabase } from "./supabase";
-// import { getAuthenticatedUser } from "./auth"; // Removed unused
+// Authentication handled via supabase.auth.getUser()
 
 export interface CatalogItem {
   id: string;
@@ -51,7 +51,7 @@ export async function getCatalogItems(projectId: string): Promise<{ data: Catalo
 }
 
 export async function createCatalogItem(item: CatalogItemInsert): Promise<{ data: CatalogItem | null; error: Error | null }> {
-  const user = await getAuthenticatedUser();
+  const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { data: null, error: new Error("Unauthorized") };
 
   const { data, error } = await supabase
@@ -68,7 +68,7 @@ export async function createCatalogItem(item: CatalogItemInsert): Promise<{ data
 }
 
 export async function updateCatalogItem(itemId: string, updates: CatalogItemUpdate): Promise<{ data: CatalogItem | null; error: Error | null }> {
-  const user = await getAuthenticatedUser();
+  const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { data: null, error: new Error("Unauthorized") };
 
   const { data, error } = await supabase
@@ -84,7 +84,7 @@ export async function updateCatalogItem(itemId: string, updates: CatalogItemUpda
 }
 
 export async function deleteCatalogItem(itemId: string): Promise<{ error: Error | null }> {
-  const user = await getAuthenticatedUser();
+  const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: new Error("Unauthorized") };
 
   const { error } = await supabase
@@ -98,7 +98,7 @@ export async function deleteCatalogItem(itemId: string): Promise<{ error: Error 
 }
 
 export async function updateCatalogOrder(updates: { id: string; display_order: number }[]): Promise<{ error: Error | null }> {
-  const user = await getAuthenticatedUser();
+  const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: new Error("Unauthorized") };
 
   // Supabase doesn't support bulk update cleanly without RPC, so we'll do promises for now.

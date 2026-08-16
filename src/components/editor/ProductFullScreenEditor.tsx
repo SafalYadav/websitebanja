@@ -71,7 +71,7 @@ function ProductEditorForm({ initialProduct, onSave, onClose, isEditing, project
   const [category, setCategory] = useState(initialProduct?.category || "Featured");
   const [badge, setBadge] = useState(initialProduct?.badge || "New");
   
-  const [images, setImages] = useState<string[]>(initialProduct?.images?.length ? initialProduct.images : (initialProduct?.image ? [initialProduct.image] : [SAMPLE_PRESET_IMAGES[0]]));
+  const [images, setImages] = useState<string[]>(initialProduct?.images?.length ? initialProduct.images : [SAMPLE_PRESET_IMAGES[0]]);
   
   const [status, setStatus] = useState<"active" | "draft" | "out_of_stock">(initialProduct?.status || "active");
   const [ctaText, setCtaText] = useState(initialProduct?.cta_text || "Order on WhatsApp");
