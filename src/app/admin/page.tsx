@@ -101,6 +101,8 @@ export default function AdminDashboardPage() {
   const [projectSearch, setProjectSearch] = useState("");
   const [planFilter, setPlanFilter] = useState<string>("all");
 
+  const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [userEmail, setUserEmail] = useState<string | null>(null);
 
   useEffect(() => {
@@ -121,7 +123,8 @@ export default function AdminDashboardPage() {
           return;
         }
 
-        const res = await fetch("/api/admin/analytics", {
+        const res = await fetch(`/api/admin/analytics?t=${Date.now()}`, {
+          cache: "no-store",
           headers: {
             Authorization: `Bearer ${session.access_token}`,
           },
@@ -142,6 +145,7 @@ export default function AdminDashboardPage() {
 
         if (isMounted) {
           setData(json.data);
+          setLastUpdated(new Date());
           setIsLoading(false);
         }
       } catch (err) {
@@ -154,13 +158,21 @@ export default function AdminDashboardPage() {
 
     void fetchAnalytics();
 
+    // Gentle 60s background refresh interval
+    const interval = setInterval(() => {
+      if (document.visibilityState === "visible") {
+        void fetchAnalytics();
+      }
+    }, 60000);
+
     return () => {
       isMounted = false;
+      clearInterval(interval);
     };
   }, []);
 
   const handleRefresh = useCallback(async () => {
-    setIsLoading(true);
+    setIsRefreshing(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.user?.email) {
@@ -168,20 +180,22 @@ export default function AdminDashboardPage() {
       }
       if (!session) {
         setIsUnauthorized(true);
-        setIsLoading(false);
+        setIsRefreshing(false);
         return;
       }
-      const res = await fetch("/api/admin/analytics", {
+      const res = await fetch(`/api/admin/analytics?t=${Date.now()}`, {
+        cache: "no-store",
         headers: { Authorization: `Bearer ${session.access_token}` },
       });
       const json = await res.json();
       if (json.success) {
         setData(json.data);
+        setLastUpdated(new Date());
       }
     } catch {
       // Ignored
     } finally {
-      setIsLoading(false);
+      setIsRefreshing(false);
     }
   }, []);
 
@@ -291,13 +305,18 @@ export default function AdminDashboardPage() {
               <span>Admin: {data.adminUser.email}</span>
             </div>
 
+            <div className="hidden md:flex items-center text-[11px] font-mono text-zinc-400">
+              <span>Updated {lastUpdated.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</span>
+            </div>
+
             <button
               type="button"
               onClick={() => void handleRefresh()}
               title="Refresh Telemetry"
-              className="flex h-9 w-9 items-center justify-center rounded-xl border border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-100 dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 transition"
+              className="flex h-9 items-center gap-1.5 px-3 rounded-xl border border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-100 dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800 transition text-xs font-bold"
             >
-              <RefreshCw className="h-4 w-4" />
+              <RefreshCw className={cn("h-3.5 w-3.5", isRefreshing && "animate-spin text-violet-600")} />
+              <span className="hidden sm:inline">Refresh</span>
             </button>
 
             <ThemeToggle />

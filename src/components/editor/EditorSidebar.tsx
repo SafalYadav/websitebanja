@@ -21,6 +21,10 @@ import {
   Palette,
   Bot,
   LayoutGrid,
+  CreditCard,
+  Quote,
+  Users2,
+  Flame,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -31,6 +35,10 @@ const ICONS: Record<string, React.ElementType> = {
   features: Sparkles,
   products: ShoppingBag,
   catalog: ShoppingBag,
+  pricing: CreditCard,
+  testimonials: Quote,
+  team: Users2,
+  cta: Flame,
   faq: HelpCircle,
   contact: Phone,
   footer: Layers,
@@ -43,20 +51,34 @@ const LABELS: Record<string, string> = {
   features: "Features Grid",
   products: "Product Catalog",
   catalog: "Product Catalog",
+  pricing: "Pricing Tables",
+  testimonials: "Testimonials",
+  team: "Team Members",
+  cta: "Call to Action",
   faq: "FAQ Accordion",
   contact: "Contact Details",
   footer: "Footer Section",
 };
 
 const AVAILABLE_BLOCKS = [
-  { type: "hero", label: "Hero Banner", desc: "Headline, CTA, and visual hero showcase", icon: Home },
-  { type: "about", label: "About Mission", desc: "Narrative story and verified value points", icon: FileText },
-  { type: "services", label: "Services Cards", desc: "Detailed breakdown of bespoke offerings", icon: Wrench },
-  { type: "features", label: "Feature Grid", desc: "Key benefits, advantages, and technology", icon: Sparkles },
-  { type: "products", label: "Product Catalog", desc: "E-commerce items, pricing, and WhatsApp orders", icon: ShoppingBag },
+  { type: "hero", label: "Hero Banner", desc: "Headline, CTA, and visual showcase", icon: Home },
+  { type: "about", label: "About Story", desc: "Narrative story and verified mission", icon: FileText },
+  { type: "services", label: "Services Cards", desc: "Breakdown of bespoke offerings", icon: Wrench },
+  { type: "features", label: "Feature Grid", desc: "Key benefits, advantages, tech specs", icon: Sparkles },
+  { type: "products", label: "Product Catalog", desc: "E-commerce store with INR pricing & WhatsApp", icon: ShoppingBag },
   { type: "faq", label: "FAQ Accordion", desc: "Answers to common customer questions", icon: HelpCircle },
   { type: "contact", label: "Contact Form", desc: "Direct phone, email, and inquiry form", icon: Phone },
   { type: "footer", label: "Footer Section", desc: "Copyright notice and fast jump anchors", icon: Layers },
+];
+
+const THEME_PRESETS = [
+  { name: "Modern", primary: "#4f46e5", secondary: "#06b6d4", style: "Modern" },
+  { name: "Luxury", primary: "#d97706", secondary: "#18181b", style: "Luxury" },
+  { name: "Minimal", primary: "#18181b", secondary: "#71717a", style: "Minimal" },
+  { name: "Bold", primary: "#6366f1", secondary: "#f43f5e", style: "Creative" },
+  { name: "Elegant", primary: "#059669", secondary: "#f59e0b", style: "Corporate" },
+  { name: "Tech", primary: "#0ea5e9", secondary: "#8b5cf6", style: "Dark" },
+  { name: "Ecommerce", primary: "#f59e0b", secondary: "#6366f1", style: "Modern" },
 ];
 
 export default function EditorSidebar() {
@@ -131,6 +153,12 @@ export default function EditorSidebar() {
 
     reorderSections(newOrder);
     setDraggedItem(null);
+  };
+
+  const applyThemePreset = (preset: typeof THEME_PRESETS[0]) => {
+    setPrimaryColor(preset.primary);
+    setSecondaryColor(preset.secondary);
+    setStyle(preset.style);
   };
 
   const TABS: { id: StudioTab; label: string; icon: React.ElementType }[] = [
@@ -303,6 +331,37 @@ export default function EditorSidebar() {
         {/* 5. Theme & Styles Tab */}
         {activeStudioTab === "theme" && (
           <div className="space-y-6">
+            {/* Presets Grid */}
+            <div>
+              <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-3">
+                1-Click Theme Presets
+              </h4>
+              <div className="grid grid-cols-2 gap-2">
+                {THEME_PRESETS.map((preset) => (
+                  <button
+                    key={preset.name}
+                    type="button"
+                    onClick={() => applyThemePreset(preset)}
+                    className="flex items-center gap-2.5 rounded-xl border border-zinc-200 p-2 text-left hover:border-violet-500 hover:bg-violet-50/30 dark:border-white/10 dark:hover:bg-zinc-900 transition"
+                  >
+                    <div className="flex items-center -space-x-1 shrink-0">
+                      <span
+                        className="h-4 w-4 rounded-full border border-white shadow-2xs"
+                        style={{ backgroundColor: preset.primary }}
+                      />
+                      <span
+                        className="h-4 w-4 rounded-full border border-white shadow-2xs"
+                        style={{ backgroundColor: preset.secondary }}
+                      />
+                    </div>
+                    <span className="text-xs font-bold text-zinc-800 dark:text-zinc-200">
+                      {preset.name}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <div>
               <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-3">
                 Visual Aesthetic Style

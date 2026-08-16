@@ -55,6 +55,8 @@ export default function WorkspacePage() {
     setIsRightPanelOpen,
     rightPanelWidth,
     setRightPanelWidth,
+    undo,
+    redo,
   } = useGeneratedWebsiteStore();
 
   const [isLoading, setIsLoading] = useState(true);
@@ -65,7 +67,43 @@ export default function WorkspacePage() {
   const hasFetchedRef = useRef(false);
 
   // Auto-save any changes to website data back to Supabase
-  useProjectAutosave(effectiveProjectId, { json_data: website || undefined });
+  const { isSaving, isError } = useProjectAutosave(effectiveProjectId, {
+    json_data: website || undefined,
+  });
+
+  // Global Keyboard Shortcuts for Undo & Redo
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't trigger if user is actively typing in an input or textarea
+      const target = e.target as HTMLElement;
+      if (
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+
+      const isMac = navigator.platform.toUpperCase().indexOf("MAC") >= 0;
+      const isCmdOrCtrl = isMac ? e.metaKey : e.ctrlKey;
+
+      if (isCmdOrCtrl && e.key.toLowerCase() === "z") {
+        e.preventDefault();
+        if (e.shiftKey) {
+          redo();
+        } else {
+          undo();
+        }
+      } else if (isCmdOrCtrl && e.key.toLowerCase() === "y") {
+        e.preventDefault();
+        redo();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [undo, redo]);
 
   // Resizable Right Panel Handlers
   const handleMouseDownResize = (e: React.MouseEvent) => {
@@ -176,7 +214,13 @@ export default function WorkspacePage() {
   return (
     <div className="flex h-screen w-full flex-col bg-slate-100 dark:bg-[#09090B] overflow-hidden">
       {/* Top Studio Toolbar */}
-      {!isPreviewMode && <EditorTopBar onOpenPublishModal={() => setIsPublishModalOpen(true)} />}
+      {!isPreviewMode && (
+        <EditorTopBar
+          onOpenPublishModal={() => setIsPublishModalOpen(true)}
+          isSaving={isSaving}
+          isError={isError}
+        />
+      )}
 
       {/* Main Studio Body */}
       <div className="flex flex-1 overflow-hidden relative">

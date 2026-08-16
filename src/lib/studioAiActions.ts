@@ -11,15 +11,60 @@ export interface StudioAiAction {
     | "set_button_whatsapp"
     | "set_button_external_url"
     | "set_button_call"
+    | "set_button_email"
+    | "move_element"
     | "add_section"
     | "delete_section"
     | "reorder_sections"
     | "add_product"
     | "update_product"
     | "delete_product"
-    | "update_theme_colors";
+    | "update_theme";
   payload: Record<string, unknown>;
   summary: string;
+}
+
+/**
+ * Resolves natural language references (e.g. "catalog", "shop", "get in touch", "our services")
+ * to the actual dynamic section key currently present in the website's sectionOrder.
+ */
+export function resolveSemanticSectionTarget(targetText: string, sectionOrder: string[] = []): string {
+  const clean = targetText.toLowerCase().trim().replace(/^#/, "");
+
+  // 1. Direct match with existing section keys
+  if (sectionOrder.includes(clean)) {
+    return clean;
+  }
+
+  // 2. Keyword synonyms mapping
+  const synonymMap: Record<string, string[]> = {
+    products: ["catalog", "product", "products", "shop", "store", "ecommerce", "items", "collection", "pricing"],
+    contact: ["contact", "contact us", "get in touch", "reach us", "enquiry", "inquiry", "call", "location", "address"],
+    services: ["services", "service", "our services", "offerings", "solutions", "what we do", "features"],
+    about: ["about", "about us", "story", "mission", "who we are", "company"],
+    faq: ["faq", "faqs", "question", "questions", "answers", "help", "support"],
+    features: ["features", "feature", "benefits", "advantages", "highlights"],
+    hero: ["hero", "home", "top", "header", "banner", "main"],
+    footer: ["footer", "bottom", "legal", "copyright"],
+  };
+
+  for (const [canonicalType, keywords] of Object.entries(synonymMap)) {
+    if (keywords.some((kw) => clean.includes(kw) || kw.includes(clean))) {
+      // Find actual section in sectionOrder matching this canonical type
+      const matched = sectionOrder.find(
+        (key) => key === canonicalType || key.startsWith(`${canonicalType}_`) || key === "catalog"
+      );
+      if (matched) return matched;
+      if (canonicalType === "products" && sectionOrder.includes("catalog")) return "catalog";
+    }
+  }
+
+  // 3. Prefix matching
+  const prefixMatch = sectionOrder.find((k) => k.toLowerCase().startsWith(clean));
+  if (prefixMatch) return prefixMatch;
+
+  // 4. Default fallback: first section or "contact"
+  return sectionOrder[0] || "contact";
 }
 
 // Safely sets a deep value using a path string e.g. "hero.title" or "services[0].title"
@@ -83,33 +128,41 @@ export function executeStudioActions(
         case "set_button_action": {
           const buttonPath = String(act.payload.path || "hero.button");
           const actionType = String(act.payload.type || "scroll") as ButtonActionType;
-          const target = String(act.payload.target || "contact");
+          const rawTarget = String(act.payload.target || "contact");
           const label = act.payload.label ? String(act.payload.label) : undefined;
+
+          const resolvedTarget =
+            actionType === "scroll"
+              ? resolveSemanticSectionTarget(rawTarget, current.sectionOrder)
+              : actionType === "url"
+              ? sanitizeActionUrl(rawTarget)
+              : rawTarget;
 
           const actionConfig: ButtonActionConfig = {
             type: actionType,
-            target: actionType === "url" ? sanitizeActionUrl(target) : target,
+            target: resolvedTarget,
             label,
           };
 
           const basePath = buttonPath.replace(/\.button$/, "");
           current = setDeepValue(current as unknown as Record<string, unknown>, `${basePath}.buttonAction`, actionConfig) as unknown as WebsiteData;
-          appliedSummaries.push(act.summary || `Configured button action: ${actionType} -> ${target}`);
+          appliedSummaries.push(act.summary || `Configured button action: ${actionType} -> ${resolvedTarget}`);
           break;
         }
 
         case "set_button_scroll_target": {
           const buttonPath = String(act.payload.path || "hero.button");
-          const sectionTarget = String(act.payload.target || "contact").replace(/^#/, "");
+          const rawTarget = String(act.payload.target || "contact");
+          const resolvedSection = resolveSemanticSectionTarget(rawTarget, current.sectionOrder);
           const basePath = buttonPath.replace(/\.button$/, "");
 
           const actionConfig: ButtonActionConfig = {
             type: "scroll",
-            target: sectionTarget,
+            target: resolvedSection,
           };
 
           current = setDeepValue(current as unknown as Record<string, unknown>, `${basePath}.buttonAction`, actionConfig) as unknown as WebsiteData;
-          appliedSummaries.push(act.summary || `Configured button to scroll to ${sectionTarget} section`);
+          appliedSummaries.push(act.summary || `Configured button to scroll to ${resolvedSection} section`);
           break;
         }
 
@@ -158,8 +211,24 @@ export function executeStudioActions(
           break;
         }
 
+        case "set_button_email": {
+          const buttonPath = String(act.payload.path || "hero.button");
+          const email = String(act.payload.email || current.contact?.email || "hello@example.com");
+          const basePath = buttonPath.replace(/\.button$/, "");
+
+          const actionConfig: ButtonActionConfig = {
+            type: "email",
+            target: email,
+          };
+
+          current = setDeepValue(current as unknown as Record<string, unknown>, `${basePath}.buttonAction`, actionConfig) as unknown as WebsiteData;
+          appliedSummaries.push(act.summary || `Configured button to send email to ${email}`);
+          break;
+        }
+
         case "add_section": {
-          const sectionType = String(act.payload.sectionType || "features");
+          const rawType = String(act.payload.sectionType || "features");
+          const sectionType = resolveSemanticSectionTarget(rawType, ["hero", "about", "services", "features", "products", "faq", "contact", "footer"]);
           const customData = act.payload.data;
           const newKey = `${sectionType}_${Date.now()}`;
           const currentOrder = current.sectionOrder || ["hero", "about", "services", "features", "faq", "contact", "footer"];
@@ -191,17 +260,12 @@ export function executeStudioActions(
         }
 
         case "delete_section": {
-          const sectionKey = String(act.payload.sectionKey || "").toLowerCase();
-          if (sectionKey && current.sectionOrder) {
-            // Find exact or prefix match (e.g. "faq" matches "faq_123" or "faq")
-            const targetKey = current.sectionOrder.find(
-              (k) => k.toLowerCase() === sectionKey || k.toLowerCase().startsWith(sectionKey)
-            );
-            if (targetKey) {
-              current.sectionOrder = current.sectionOrder.filter((k) => k !== targetKey);
-              delete current[targetKey];
-              appliedSummaries.push(act.summary || `Removed ${targetKey} section`);
-            }
+          const rawKey = String(act.payload.sectionKey || "").toLowerCase();
+          const resolvedKey = resolveSemanticSectionTarget(rawKey, current.sectionOrder || []);
+          if (resolvedKey && current.sectionOrder) {
+            current.sectionOrder = current.sectionOrder.filter((k) => k !== resolvedKey);
+            delete current[resolvedKey];
+            appliedSummaries.push(act.summary || `Removed ${resolvedKey} section`);
           }
           break;
         }

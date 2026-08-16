@@ -13,6 +13,9 @@ import {
   EyeOff,
   Globe,
   Edit3,
+  CheckCircle2,
+  CloudUpload,
+  AlertCircle,
 } from "lucide-react";
 import { useGeneratedWebsiteStore, type ViewportMode } from "@/store/generatedWebsiteStore";
 import { useBuilderStore } from "@/store/builderStore";
@@ -20,10 +23,19 @@ import { dashboardRoute } from "@/lib/editorRoutes";
 import { publishProject, updateProject } from "@/lib/projects";
 import { toast } from "@/store/toastStore";
 import ThemeToggle from "@/components/theme/ThemeToggle";
-
 import Logo from "@/components/brand/Logo";
 
-export default function EditorTopBar({ onOpenPublishModal }: { onOpenPublishModal: () => void }) {
+interface EditorTopBarProps {
+  onOpenPublishModal: () => void;
+  isSaving?: boolean;
+  isError?: boolean;
+}
+
+export default function EditorTopBar({
+  onOpenPublishModal,
+  isSaving = false,
+  isError = false,
+}: EditorTopBarProps) {
   const {
     undo,
     redo,
@@ -130,6 +142,26 @@ export default function EditorTopBar({ onOpenPublishModal }: { onOpenPublishModa
               LIVE
             </span>
           )}
+
+          {/* Autosave Status Badge */}
+          <div className="hidden xl:flex items-center gap-1 text-[10px] font-semibold text-zinc-400 border-l border-zinc-200 dark:border-white/10 pl-2">
+            {isSaving ? (
+              <span className="flex items-center gap-1 text-amber-500">
+                <CloudUpload className="h-3 w-3 animate-bounce" />
+                <span>Saving...</span>
+              </span>
+            ) : isError ? (
+              <span className="flex items-center gap-1 text-rose-500">
+                <AlertCircle className="h-3 w-3" />
+                <span>Save Error</span>
+              </span>
+            ) : (
+              <span className="flex items-center gap-1 text-zinc-400">
+                <CheckCircle2 className="h-3 w-3 text-emerald-500" />
+                <span>Saved</span>
+              </span>
+            )}
+          </div>
         </div>
       </div>
 
@@ -163,13 +195,13 @@ export default function EditorTopBar({ onOpenPublishModal }: { onOpenPublishModa
 
       {/* Right Action Stack */}
       <div className="flex items-center gap-2 sm:gap-3">
-        {/* Undo / Redo */}
+        {/* Undo / Redo with Tooltips */}
         <div className="hidden sm:flex items-center rounded-xl border border-zinc-200 bg-zinc-50 dark:border-white/10 dark:bg-zinc-900 p-0.5">
           <button
             type="button"
             onClick={undo}
             disabled={historyIndex <= 0}
-            title="Undo (Ctrl+Z)"
+            title="Undo (Cmd/Ctrl + Z)"
             className="flex h-8 w-8 items-center justify-center rounded-lg text-zinc-600 hover:bg-zinc-200 hover:text-zinc-900 disabled:opacity-40 disabled:hover:bg-transparent dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-white transition"
           >
             <Undo2 className="h-4 w-4" />
@@ -178,7 +210,7 @@ export default function EditorTopBar({ onOpenPublishModal }: { onOpenPublishModa
             type="button"
             onClick={redo}
             disabled={historyIndex >= history.length - 1}
-            title="Redo (Ctrl+Y)"
+            title="Redo (Cmd/Ctrl + Shift + Z)"
             className="flex h-8 w-8 items-center justify-center rounded-lg text-zinc-600 hover:bg-zinc-200 hover:text-zinc-900 disabled:opacity-40 disabled:hover:bg-transparent dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-white transition"
           >
             <Redo2 className="h-4 w-4" />

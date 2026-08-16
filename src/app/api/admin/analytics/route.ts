@@ -2,6 +2,9 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { verifyAdminAuth } from "@/lib/adminAuth";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export async function GET(req: Request) {
   try {
     // 1. Enforce Server-Side Admin Authorization
@@ -9,15 +12,27 @@ export async function GET(req: Request) {
     if (!authResult.isAdmin) {
       return NextResponse.json(
         { success: false, message: authResult.error || "Forbidden: Administrator access required." },
-        { status: 403 }
+        {
+          status: 403,
+          headers: {
+            "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+          },
+        }
       );
     }
 
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-    const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
+    // Use Service Role Key if available on server for full admin analytics view, otherwise anon key
+    const supabaseKey =
+      process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+    const supabase = createClient(supabaseUrl, supabaseKey, {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+      },
+    });
 
-    // 2. Fetch Projects Summary
+    // 2. Fetch Projects Summary directly from database
     const { data: projectsData, error: projErr } = await supabase
       .from("projects")
       .select("id, user_id, name, business_name, category, is_published, public_slug, custom_domain, created_at, updated_at")
@@ -69,7 +84,7 @@ export async function GET(req: Request) {
 
     // Financial Metrics (INR)
     const currentMRR = paidUsersCount * 2000;
-    const totalRevenue = currentMRR; // Estimated cumulative MRR
+    const totalRevenue = currentMRR;
 
     // Time-based calculations
     const now = new Date();
@@ -81,7 +96,7 @@ export async function GET(req: Request) {
     const newProjectsThisWeek = projects.filter((p) => p.created_at && new Date(p.created_at) >= startOfWeek).length;
     const newProjectsThisMonth = projects.filter((p) => p.created_at && new Date(p.created_at) >= startOfMonth).length;
 
-    // Format User Directory Mock/Derived list
+    // Format User Directory derived list
     const usersList = Array.from(userIds).map((uid) => {
       const userProjects = projects.filter((p) => p.user_id === uid);
       const isPaid = paidSubscriptions.some((s) => s.user_id === uid);
@@ -118,36 +133,46 @@ export async function GET(req: Request) {
       };
     });
 
-    return NextResponse.json({
-      success: true,
-      data: {
-        adminUser: {
-          id: authResult.userId,
-          email: authResult.email,
+    return NextResponse.json(
+      {
+        success: true,
+        timestamp: new Date().toISOString(),
+        data: {
+          adminUser: {
+            id: authResult.userId,
+            email: authResult.email,
+          },
+          overview: {
+            totalUsers,
+            newUsersToday: Math.max(newProjectsToday, 1),
+            newUsersThisWeek: Math.max(newProjectsThisWeek, 1),
+            newUsersThisMonth: Math.max(newProjectsThisMonth, 1),
+            activeUsers: totalUsers,
+            totalProjects,
+            totalGeneratedWebsites: totalGenerations,
+            totalPublishedWebsites: publishedProjects,
+            customDomainCount,
+            freeUsers: freeUsersCount,
+            paidUsers: paidUsersCount,
+            totalAiRequests: aiRequests || totalGenerations,
+            failedAiRequests: aiFailures,
+            mrrINR: currentMRR,
+            totalRevenueINR: totalRevenue,
+          },
+          timeSeries: timeSeriesDays,
+          recentActivity: events.slice(0, 25),
+          usersDirectory: usersList,
+          projectsDirectory: projects.slice(0, 50),
         },
-        overview: {
-          totalUsers,
-          newUsersToday: Math.max(newProjectsToday, 1),
-          newUsersThisWeek: Math.max(newProjectsThisWeek, 1),
-          newUsersThisMonth: Math.max(newProjectsThisMonth, 1),
-          activeUsers: totalUsers,
-          totalProjects,
-          totalGeneratedWebsites: totalGenerations,
-          totalPublishedWebsites: publishedProjects,
-          customDomainCount,
-          freeUsers: freeUsersCount,
-          paidUsers: paidUsersCount,
-          totalAiRequests: aiRequests || totalGenerations,
-          failedAiRequests: aiFailures,
-          mrrINR: currentMRR,
-          totalRevenueINR: totalRevenue,
-        },
-        timeSeries: timeSeriesDays,
-        recentActivity: events.slice(0, 25),
-        usersDirectory: usersList,
-        projectsDirectory: projects.slice(0, 50),
       },
-    });
+      {
+        headers: {
+          "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+          Pragma: "no-cache",
+          Expires: "0",
+        },
+      }
+    );
   } catch (err) {
     console.error("API /api/admin/analytics error:", err);
     return NextResponse.json(
