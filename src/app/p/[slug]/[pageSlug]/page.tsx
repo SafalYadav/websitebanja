@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import WebsiteRenderer from "@/components/editor/WebsiteRenderer";
 import Logo from "@/components/brand/Logo";
-import { getProjectBySlug } from "@/lib/projects";
+import { getProjectBySlug, getPublishedSnapshot } from "@/lib/projects";
 import { getCatalogItems } from "@/lib/catalog";
 import type { Metadata } from "next";
 import type { WebsiteData } from "@/types/website";
@@ -15,7 +15,8 @@ export async function generateMetadata({
   const { data } = await getProjectBySlug(resolvedParams.slug);
   if (!data) return { title: "Not Found" };
 
-  const jsonData = (data.json_data || {}) as WebsiteData;
+  const { snapshot_data } = await getPublishedSnapshot(data.id);
+  const jsonData = (snapshot_data || data.json_data || {}) as WebsiteData;
   const currentPage = jsonData.pages?.find((p) => p.slug === resolvedParams.pageSlug);
   if (!currentPage) return { title: `${data.business_name || data.name}` };
 
@@ -41,11 +42,17 @@ export default async function PublicWebsiteSubPage({
   const resolvedParams = await params;
   const { data: project } = await getProjectBySlug(resolvedParams.slug);
 
-  if (!project || !project.json_data || Object.keys(project.json_data).length === 0) {
+  if (!project) {
     notFound();
   }
 
-  const websiteData = project.json_data as WebsiteData;
+  const { snapshot_data } = await getPublishedSnapshot(project.id);
+
+  if (!snapshot_data && (!project.json_data || Object.keys(project.json_data).length === 0)) {
+    notFound();
+  }
+
+  const websiteData = (snapshot_data || project.json_data) as WebsiteData;
   const pages = websiteData.pages || [];
   const targetPage = pages.find((p) => p.slug === resolvedParams.pageSlug);
 

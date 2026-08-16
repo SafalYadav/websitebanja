@@ -136,9 +136,44 @@ export async function getProjectBySlug(slug: string): Promise<{ data: Project | 
   return { data: data as Project | null, error };
 }
 
+export async function getPublishedSnapshot(projectId: string): Promise<{ snapshot_data: Record<string, unknown> | null; error: Error | null }> {
+  const { data, error } = await supabase
+    .from("published_versions")
+    .select("snapshot_data")
+    .eq("project_id", projectId)
+    .order("published_at", { ascending: false })
+    .limit(1)
+    .single();
+
+  return { snapshot_data: data?.snapshot_data || null, error };
+}
+
 export async function publishProject(projectId: string, slug: string): Promise<{ data: Project | null; error: Error | null }> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { data: null, error: new Error("Unauthorized") };
+
+  // Fetch current project to get json_data for snapshot
+  const { data: currentProject, error: fetchError } = await supabase
+    .from("projects")
+    .select("json_data")
+    .eq("id", projectId)
+    .single();
+
+  if (fetchError || !currentProject) {
+    return { data: null, error: fetchError ?? new Error("Project not found") };
+  }
+
+  // Create published version snapshot
+  const { error: snapshotError } = await supabase
+    .from("published_versions")
+    .insert({
+      project_id: projectId,
+      snapshot_data: currentProject.json_data || {},
+    });
+
+  if (snapshotError) {
+    return { data: null, error: new Error("Failed to create publish snapshot") };
+  }
 
   const { data, error } = await supabase
     .from("projects")

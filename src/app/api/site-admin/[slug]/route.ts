@@ -42,17 +42,37 @@ export async function GET(
       return NextResponse.json({ success: false, message: "Website not found." }, { status: 404 });
     }
 
-    // Verify Project Ownership (or Platform Admin)
+    // 1. Check if user is Platform Admin or Project Creator
     const rawAdminEmails = process.env.ADMIN_EMAILS || "";
     const adminEmails = rawAdminEmails.split(",").map((e) => e.trim().toLowerCase());
     const isPlatformAdmin = user.email && adminEmails.includes(user.email.toLowerCase());
+    const isProjectCreator = project.user_id === user.id;
 
-    if (project.user_id !== user.id && !isPlatformAdmin) {
+    // 2. Check Website Members
+    const { data: members } = await supabase
+      .from("website_members")
+      .select("*")
+      .eq("project_id", project.id);
+      
+    const memberList = members || [];
+    const isMember = memberList.some((m) => m.user_id === user.id);
+
+    // 3. Needs Claim Logic (if no members exist at all)
+    if (memberList.length === 0 && !isProjectCreator && !isPlatformAdmin) {
+      return NextResponse.json({ 
+        success: true, 
+        needsClaim: true, 
+        message: "Website has no owner yet." 
+      });
+    }
+
+    if (!isProjectCreator && !isPlatformAdmin && !isMember) {
       return NextResponse.json(
-        { success: false, message: "Forbidden: You are not the owner of this website." },
+        { success: false, message: "Forbidden: You are not an authorized admin of this website." },
         { status: 403 }
       );
     }
+
 
     const jsonData = (project.json_data || {}) as WebsiteData;
     const leads = jsonData.leads || [];

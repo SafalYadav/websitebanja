@@ -22,6 +22,7 @@ import { supabase } from "@/lib/supabase";
 import type { ProductItem, SiteLead } from "@/types/website";
 import { cn } from "@/lib/utils";
 import ThemeToggle from "@/components/theme/ThemeToggle";
+import { getFeaturesForCategory } from "@/lib/featureRegistry";
 
 interface SiteAdminData {
   project: {
@@ -58,6 +59,8 @@ export default function GeneratedWebsiteAdminPage({
 
   const [isLoading, setIsLoading] = useState(true);
   const [isUnauthorized, setIsUnauthorized] = useState(false);
+  const [needsClaim, setNeedsClaim] = useState(false);
+  const [isClaiming, setIsClaiming] = useState(false);
   const [data, setData] = useState<SiteAdminData | null>(null);
   const [activeTab, setActiveTab] = useState<"overview" | "leads" | "products" | "pages">("overview");
   const [leadSearch, setLeadSearch] = useState("");
@@ -92,7 +95,11 @@ export default function GeneratedWebsiteAdminPage({
 
         const json = await res.json();
         if (json.success && isMounted) {
-          setData(json.data);
+          if (json.needsClaim) {
+            setNeedsClaim(true);
+          } else {
+            setData(json.data);
+          }
           setIsLoading(false);
         }
       } catch {
@@ -169,12 +176,65 @@ export default function GeneratedWebsiteAdminPage({
     }
   };
 
+  const handleClaim = async () => {
+    setIsClaiming(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+      const res = await fetch(`/api/site-admin/${slug}/claim`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+      const json = await res.json();
+      if (json.success) {
+        setNeedsClaim(false);
+        void reloadData();
+      } else {
+        alert(json.message || "Failed to claim website.");
+      }
+    } catch {
+      alert("Error claiming website.");
+    } finally {
+      setIsClaiming(false);
+    }
+  };
+
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-[#09090B] text-zinc-600">
-        <div className="flex flex-col items-center gap-3">
-          <div className="h-8 w-8 animate-spin rounded-full border-3 border-violet-600 border-t-transparent" />
-          <p className="text-sm font-semibold">Loading Website Admin Dashboard...</p>
+      <div className="flex min-h-screen items-center justify-center bg-zinc-50 dark:bg-zinc-950">
+        <div className="flex items-center gap-3 text-zinc-500">
+          <div className="h-5 w-5 animate-spin rounded-full border-2 border-current border-t-transparent" />
+          <span className="text-sm font-medium">Loading Dashboard...</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (needsClaim) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-zinc-50 dark:bg-[#09090B] p-6">
+        <div className="max-w-md w-full rounded-3xl border border-zinc-200 bg-white p-8 text-center shadow-xl dark:border-white/10 dark:bg-zinc-900">
+          <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-violet-100 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400">
+            <Store className="h-8 w-8" />
+          </div>
+          <h2 className="mb-2 text-2xl font-bold text-zinc-900 dark:text-white">Claim Your Website</h2>
+          <p className="mb-8 text-sm text-zinc-500 dark:text-zinc-400">
+            This website currently has no owner. Claim it now to access the admin dashboard, manage leads, and update your catalog.
+          </p>
+          <button
+            onClick={handleClaim}
+            disabled={isClaiming}
+            className="w-full flex items-center justify-center gap-2 rounded-xl bg-violet-600 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-violet-600/25 transition-all hover:bg-violet-700 active:scale-95 disabled:opacity-50"
+          >
+            {isClaiming ? (
+              <span className="h-5 w-5 animate-spin rounded-full border-2 border-white border-t-transparent" />
+            ) : (
+              <>
+                <CheckCircle2 className="h-5 w-5" />
+                Claim Ownership
+              </>
+            )}
+          </button>
         </div>
       </div>
     );
@@ -276,19 +336,23 @@ export default function GeneratedWebsiteAdminPage({
       <main className="mx-auto max-w-7xl px-4 sm:px-6 py-8 space-y-6">
         {/* Navigation Tabs */}
         <div className="flex overflow-x-auto gap-2 border-b border-zinc-200 pb-3 dark:border-white/10 text-xs font-bold">
-          {[
-            { id: "overview", label: "Overview & Analytics", icon: BarChart3 },
-            { id: "leads", label: `Leads & Inquiries (${data.overview.unreadLeads} new)`, icon: MessageSquare },
-            { id: "products", label: `Catalog (${data.overview.totalProducts})`, icon: ShoppingBag },
-            { id: "pages", label: `Pages (${data.pages.length || 1})`, icon: Layers },
-          ].map((tab) => {
-            const Icon = tab.icon;
-            const isActive = activeTab === tab.id;
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => setActiveTab(tab.id as typeof activeTab)}
+          {(() => {
+            const features = getFeaturesForCategory(data.project.category);
+            const allTabs = [
+              { id: "overview", label: "Overview & Analytics", icon: BarChart3, show: true },
+              { id: "leads", label: `Leads & Inquiries (${data.overview.unreadLeads} new)`, icon: MessageSquare, show: features.hasLeads },
+              { id: "products", label: `${features.catalogLabel} (${data.overview.totalProducts})`, icon: ShoppingBag, show: features.hasCatalog },
+              { id: "pages", label: `Pages (${data.pages.length || 1})`, icon: Layers, show: true },
+            ];
+
+            return allTabs.filter(t => t.show).map((tab) => {
+              const Icon = tab.icon;
+              const isActive = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setActiveTab(tab.id as typeof activeTab)}
                 className={cn(
                   "flex items-center gap-2 rounded-xl px-4 py-2 transition",
                   isActive
@@ -300,7 +364,8 @@ export default function GeneratedWebsiteAdminPage({
                 <span>{tab.label}</span>
               </button>
             );
-          })}
+            });
+          })()}
         </div>
 
         {/* Tab 1: Overview */}

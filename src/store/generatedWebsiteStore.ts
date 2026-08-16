@@ -467,7 +467,15 @@ export const useGeneratedWebsiteStore = create<GeneratedWebsiteState>((set, get)
     const { website, history, historyIndex } = get();
     if (!website) return;
 
-    const newWebsite = { ...website, [section]: data };
+    // Deep merge buttonAction to prevent CTA loss
+    const existingSectionData = website[section as keyof WebsiteData] as any;
+    const incomingSectionData = data as any;
+    
+    if (existingSectionData?.buttonAction && incomingSectionData && typeof incomingSectionData === 'object' && !incomingSectionData.buttonAction) {
+      incomingSectionData.buttonAction = existingSectionData.buttonAction;
+    }
+
+    const newWebsite = { ...website, [section]: incomingSectionData };
     const newHistory = [...history.slice(0, historyIndex + 1), newWebsite];
 
     set({
