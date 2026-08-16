@@ -148,7 +148,14 @@ export default function EditableElement({
 
   return (
     <div
-      onClick={handleClick}
+      onClickCapture={(e) => {
+        if (!isPreviewMode) {
+          e.preventDefault();
+          e.stopPropagation();
+          handleClick(e);
+        }
+      }}
+      onClick={isPreviewMode ? handleClick : undefined}
       onDoubleClick={handleDoubleClick}
       className={cn(
         "group/element relative cursor-pointer transition-all duration-150 rounded-lg",
