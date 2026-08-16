@@ -228,12 +228,17 @@ export const useGeneratedWebsiteStore = create<GeneratedWebsiteState>((set, get)
 
     const rawSlug = slug || title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
     const pageId = `page_${Date.now()}`;
+    const hKey = `hero_${pageId}`;
+    const aKey = `about_${pageId}`;
+    const cKey = `contact_${pageId}`;
+    const fKey = `footer_${pageId}`;
+
     const newPage: WebsitePage = {
       id: pageId,
       slug: rawSlug,
       title: title.trim(),
       isHome: false,
-      sectionOrder: ["hero", "about", "contact", "footer"],
+      sectionOrder: [hKey, aKey, cKey, fKey],
       seo: {
         title: `${title.trim()} | ${website.hero?.title || "Website"}`,
         description: `Explore our ${title.trim()} page.`,
@@ -246,6 +251,18 @@ export const useGeneratedWebsiteStore = create<GeneratedWebsiteState>((set, get)
     const newWebsite: WebsiteData = {
       ...website,
       pages: updatedPages,
+      [hKey]: {
+        title: `Welcome to ${title.trim()}`,
+        subtitle: `Explore everything about ${title.trim()}`,
+        button: "Learn More",
+        buttonAction: { type: "scroll", target: aKey },
+      },
+      [aKey]: {
+        title: "About this section",
+        content: "Add your content here...",
+      },
+      [cKey]: { phone: website.contact?.phone || "", email: website.contact?.email || "", address: website.contact?.address || "" },
+      [fKey]: { copyright: website.footer?.copyright || "" },
     };
 
     const newHistory = [...history.slice(0, historyIndex + 1), newWebsite];
@@ -508,7 +525,7 @@ export const useGeneratedWebsiteStore = create<GeneratedWebsiteState>((set, get)
 
   addSection: (sectionType: string) => {
     const { website, history, historyIndex } = get();
-    if (!website || !website.sectionOrder) return;
+    if (!website) return;
 
     const newKey = `${sectionType}_${Date.now()}`;
     let defaultData: unknown = {};
@@ -583,11 +600,27 @@ export const useGeneratedWebsiteStore = create<GeneratedWebsiteState>((set, get)
       defaultData = { copyright: `© ${new Date().getFullYear()} All Rights Reserved.` };
     }
 
-    const newOrder = [...website.sectionOrder, newKey];
+    let updatedPages = website.pages || [];
+    const { activePageId } = get();
+    let newOrder = [...(website.sectionOrder || [])];
+
+    if (updatedPages.length > 0 && activePageId) {
+      updatedPages = updatedPages.map((p) => {
+        if (p.id === activePageId || (activePageId === "home" && p.isHome)) {
+          newOrder = [...p.sectionOrder, newKey];
+          return { ...p, sectionOrder: newOrder };
+        }
+        return p;
+      });
+    } else {
+      newOrder = [...(website.sectionOrder || []), newKey];
+    }
+
     const newWebsite = {
       ...website,
       [newKey]: defaultData,
-      sectionOrder: newOrder,
+      sectionOrder: activePageId === "home" ? newOrder : website.sectionOrder,
+      pages: updatedPages.length > 0 ? updatedPages : website.pages,
     } as WebsiteData;
 
     const newHistory = [...history.slice(0, historyIndex + 1), newWebsite];
@@ -600,8 +633,8 @@ export const useGeneratedWebsiteStore = create<GeneratedWebsiteState>((set, get)
   },
 
   duplicateSection: (sectionKey) => {
-    const { website, history, historyIndex } = get();
-    if (!website || !website.sectionOrder) return;
+    const { website, history, historyIndex, activePageId } = get();
+    if (!website) return;
 
     const baseData = website[sectionKey];
     if (!baseData) return;
@@ -609,18 +642,34 @@ export const useGeneratedWebsiteStore = create<GeneratedWebsiteState>((set, get)
     const baseType = sectionKey.split("_")[0];
     const newKey = `${baseType}_${Date.now()}`;
 
-    const newOrder = [...website.sectionOrder];
-    const currentIndex = newOrder.indexOf(sectionKey);
+    let updatedPages = website.pages || [];
+    let activeOrder = [...(website.sectionOrder || [])];
+
+    if (updatedPages.length > 0 && activePageId) {
+      const activePage = updatedPages.find((p) => p.id === activePageId || (activePageId === "home" && p.isHome));
+      if (activePage) {
+        activeOrder = [...activePage.sectionOrder];
+      }
+    }
+
+    const currentIndex = activeOrder.indexOf(sectionKey);
     if (currentIndex !== -1) {
-      newOrder.splice(currentIndex + 1, 0, newKey);
+      activeOrder.splice(currentIndex + 1, 0, newKey);
     } else {
-      newOrder.push(newKey);
+      activeOrder.push(newKey);
+    }
+
+    if (updatedPages.length > 0 && activePageId) {
+      updatedPages = updatedPages.map((p) =>
+        p.id === activePageId || (activePageId === "home" && p.isHome) ? { ...p, sectionOrder: activeOrder } : p
+      );
     }
 
     const newWebsite = {
       ...website,
       [newKey]: JSON.parse(JSON.stringify(baseData)),
-      sectionOrder: newOrder,
+      sectionOrder: activePageId === "home" ? activeOrder : website.sectionOrder,
+      pages: updatedPages.length > 0 ? updatedPages : website.pages,
     };
 
     const newHistory = [...history.slice(0, historyIndex + 1), newWebsite];
@@ -633,26 +682,59 @@ export const useGeneratedWebsiteStore = create<GeneratedWebsiteState>((set, get)
   },
 
   deleteSection: (sectionKey) => {
-    const { website, history, historyIndex, selectedSection } = get();
-    if (!website || !website.sectionOrder) return;
+    const { website, history, historyIndex, selectedSection, activePageId } = get();
+    if (!website) return;
 
-    const newOrder = website.sectionOrder.filter((k) => k !== sectionKey);
-    const newWebsite = { ...website, sectionOrder: newOrder };
+    let updatedPages = website.pages || [];
+    let activeOrder = [...(website.sectionOrder || [])];
+
+    if (updatedPages.length > 0 && activePageId) {
+      const activePage = updatedPages.find((p) => p.id === activePageId || (activePageId === "home" && p.isHome));
+      if (activePage) {
+        activeOrder = activePage.sectionOrder.filter((k) => k !== sectionKey);
+      }
+    } else {
+      activeOrder = activeOrder.filter((k) => k !== sectionKey);
+    }
+
+    if (updatedPages.length > 0 && activePageId) {
+      updatedPages = updatedPages.map((p) =>
+        p.id === activePageId || (activePageId === "home" && p.isHome) ? { ...p, sectionOrder: activeOrder } : p
+      );
+    }
+
+    const newWebsite = {
+      ...website,
+      sectionOrder: activePageId === "home" ? activeOrder : website.sectionOrder,
+      pages: updatedPages.length > 0 ? updatedPages : website.pages,
+    };
 
     const newHistory = [...history.slice(0, historyIndex + 1), newWebsite];
     set({
       website: newWebsite,
       history: newHistory,
       historyIndex: newHistory.length - 1,
-      selectedSection: selectedSection === sectionKey ? newOrder[0] || null : selectedSection,
+      selectedSection: selectedSection === sectionKey ? activeOrder[0] || null : selectedSection,
     });
   },
 
   reorderSections: (newOrder) => {
-    const { website, history, historyIndex } = get();
+    const { website, history, historyIndex, activePageId } = get();
     if (!website) return;
 
-    const newWebsite = { ...website, sectionOrder: newOrder };
+    let updatedPages = website.pages || [];
+    if (updatedPages.length > 0 && activePageId) {
+      updatedPages = updatedPages.map((p) =>
+        p.id === activePageId || (activePageId === "home" && p.isHome) ? { ...p, sectionOrder: newOrder } : p
+      );
+    }
+
+    const newWebsite = {
+      ...website,
+      sectionOrder: activePageId === "home" ? newOrder : website.sectionOrder,
+      pages: updatedPages.length > 0 ? updatedPages : website.pages,
+    };
+
     const newHistory = [...history.slice(0, historyIndex + 1), newWebsite];
 
     set({
