@@ -83,12 +83,6 @@ export default function IntegrationsPage() {
 
   const { saveNow } = useProjectAutosave(activeProjectId, {
     phone: whatsappNumber.trim() || undefined,
-    backend_config: {
-      selected_features: selectedFeatures,
-      whatsapp_number: whatsappNumber,
-      whatsapp_message: whatsappMessage,
-      whatsapp_enabled: whatsappEnabled,
-    },
   });
 
   function handleWhatsappBlur() {

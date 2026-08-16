@@ -36,7 +36,6 @@ export default function ReviewPage() {
     facebook,
     selectedFeatures,
     whatsappNumber,
-    whatsappMessage,
     whatsappEnabled,
   } = useBuilderStore();
 
@@ -56,12 +55,6 @@ export default function ReviewPage() {
     instagram,
     facebook,
     address,
-    backend_config: {
-      selected_features: selectedFeatures,
-      whatsapp_number: whatsappNumber,
-      whatsapp_message: whatsappMessage,
-      whatsapp_enabled: whatsappEnabled,
-    },
   });
 
   async function handleNext() {

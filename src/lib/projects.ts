@@ -60,10 +60,6 @@ const VALID_PROJECT_COLUMNS = new Set([
   "public_slug",
   "published_at",
   "custom_domain",
-  "custom_domain_status",
-  "custom_domain_verified_at",
-  "backend_requirement",
-  "backend_config",
 ]);
 
 async function getAuthenticatedUser() {

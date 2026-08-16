@@ -82,8 +82,6 @@ export default function OnboardingStartPage() {
     description,
     targetAudience,
     whatsappNumber,
-    whatsappMessage,
-    whatsappEnabled,
     setOnboardingMode,
     setUserPrompt,
     toggleFeature,
@@ -115,14 +113,6 @@ export default function OnboardingStartPage() {
     description,
     target_audience: targetAudience,
     phone: whatsappNumber.trim() || undefined,
-    backend_config: {
-      onboarding_mode: onboardingMode,
-      user_prompt: userPrompt,
-      selected_features: selectedFeatures,
-      whatsapp_number: whatsappNumber,
-      whatsapp_message: whatsappMessage,
-      whatsapp_enabled: whatsappEnabled,
-    },
   });
 
   // Prompt Mode Submission Handler
@@ -188,8 +178,8 @@ export default function OnboardingStartPage() {
         setWhatsappEnabled(true);
       }
 
-      if (projectId) {
-        await updateProject(projectId, {
+      if (activeProjectId) {
+        await updateProject(activeProjectId, {
           name: finalBusinessName,
           business_name: finalBusinessName,
           category: finalCategory,
@@ -200,18 +190,10 @@ export default function OnboardingStartPage() {
           secondary_color: finalSecondaryColor,
           phone: finalPhone,
           email: finalEmail,
-          backend_config: {
-            onboarding_mode: "prompt",
-            user_prompt: userPrompt.trim(),
-            selected_features: selectedFeatures,
-            whatsapp_number: finalPhone,
-            whatsapp_message: whatsappMessage,
-            whatsapp_enabled: whatsappEnabled,
-          },
         });
       }
 
-      router.push(editorRoute(projectId, "loading"));
+      router.push(editorRoute(activeProjectId, "loading"));
     } catch (err) {
       setIsExtracting(false);
       const isDev = process.env.NODE_ENV === "development";
