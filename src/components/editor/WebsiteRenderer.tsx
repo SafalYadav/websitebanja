@@ -240,9 +240,9 @@ export default function WebsiteRenderer({
               e.preventDefault();
             }
           }}
-          className="fixed bottom-6 right-6 z-50 flex items-center gap-2.5 rounded-full bg-emerald-500 px-4 py-3 text-sm font-bold text-white shadow-xl shadow-emerald-500/30 transition-all hover:bg-emerald-600 hover:scale-105 active:scale-95 group select-none"
+          className="fixed bottom-20 lg:bottom-6 right-4 sm:right-6 z-40 flex items-center gap-2 sm:gap-2.5 rounded-full bg-emerald-500 px-3.5 sm:px-4 py-2.5 sm:py-3 text-xs sm:text-sm font-bold text-white shadow-xl shadow-emerald-500/30 transition-all hover:bg-emerald-600 hover:scale-105 active:scale-95 group select-none"
         >
-          <MessageCircle className="h-5 w-5 animate-pulse" />
+          <MessageCircle className="h-4 sm:h-5 w-4 sm:w-5 animate-pulse" />
           <span className="hidden sm:inline font-semibold">Chat on WhatsApp</span>
         </a>
       )}

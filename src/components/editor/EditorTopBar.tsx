@@ -4,7 +4,6 @@ import { useState } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
-  Sparkles,
   Laptop,
   Tablet,
   Smartphone,
@@ -21,6 +20,8 @@ import { dashboardRoute } from "@/lib/editorRoutes";
 import { publishProject, updateProject } from "@/lib/projects";
 import { toast } from "@/store/toastStore";
 import ThemeToggle from "@/components/theme/ThemeToggle";
+
+import Logo from "@/components/brand/Logo";
 
 export default function EditorTopBar({ onOpenPublishModal }: { onOpenPublishModal: () => void }) {
   const {
@@ -80,22 +81,22 @@ export default function EditorTopBar({ onOpenPublishModal }: { onOpenPublishModa
   }
 
   return (
-    <header className="h-16 border-b border-zinc-200/80 bg-white/90 px-4 sm:px-6 flex items-center justify-between z-40 backdrop-blur-xl dark:border-white/10 dark:bg-[#09090B]/90 select-none">
-      {/* Left: Back & Editable Project Title */}
-      <div className="flex items-center gap-3 min-w-0">
+    <header className="h-16 border-b border-zinc-200/80 bg-white/90 px-3 sm:px-6 flex items-center justify-between z-40 backdrop-blur-xl dark:border-white/10 dark:bg-[#09090B]/90 select-none">
+      {/* Left: Brand Logo & Editable Project Title */}
+      <div className="flex items-center gap-2 sm:gap-3 min-w-0">
         <Link
           href={dashboardRoute()}
-          className="flex h-9 w-9 items-center justify-center rounded-xl border border-zinc-200 bg-zinc-50 text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-white transition"
+          className="flex h-9 w-9 items-center justify-center rounded-xl border border-zinc-200 bg-zinc-50 text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-white transition flex-shrink-0"
           title="Back to Dashboard"
         >
           <ArrowLeft className="h-4 w-4" />
         </Link>
 
-        <div className="flex items-center gap-2 min-w-0">
-          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-tr from-blue-600 via-violet-600 to-indigo-600 text-white shadow-xs">
-            <Sparkles className="h-4 w-4" />
-          </div>
+        <Link href={dashboardRoute()} className="hidden md:flex items-center flex-shrink-0" title="WebsiteBanja Studio">
+          <Logo imageSize={30} showText={false} />
+        </Link>
 
+        <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
           {isEditingTitle ? (
             <input
               type="text"
@@ -104,7 +105,7 @@ export default function EditorTopBar({ onOpenPublishModal }: { onOpenPublishModa
               onChange={(e) => setTitleValue(e.target.value)}
               onBlur={() => void handleTitleSubmit()}
               onKeyDown={(e) => e.key === "Enter" && void handleTitleSubmit()}
-              className="rounded-md border border-violet-500 bg-zinc-50 px-2 py-0.5 text-sm font-bold text-zinc-900 outline-none ring-2 ring-violet-500/20 dark:bg-zinc-800 dark:text-white max-w-[200px]"
+              className="rounded-md border border-violet-500 bg-zinc-50 px-2 py-0.5 text-xs sm:text-sm font-bold text-zinc-900 outline-none ring-2 ring-violet-500/20 dark:bg-zinc-800 dark:text-white max-w-[130px] sm:max-w-[200px]"
             />
           ) : (
             <button
@@ -113,18 +114,18 @@ export default function EditorTopBar({ onOpenPublishModal }: { onOpenPublishModa
                 setTitleValue(businessName);
                 setIsEditingTitle(true);
               }}
-              className="group flex items-center gap-1.5 text-sm font-bold text-zinc-900 dark:text-white truncate hover:text-violet-600 transition"
+              className="group flex items-center gap-1 text-xs sm:text-sm font-bold text-zinc-900 dark:text-white truncate hover:text-violet-600 transition"
               title="Click to rename project"
             >
-              <span className="truncate max-w-[160px] sm:max-w-[220px]">
+              <span className="truncate max-w-[110px] sm:max-w-[220px]">
                 {businessName || "Untitled Website"}
               </span>
-              <Edit3 className="h-3 w-3 text-zinc-400 opacity-0 group-hover:opacity-100 transition" />
+              <Edit3 className="h-3 w-3 text-zinc-400 opacity-0 group-hover:opacity-100 transition hidden sm:inline" />
             </button>
           )}
 
           {isPublished && (
-            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 px-2 py-0.5 text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
+            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 px-1.5 sm:px-2 py-0.5 text-[9px] sm:text-[10px] font-bold text-emerald-600 dark:text-emerald-400 flex-shrink-0">
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
               LIVE
             </span>
