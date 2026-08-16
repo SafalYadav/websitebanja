@@ -145,7 +145,8 @@ export async function publishProject(projectId: string, slug: string): Promise<{
     .update({
       is_published: true,
       public_slug: slug,
-      published_at: new Date().toISOString()
+      published_at: new Date().toISOString(),
+      preview_expires_at: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString(),
     })
     .eq("id", projectId)
     .eq("user_id", user.id)

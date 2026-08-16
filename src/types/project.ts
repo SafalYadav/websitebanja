@@ -31,6 +31,7 @@ export interface Project {
   is_published?: boolean;
   public_slug?: string | null;
   published_at?: string | null;
+  preview_expires_at?: string | null;
   custom_domain?: string | null;
   custom_domain_status?: CustomDomainStatus | null;
   custom_domain_verified_at?: string | null;

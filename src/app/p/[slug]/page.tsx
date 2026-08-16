@@ -30,6 +30,8 @@ export async function generateMetadata({
   };
 }
 
+import { AlertCircle } from "lucide-react";
+
 export default async function PublicWebsitePage({
   params,
 }: {
@@ -40,6 +42,29 @@ export default async function PublicWebsitePage({
 
   if (!project || !project.json_data || Object.keys(project.json_data).length === 0) {
     notFound();
+  }
+
+  // Check if preview has expired
+  if (project.preview_expires_at && Date.now() > new Date(project.preview_expires_at).getTime()) {
+    return (
+      <main className="min-h-screen flex flex-col items-center justify-center bg-zinc-50 p-6 text-center">
+        <div className="flex h-16 w-16 items-center justify-center rounded-3xl bg-rose-100 text-rose-600 mb-6 shadow-sm">
+          <AlertCircle className="h-8 w-8" />
+        </div>
+        <h1 className="text-2xl sm:text-3xl font-extrabold text-zinc-900 mb-3 tracking-tight">
+          Preview Expired
+        </h1>
+        <p className="text-zinc-500 max-w-sm mb-8">
+          This WebsiteBanja preview link has expired. To view this website again, the owner must republish it from the Studio.
+        </p>
+        <a 
+          href="/" 
+          className="rounded-xl bg-zinc-900 px-6 py-3 text-sm font-bold text-white shadow-md hover:bg-zinc-800 transition active:scale-95"
+        >
+          Build Your Own Website
+        </a>
+      </main>
+    );
   }
 
   const websiteData = project.json_data as WebsiteData;
