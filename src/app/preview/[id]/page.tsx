@@ -25,9 +25,10 @@ export default async function PreviewPage({ params }: { params: { id: string } }
 
   // Inject current theme explicitly for preview (defaulting to system/light if none)
   const previewData = { ...data } as WebsiteData;
+  const themeData = (previewData as any).theme;
 
   return (
-    <div className="min-h-screen w-full" style={{ backgroundColor: previewData.theme?.colors?.background || "#ffffff" }}>
+    <div className="min-h-screen w-full" style={{ backgroundColor: themeData?.colors?.background || "#ffffff" }}>
       <WebsiteRenderer data={previewData} isPublic={true} activePageSlug="" />
     </div>
   );
