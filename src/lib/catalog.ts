@@ -33,7 +33,7 @@ export interface CatalogItem {
   updated_at: string;
 }
 
-export type CatalogItemInsert = Omit<CatalogItem, "id" | "user_id" | "created_at" | "updated_at">;
+export type CatalogItemInsert = Omit<CatalogItem, "id" | "user_id" | "created_at" | "updated_at" | "display_order"> & { display_order?: number };
 export type CatalogItemUpdate = Partial<CatalogItemInsert>;
 
 export async function getCatalogItems(projectId: string): Promise<{ data: CatalogItem[] | null; error: Error | null }> {
