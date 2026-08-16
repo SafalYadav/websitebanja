@@ -3,13 +3,15 @@
 import { useState } from "react";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { HelpCircle, ChevronDown } from "lucide-react";
+import EditableElement from "@/components/editor/EditableElement";
 import type { FAQ } from "@/types/website";
 
 interface FAQSectionProps {
+  sectionKey?: string;
   faq?: FAQ[] | null;
 }
 
-export default function FAQSection({ faq }: FAQSectionProps) {
+export default function FAQSection({ sectionKey = "faq", faq }: FAQSectionProps) {
   const shouldReduceMotion = useReducedMotion();
   const [openIndex, setOpenIndex] = useState<number | null>(0);
 
@@ -97,18 +99,26 @@ export default function FAQSection({ faq }: FAQSectionProps) {
                   boxShadow: isOpen ? "0 10px 30px -10px var(--wb-glow-primary)" : undefined,
                 }}
               >
-                <button
-                  type="button"
-                  onClick={() => toggleFAQ(index)}
-                  className="w-full flex items-center justify-between gap-4 p-6 sm:p-7 text-left transition"
-                >
-                  <span
-                    className="text-base sm:text-lg font-bold tracking-tight"
-                    style={{ color: isOpen ? "var(--wb-primary)" : "var(--wb-fg)" }}
-                  >
-                    {item.question}
-                  </span>
-                  <div
+                <div className="w-full flex items-center justify-between gap-4 p-6 sm:p-7 text-left">
+                  <div className="flex-1" onClick={() => toggleFAQ(index)}>
+                    <EditableElement
+                      sectionKey={sectionKey}
+                      elementPath={`${sectionKey}[${index}].question`}
+                      elementType="heading"
+                      label={`FAQ ${index + 1} Question`}
+                    >
+                      <span
+                        className="text-base sm:text-lg font-bold tracking-tight block"
+                        style={{ color: isOpen ? "var(--wb-primary)" : "var(--wb-fg)" }}
+                      >
+                        {item.question}
+                      </span>
+                    </EditableElement>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => toggleFAQ(index)}
                     className="flex h-9 w-9 items-center justify-center rounded-2xl border flex-shrink-0 transition-transform duration-300"
                     style={{
                       borderColor: "var(--wb-border)",
@@ -118,8 +128,8 @@ export default function FAQSection({ faq }: FAQSectionProps) {
                     }}
                   >
                     <ChevronDown className="h-4 w-4" />
-                  </div>
-                </button>
+                  </button>
+                </div>
 
                 <AnimatePresence initial={false}>
                   {isOpen && (
@@ -130,12 +140,19 @@ export default function FAQSection({ faq }: FAQSectionProps) {
                       transition={{ duration: 0.25, ease: "easeInOut" }}
                     >
                       <div className="px-6 sm:px-7 pb-7 pt-1 border-t border-[var(--wb-border)]">
-                        <p
-                          className="text-sm sm:text-base leading-relaxed"
-                          style={{ color: "var(--wb-muted)" }}
+                        <EditableElement
+                          sectionKey={sectionKey}
+                          elementPath={`${sectionKey}[${index}].answer`}
+                          elementType="paragraph"
+                          label={`FAQ ${index + 1} Answer`}
                         >
-                          {item.answer}
-                        </p>
+                          <p
+                            className="text-sm sm:text-base leading-relaxed"
+                            style={{ color: "var(--wb-muted)" }}
+                          >
+                            {item.answer}
+                          </p>
+                        </EditableElement>
                       </div>
                     </motion.div>
                   )}

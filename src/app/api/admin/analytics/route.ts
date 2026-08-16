@@ -20,7 +20,7 @@ export async function GET(req: Request) {
     // 2. Fetch Projects Summary
     const { data: projectsData, error: projErr } = await supabase
       .from("projects")
-      .select("id, user_id, name, business_name, category, is_published, public_slug, custom_domain, custom_domain_status, created_at, updated_at")
+      .select("id, user_id, name, business_name, category, is_published, public_slug, custom_domain, created_at, updated_at")
       .order("created_at", { ascending: false });
 
     if (projErr) {
@@ -30,7 +30,7 @@ export async function GET(req: Request) {
     const projects = projectsData || [];
     const totalProjects = projects.length;
     const publishedProjects = projects.filter((p) => p.is_published).length;
-    const customDomainCount = projects.filter((p) => p.custom_domain_status === "verified").length;
+    const customDomainCount = projects.filter((p) => Boolean(p.custom_domain)).length;
 
     // 3. Fetch Analytics Events
     const { data: eventsData, error: eventErr } = await supabase

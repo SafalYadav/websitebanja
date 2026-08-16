@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useParams } from "next/navigation";
 import { cn } from "@/lib/utils";
 
 import EditorTopBar from "@/components/editor/EditorTopBar";
@@ -29,7 +29,10 @@ import {
 
 export default function WorkspacePage() {
   const router = useRouter();
+  const params = useParams<{ id: string }>();
   const projectId = useBuilderStore((state) => state.projectId);
+  const effectiveProjectId = params?.id || projectId;
+
   const setBusinessName = useBuilderStore((state) => state.setBusinessName);
   const setIsPublished = useBuilderStore((state) => state.setIsPublished);
   const setPublicSlug = useBuilderStore((state) => state.setPublicSlug);
@@ -55,11 +58,11 @@ export default function WorkspacePage() {
   const hasFetchedRef = useRef(false);
 
   // Auto-save any changes to website data back to Supabase
-  useProjectAutosave(projectId, { json_data: website || undefined });
+  useProjectAutosave(effectiveProjectId, { json_data: website || undefined });
 
   useEffect(() => {
     async function loadWorkspace() {
-      if (!projectId) return;
+      if (!effectiveProjectId) return;
 
       if (website && !hasFetchedRef.current) {
         setIsLoading(false);
@@ -69,7 +72,7 @@ export default function WorkspacePage() {
       if (hasFetchedRef.current) return;
       hasFetchedRef.current = true;
 
-      const { data, error } = await getProject(projectId);
+      const { data, error } = await getProject(effectiveProjectId);
       if (error || !data) {
         router.push("/dashboard");
         return;
@@ -97,6 +100,7 @@ export default function WorkspacePage() {
     loadWorkspace();
   }, [
     projectId,
+    effectiveProjectId,
     website,
     setWebsite,
     router,

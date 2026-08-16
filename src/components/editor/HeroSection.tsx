@@ -3,13 +3,16 @@
 import { motion, useReducedMotion } from "framer-motion";
 import { Sparkles, ArrowRight, Zap, ShieldCheck, Clock } from "lucide-react";
 import ImageWithFallback from "@/components/ui/ImageWithFallback";
+import EditableElement from "@/components/editor/EditableElement";
 import type { Hero } from "@/types/website";
 
 interface HeroSectionProps extends Partial<Hero> {
+  sectionKey?: string;
   image?: string;
 }
 
 export default function HeroSection({
+  sectionKey = "hero",
   title,
   subtitle,
   button,
@@ -31,7 +34,6 @@ export default function HeroSection({
     >
       {/* Animated Layered Background Glow Orbs */}
       <div className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
-        {/* Top-Center Primary Glow Orb */}
         <motion.div
           animate={
             shouldReduceMotion
@@ -48,7 +50,6 @@ export default function HeroSection({
           }}
         />
 
-        {/* Top-Right Secondary Glow Orb */}
         <motion.div
           animate={
             shouldReduceMotion
@@ -66,7 +67,6 @@ export default function HeroSection({
           }}
         />
 
-        {/* Bottom-Left Primary Ambient Light */}
         <div
           className="absolute -bottom-20 -left-20 h-[400px] w-[400px] rounded-full blur-3xl opacity-30"
           style={{
@@ -74,7 +74,6 @@ export default function HeroSection({
           }}
         />
 
-        {/* Micro-dot Grid Texture Overlay */}
         <div className="absolute inset-0 bg-[radial-gradient(rgba(0,0,0,0.04)_1px,transparent_1px)] [background-size:24px_24px] [mask-image:radial-gradient(ellipse_70%_60%_at_50%_40%,#000_70%,transparent_100%)]" />
       </div>
 
@@ -102,34 +101,57 @@ export default function HeroSection({
             </div>
 
             {/* Main Headline */}
-            <h1
-              className="text-4xl sm:text-5xl md:text-6xl lg:text-6xl font-extrabold tracking-tight leading-[1.12] text-balance"
-              style={{ color: "var(--wb-fg)" }}
+            <EditableElement
+              sectionKey={sectionKey}
+              elementPath={`${sectionKey}.title`}
+              elementType="heading"
+              label="Hero Headline"
+              className="w-full"
             >
-              {safeTitle}
-            </h1>
+              <h1
+                className="text-4xl sm:text-5xl md:text-6xl lg:text-6xl font-extrabold tracking-tight leading-[1.12] text-balance"
+                style={{ color: "var(--wb-fg)" }}
+              >
+                {safeTitle}
+              </h1>
+            </EditableElement>
 
             {/* Subtitle */}
-            <p
-              className="mt-6 text-base sm:text-lg max-w-xl text-balance leading-relaxed"
-              style={{ color: "var(--wb-muted)" }}
+            <EditableElement
+              sectionKey={sectionKey}
+              elementPath={`${sectionKey}.subtitle`}
+              elementType="paragraph"
+              label="Hero Subtitle"
+              className="w-full mt-6"
             >
-              {safeSubtitle}
-            </p>
+              <p
+                className="text-base sm:text-lg max-w-xl text-balance leading-relaxed"
+                style={{ color: "var(--wb-muted)" }}
+              >
+                {safeSubtitle}
+              </p>
+            </EditableElement>
 
             {/* Action Buttons */}
             <div className="mt-8 flex flex-wrap items-center justify-center lg:justify-start gap-4">
-              <button
-                type="button"
-                className="group relative inline-flex items-center gap-2 rounded-2xl px-8 py-4 text-sm font-bold text-white shadow-xl transition-all duration-200 hover:scale-[1.03] active:scale-[0.98]"
-                style={{
-                  background: "var(--wb-gradient-primary)",
-                  boxShadow: "0 10px 30px -6px var(--wb-glow-primary)",
-                }}
+              <EditableElement
+                sectionKey={sectionKey}
+                elementPath={`${sectionKey}.button`}
+                elementType="button"
+                label="Primary Button"
               >
-                <span>{safeButton}</span>
-                <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
-              </button>
+                <button
+                  type="button"
+                  className="group relative inline-flex items-center gap-2 rounded-2xl px-8 py-4 text-sm font-bold text-white shadow-xl transition-all duration-200 hover:scale-[1.03] active:scale-[0.98]"
+                  style={{
+                    background: "var(--wb-gradient-primary)",
+                    boxShadow: "0 10px 30px -6px var(--wb-glow-primary)",
+                  }}
+                >
+                  <span>{safeButton}</span>
+                  <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+                </button>
+              </EditableElement>
 
               <a
                 href="#contact"
@@ -161,7 +183,7 @@ export default function HeroSection({
             </div>
           </motion.div>
 
-          {/* Right Column: Large Prominent Visual Image Showcase */}
+          {/* Right Column: Prominent Visual Image Showcase */}
           <motion.div
             initial={shouldReduceMotion ? { opacity: 1 } : { opacity: 0, scale: 0.95 }}
             whileInView={{ opacity: 1, scale: 1 }}
@@ -179,17 +201,25 @@ export default function HeroSection({
             >
               {/* Image Frame */}
               <div className="relative aspect-[16/11] sm:aspect-[4/3] w-full rounded-2xl overflow-hidden">
-                <ImageWithFallback
-                  src={image}
-                  alt={safeTitle}
-                  className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent" />
+                <EditableElement
+                  sectionKey={sectionKey}
+                  elementPath={`${sectionKey}.image`}
+                  elementType="image"
+                  label="Hero Showcase Photo"
+                  className="w-full h-full"
+                >
+                  <ImageWithFallback
+                    src={image}
+                    alt={safeTitle}
+                    className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
+                  />
+                </EditableElement>
+                <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent pointer-events-none" />
               </div>
 
               {/* Floating Glassmorphic Feature Overlay Card */}
               <div
-                className="absolute bottom-6 left-6 right-6 rounded-2xl p-4 border backdrop-blur-xl shadow-2xl flex items-center justify-between"
+                className="absolute bottom-6 left-6 right-6 rounded-2xl p-4 border backdrop-blur-xl shadow-2xl flex items-center justify-between pointer-events-none"
                 style={{
                   backgroundColor: "var(--wb-surface)",
                   borderColor: "var(--wb-border)",

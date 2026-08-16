@@ -3,18 +3,23 @@
 import { motion, useReducedMotion } from "framer-motion";
 import { Sparkles, Shield, Zap, TrendingUp, CheckCircle, Award } from "lucide-react";
 import ImageWithFallback from "@/components/ui/ImageWithFallback";
+import EditableElement from "@/components/editor/EditableElement";
 import type { Feature } from "@/types/website";
 
 const FEATURE_ICONS = [Sparkles, Shield, Zap, TrendingUp, CheckCircle, Award];
 
 interface FeaturesSectionProps {
+  sectionKey?: string;
   features?: Feature[] | null;
 }
 
-export default function FeaturesSection({ features }: FeaturesSectionProps) {
+export default function FeaturesSection({
+  sectionKey = "features",
+  features,
+}: FeaturesSectionProps) {
   const shouldReduceMotion = useReducedMotion();
 
-  // Bulletproof defensive normalization: NEVER crash regardless of data shape
+  // Bulletproof defensive normalization
   const safeFeatures = Array.isArray(features)
     ? features.filter((f): f is Feature & { image?: string } => Boolean(f && typeof f === "object"))
     : [];
@@ -129,19 +134,34 @@ export default function FeaturesSection({ features }: FeaturesSectionProps) {
                     <Icon className="h-6 w-6" />
                   </div>
 
-                  <h3
-                    className="text-xl sm:text-2xl font-bold"
-                    style={{ color: "var(--wb-fg)" }}
+                  <EditableElement
+                    sectionKey={sectionKey}
+                    elementPath={`${sectionKey}[${index}].title`}
+                    elementType="heading"
+                    label={`Feature ${index + 1} Title`}
                   >
-                    {feature.title}
-                  </h3>
+                    <h3
+                      className="text-xl sm:text-2xl font-bold"
+                      style={{ color: "var(--wb-fg)" }}
+                    >
+                      {feature.title}
+                    </h3>
+                  </EditableElement>
 
-                  <p
-                    className="mt-3 text-sm sm:text-base leading-relaxed"
-                    style={{ color: "var(--wb-muted)" }}
+                  <EditableElement
+                    sectionKey={sectionKey}
+                    elementPath={`${sectionKey}[${index}].description`}
+                    elementType="paragraph"
+                    label={`Feature ${index + 1} Description`}
+                    className="mt-3"
                   >
-                    {feature.description}
-                  </p>
+                    <p
+                      className="text-sm sm:text-base leading-relaxed"
+                      style={{ color: "var(--wb-muted)" }}
+                    >
+                      {feature.description}
+                    </p>
+                  </EditableElement>
                 </div>
 
                 <div

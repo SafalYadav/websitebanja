@@ -11,19 +11,33 @@ import HeroSection from "./HeroSection";
 import AboutSection from "./AboutSection";
 import ServicesSection from "./ServicesSection";
 import FeaturesSection from "./FeaturesSection";
+import ProductsSection from "./ProductsSection";
 import FAQSection from "./FAQSection";
 import ContactSection from "./ContactSection";
 import FooterSection from "./FooterSection";
 
 import { MessageCircle } from "lucide-react";
 
-import type { WebsiteData, Hero, About, Service, Feature, FAQ, Contact, Footer } from "@/types/website";
+import type {
+  WebsiteData,
+  Hero,
+  About,
+  Service,
+  Feature,
+  FAQ,
+  Contact,
+  Footer,
+  ProductItem,
+  ProductsSectionData,
+} from "@/types/website";
 
 const SECTION_LABELS: Record<string, string> = {
   hero: "Hero Section",
-  about: "About Section",
+  about: "About Story",
   services: "Services Section",
   features: "Features Grid",
+  products: "Product Catalog",
+  catalog: "Product Catalog",
   faq: "FAQ Accordion",
   contact: "Contact Details",
   footer: "Footer Section",
@@ -69,7 +83,7 @@ export default function WebsiteRenderer({
   const resolvedCategory = category !== undefined ? category : storeCategory;
   const resolvedBusinessName = businessName !== undefined ? businessName : storeBusinessName;
 
-  // 1. Resolve isolated website theme tokens (strictly isolated from editor UI theme)
+  // 1. Resolve isolated website theme tokens
   const theme = resolveWebsiteTheme({
     style: resolvedStyle,
     primaryColor,
@@ -126,12 +140,12 @@ export default function WebsiteRenderer({
         switch (baseType) {
           case "hero": {
             const heroData = (rawSectionData && typeof rawSectionData === "object" ? rawSectionData : website.hero) as Hero & { image?: string };
-            content = <HeroSection {...heroData} image={heroData.image || website.hero.image} />;
+            content = <HeroSection sectionKey={key} {...heroData} image={heroData.image || website.hero.image} />;
             break;
           }
           case "about": {
             const aboutData = (rawSectionData && typeof rawSectionData === "object" ? rawSectionData : website.about) as About & { image?: string };
-            content = <AboutSection {...aboutData} image={aboutData.image || website.about.image} />;
+            content = <AboutSection sectionKey={key} {...aboutData} image={aboutData.image || website.about.image} />;
             break;
           }
           case "services": {
@@ -144,7 +158,7 @@ export default function WebsiteRenderer({
             } else {
               servicesData = website.services;
             }
-            content = <ServicesSection services={servicesData} />;
+            content = <ServicesSection sectionKey={key} services={servicesData} />;
             break;
           }
           case "features": {
@@ -157,7 +171,20 @@ export default function WebsiteRenderer({
             } else {
               featuresData = website.features;
             }
-            content = <FeaturesSection features={featuresData} />;
+            content = <FeaturesSection sectionKey={key} features={featuresData} />;
+            break;
+          }
+          case "products":
+          case "catalog": {
+            const productsData = (rawSectionData || website.productsSection || website.products) as ProductsSectionData | ProductItem[];
+            content = (
+              <ProductsSection
+                sectionKey={key}
+                data={productsData}
+                whatsappNumber={storeWhatsappNumber || storePhone}
+                isPublic={isPublic}
+              />
+            );
             break;
           }
           case "faq": {
@@ -170,17 +197,17 @@ export default function WebsiteRenderer({
             } else {
               faqData = website.faq;
             }
-            content = <FAQSection faq={faqData} />;
+            content = <FAQSection sectionKey={key} faq={faqData} />;
             break;
           }
           case "contact": {
             const contactData = (rawSectionData && typeof rawSectionData === "object" ? rawSectionData : website.contact) as Contact;
-            content = <ContactSection contact={contactData} />;
+            content = <ContactSection sectionKey={key} contact={contactData} />;
             break;
           }
           case "footer": {
             const footerData = (rawSectionData && typeof rawSectionData === "object" ? rawSectionData : website.footer) as Footer;
-            content = <FooterSection footer={footerData} />;
+            content = <FooterSection sectionKey={key} footer={footerData} />;
             break;
           }
           default:

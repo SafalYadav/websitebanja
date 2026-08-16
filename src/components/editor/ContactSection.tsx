@@ -3,13 +3,15 @@
 import { useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { Phone, Mail, MapPin, Send, CheckCircle2, MessageSquare } from "lucide-react";
+import EditableElement from "@/components/editor/EditableElement";
 import type { Contact } from "@/types/website";
 
 interface ContactSectionProps {
+  sectionKey?: string;
   contact?: Contact | null;
 }
 
-export default function ContactSection({ contact }: ContactSectionProps) {
+export default function ContactSection({ sectionKey = "contact", contact }: ContactSectionProps) {
   const shouldReduceMotion = useReducedMotion();
   const [submitted, setSubmitted] = useState(false);
   const [formName, setFormName] = useState("");
@@ -91,71 +93,92 @@ export default function ContactSection({ contact }: ContactSectionProps) {
 
             <div className="space-y-4 pt-4">
               {safeContact.phone ? (
-                <a
-                  href={`tel:${safeContact.phone}`}
-                  className="flex items-center gap-4 p-5 rounded-3xl border transition-all duration-200 hover:scale-[1.01] shadow-lg backdrop-blur-xl"
-                  style={{
-                    backgroundColor: "var(--wb-surface)",
-                    borderColor: "var(--wb-border)",
-                  }}
+                <EditableElement
+                  sectionKey={sectionKey}
+                  elementPath={`${sectionKey}.phone`}
+                  elementType="paragraph"
+                  label="Contact Phone"
                 >
-                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[var(--wb-glow-primary)] text-[var(--wb-primary)] flex-shrink-0 shadow-sm">
-                    <Phone className="h-5 w-5" />
-                  </div>
-                  <div>
-                    <span className="text-xs font-semibold block" style={{ color: "var(--wb-muted)" }}>
-                      Direct Phone
-                    </span>
-                    <span className="text-base font-bold" style={{ color: "var(--wb-fg)" }}>
-                      {safeContact.phone}
-                    </span>
-                  </div>
-                </a>
+                  <a
+                    href={`tel:${safeContact.phone}`}
+                    className="flex items-center gap-4 p-5 rounded-3xl border transition-all duration-200 hover:scale-[1.01] shadow-lg backdrop-blur-xl"
+                    style={{
+                      backgroundColor: "var(--wb-surface)",
+                      borderColor: "var(--wb-border)",
+                    }}
+                  >
+                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[var(--wb-glow-primary)] text-[var(--wb-primary)] flex-shrink-0 shadow-sm">
+                      <Phone className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <span className="text-xs font-semibold block" style={{ color: "var(--wb-muted)" }}>
+                        Direct Phone
+                      </span>
+                      <span className="text-base font-bold" style={{ color: "var(--wb-fg)" }}>
+                        {safeContact.phone}
+                      </span>
+                    </div>
+                  </a>
+                </EditableElement>
               ) : null}
 
               {safeContact.email ? (
-                <a
-                  href={`mailto:${safeContact.email}`}
-                  className="flex items-center gap-4 p-5 rounded-3xl border transition-all duration-200 hover:scale-[1.01] shadow-lg backdrop-blur-xl"
-                  style={{
-                    backgroundColor: "var(--wb-surface)",
-                    borderColor: "var(--wb-border)",
-                  }}
+                <EditableElement
+                  sectionKey={sectionKey}
+                  elementPath={`${sectionKey}.email`}
+                  elementType="paragraph"
+                  label="Contact Email"
                 >
-                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[var(--wb-glow-secondary)] text-[var(--wb-secondary)] flex-shrink-0 shadow-sm">
-                    <Mail className="h-5 w-5" />
-                  </div>
-                  <div>
-                    <span className="text-xs font-semibold block" style={{ color: "var(--wb-muted)" }}>
-                      Email Inquiries
-                    </span>
-                    <span className="text-base font-bold" style={{ color: "var(--wb-fg)" }}>
-                      {safeContact.email}
-                    </span>
-                  </div>
-                </a>
+                  <a
+                    href={`mailto:${safeContact.email}`}
+                    className="flex items-center gap-4 p-5 rounded-3xl border transition-all duration-200 hover:scale-[1.01] shadow-lg backdrop-blur-xl"
+                    style={{
+                      backgroundColor: "var(--wb-surface)",
+                      borderColor: "var(--wb-border)",
+                    }}
+                  >
+                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[var(--wb-glow-secondary)] text-[var(--wb-secondary)] flex-shrink-0 shadow-sm">
+                      <Mail className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <span className="text-xs font-semibold block" style={{ color: "var(--wb-muted)" }}>
+                        Email Inquiries
+                      </span>
+                      <span className="text-base font-bold" style={{ color: "var(--wb-fg)" }}>
+                        {safeContact.email}
+                      </span>
+                    </div>
+                  </a>
+                </EditableElement>
               ) : null}
 
               {safeContact.address ? (
-                <div
-                  className="flex items-center gap-4 p-5 rounded-3xl border shadow-lg backdrop-blur-xl"
-                  style={{
-                    backgroundColor: "var(--wb-surface)",
-                    borderColor: "var(--wb-border)",
-                  }}
+                <EditableElement
+                  sectionKey={sectionKey}
+                  elementPath={`${sectionKey}.address`}
+                  elementType="paragraph"
+                  label="Contact Address"
                 >
-                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[var(--wb-glow-primary)] text-[var(--wb-primary)] flex-shrink-0 shadow-sm">
-                    <MapPin className="h-5 w-5" />
+                  <div
+                    className="flex items-center gap-4 p-5 rounded-3xl border shadow-lg backdrop-blur-xl"
+                    style={{
+                      backgroundColor: "var(--wb-surface)",
+                      borderColor: "var(--wb-border)",
+                    }}
+                  >
+                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[var(--wb-glow-primary)] text-[var(--wb-primary)] flex-shrink-0 shadow-sm">
+                      <MapPin className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <span className="text-xs font-semibold block" style={{ color: "var(--wb-muted)" }}>
+                        Location & Office
+                      </span>
+                      <span className="text-base font-bold" style={{ color: "var(--wb-fg)" }}>
+                        {safeContact.address}
+                      </span>
+                    </div>
                   </div>
-                  <div>
-                    <span className="text-xs font-semibold block" style={{ color: "var(--wb-muted)" }}>
-                      Location & Office
-                    </span>
-                    <span className="text-base font-bold" style={{ color: "var(--wb-fg)" }}>
-                      {safeContact.address}
-                    </span>
-                  </div>
-                </div>
+                </EditableElement>
               ) : null}
 
               {!hasAnyContactDetail && (

@@ -1,13 +1,15 @@
 "use client";
 
 import { Sparkles } from "lucide-react";
+import EditableElement from "@/components/editor/EditableElement";
 import type { Footer } from "@/types/website";
 
 interface FooterSectionProps {
+  sectionKey?: string;
   footer?: Footer | null;
 }
 
-export default function FooterSection({ footer }: FooterSectionProps) {
+export default function FooterSection({ sectionKey = "footer", footer }: FooterSectionProps) {
   const currentYear = new Date().getFullYear();
   const safeCopyright =
     typeof footer?.copyright === "string" && footer.copyright.trim()
@@ -75,7 +77,14 @@ export default function FooterSection({ footer }: FooterSectionProps) {
 
         {/* Bottom Credits & Legal Notice */}
         <div className="pt-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs" style={{ color: "var(--wb-muted)" }}>
-          <p>{safeCopyright}</p>
+          <EditableElement
+            sectionKey={sectionKey}
+            elementPath={`${sectionKey}.copyright`}
+            elementType="paragraph"
+            label="Copyright Text"
+          >
+            <p>{safeCopyright}</p>
+          </EditableElement>
 
           <div
             className="flex items-center gap-1.5 px-3 py-1 rounded-full border text-[11px] font-medium backdrop-blur-sm"

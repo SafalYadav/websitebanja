@@ -3,15 +3,20 @@
 import { motion, useReducedMotion } from "framer-motion";
 import { Wrench, Sparkles, ArrowRight, Layers, Cpu, Gem } from "lucide-react";
 import ImageWithFallback from "@/components/ui/ImageWithFallback";
+import EditableElement from "@/components/editor/EditableElement";
 import type { Service } from "@/types/website";
 
 const SERVICE_ICONS = [Wrench, Sparkles, Layers, Cpu, Gem];
 
 interface ServicesSectionProps {
+  sectionKey?: string;
   services?: Service[] | null;
 }
 
-export default function ServicesSection({ services }: ServicesSectionProps) {
+export default function ServicesSection({
+  sectionKey = "services",
+  services,
+}: ServicesSectionProps) {
   const shouldReduceMotion = useReducedMotion();
 
   // Defensive array normalization
@@ -99,12 +104,20 @@ export default function ServicesSection({ services }: ServicesSectionProps) {
                 {/* Service Image Header */}
                 {hasImage && (
                   <div className="relative aspect-[16/10] w-full overflow-hidden">
-                    <ImageWithFallback
-                      src={(service as { image?: string }).image}
-                      alt={service.title || "Service"}
-                      className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-110"
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-[var(--wb-bg)] via-transparent to-transparent opacity-90" />
+                    <EditableElement
+                      sectionKey={sectionKey}
+                      elementPath={`${sectionKey}[${index}].image`}
+                      elementType="image"
+                      label="Service Image"
+                      className="w-full h-full"
+                    >
+                      <ImageWithFallback
+                        src={(service as { image?: string }).image}
+                        alt={service.title || "Service"}
+                        className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-110"
+                      />
+                    </EditableElement>
+                    <div className="absolute inset-0 bg-gradient-to-t from-[var(--wb-bg)] via-transparent to-transparent opacity-90 pointer-events-none" />
                   </div>
                 )}
 
@@ -121,19 +134,33 @@ export default function ServicesSection({ services }: ServicesSectionProps) {
                     <Icon className="h-6 w-6" />
                   </div>
 
-                  <h3
-                    className="text-xl font-bold transition-colors group-hover:text-[var(--wb-primary)]"
-                    style={{ color: "var(--wb-fg)" }}
+                  <EditableElement
+                    sectionKey={sectionKey}
+                    elementPath={`${sectionKey}[${index}].title`}
+                    elementType="heading"
+                    label={`Service ${index + 1} Title`}
                   >
-                    {service.title}
-                  </h3>
+                    <h3
+                      className="text-xl font-bold transition-colors group-hover:text-[var(--wb-primary)]"
+                      style={{ color: "var(--wb-fg)" }}
+                    >
+                      {service.title}
+                    </h3>
+                  </EditableElement>
 
-                  <p
-                    className="text-sm leading-relaxed"
-                    style={{ color: "var(--wb-muted)" }}
+                  <EditableElement
+                    sectionKey={sectionKey}
+                    elementPath={`${sectionKey}[${index}].description`}
+                    elementType="paragraph"
+                    label={`Service ${index + 1} Details`}
                   >
-                    {service.description}
-                  </p>
+                    <p
+                      className="text-sm leading-relaxed"
+                      style={{ color: "var(--wb-muted)" }}
+                    >
+                      {service.description}
+                    </p>
+                  </EditableElement>
                 </div>
 
                 {/* Footer Action */}

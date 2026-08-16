@@ -3,13 +3,16 @@
 import { motion, useReducedMotion } from "framer-motion";
 import { Compass, CheckCircle2, HeartHandshake, Sparkles } from "lucide-react";
 import ImageWithFallback from "@/components/ui/ImageWithFallback";
+import EditableElement from "@/components/editor/EditableElement";
 import type { About } from "@/types/website";
 
 interface AboutSectionProps extends Partial<About> {
+  sectionKey?: string;
   image?: string;
 }
 
 export default function AboutSection({
+  sectionKey = "about",
   title,
   content,
   image,
@@ -55,17 +58,25 @@ export default function AboutSection({
               }}
             >
               <div className="relative aspect-[4/3] sm:aspect-square w-full rounded-2xl overflow-hidden">
-                <ImageWithFallback
-                  src={image}
-                  alt={safeTitle}
-                  className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+                <EditableElement
+                  sectionKey={sectionKey}
+                  elementPath={`${sectionKey}.image`}
+                  elementType="image"
+                  label="About Photo"
+                  className="w-full h-full"
+                >
+                  <ImageWithFallback
+                    src={image}
+                    alt={safeTitle}
+                    className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
+                  />
+                </EditableElement>
+                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent pointer-events-none" />
               </div>
 
               {/* Floating Story Stamp Badge */}
               <div
-                className="absolute top-6 right-6 rounded-2xl px-3.5 py-2 border backdrop-blur-xl shadow-xl flex items-center gap-2"
+                className="absolute top-6 right-6 rounded-2xl px-3.5 py-2 border backdrop-blur-xl shadow-xl flex items-center gap-2 pointer-events-none"
                 style={{
                   backgroundColor: "var(--wb-surface)",
                   borderColor: "var(--wb-border)",
@@ -99,19 +110,35 @@ export default function AboutSection({
               <span>About Our Mission</span>
             </div>
 
-            <h2
-              className="text-3xl sm:text-4xl md:text-5xl font-extrabold tracking-tight leading-tight text-balance"
-              style={{ color: "var(--wb-fg)" }}
+            <EditableElement
+              sectionKey={sectionKey}
+              elementPath={`${sectionKey}.title`}
+              elementType="heading"
+              label="About Title"
+              className="w-full"
             >
-              {safeTitle}
-            </h2>
+              <h2
+                className="text-3xl sm:text-4xl md:text-5xl font-extrabold tracking-tight leading-tight text-balance"
+                style={{ color: "var(--wb-fg)" }}
+              >
+                {safeTitle}
+              </h2>
+            </EditableElement>
 
-            <p
-              className="text-base sm:text-lg leading-relaxed whitespace-pre-line"
-              style={{ color: "var(--wb-muted)" }}
+            <EditableElement
+              sectionKey={sectionKey}
+              elementPath={`${sectionKey}.content`}
+              elementType="paragraph"
+              label="About Story"
+              className="w-full"
             >
-              {safeContent}
-            </p>
+              <p
+                className="text-base sm:text-lg leading-relaxed whitespace-pre-line"
+                style={{ color: "var(--wb-muted)" }}
+              >
+                {safeContent}
+              </p>
+            </EditableElement>
 
             {/* Core Value Checklist */}
             <div className="pt-4 grid grid-cols-1 sm:grid-cols-2 gap-3.5">

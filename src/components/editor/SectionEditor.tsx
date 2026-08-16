@@ -1,8 +1,10 @@
 "use client";
 
+import React, { useState } from "react";
 import { useGeneratedWebsiteStore } from "@/store/generatedWebsiteStore";
 import InputField from "@/components/builder/InputField";
 import TextAreaField from "@/components/builder/TextAreaField";
+import ImageMediaModal from "@/components/editor/ImageMediaModal";
 import {
   Home,
   FileText,
@@ -14,6 +16,11 @@ import {
   Plus,
   Trash2,
   Sliders,
+  ImageIcon,
+  ShoppingBag,
+  X,
+  Type,
+  MousePointerClick,
 } from "lucide-react";
 
 const SECTION_ICONS: Record<string, React.ElementType> = {
@@ -21,14 +28,118 @@ const SECTION_ICONS: Record<string, React.ElementType> = {
   about: FileText,
   services: Wrench,
   features: Sparkles,
+  products: ShoppingBag,
+  catalog: ShoppingBag,
   faq: HelpCircle,
   contact: Phone,
   footer: Layers,
 };
 
 export default function SectionEditor() {
-  const { website, selectedSection, updateWebsiteSection } = useGeneratedWebsiteStore();
+  const website = useGeneratedWebsiteStore((state) => state.website);
+  const selectedSection = useGeneratedWebsiteStore((state) => state.selectedSection);
+  const updateWebsiteSection = useGeneratedWebsiteStore((state) => state.updateWebsiteSection);
+  const selectedElement = useGeneratedWebsiteStore((state) => state.selectedElement);
+  const setSelectedElement = useGeneratedWebsiteStore((state) => state.setSelectedElement);
+  const updateElementValue = useGeneratedWebsiteStore((state) => state.updateElementValue);
 
+  const [isImageModalOpen, setIsImageModalOpen] = useState(false);
+
+  // 1. Element-Level Inspector Mode
+  if (selectedElement) {
+    const isImage = selectedElement.elementType === "image";
+    const currentValue = typeof selectedElement.value === "string" ? selectedElement.value : "";
+
+    return (
+      <div className="h-full w-full overflow-y-auto p-5 select-none space-y-6">
+        {/* Element Inspector Header */}
+        <div className="flex items-center justify-between pb-3 border-b border-zinc-200 dark:border-white/10">
+          <div className="flex items-center gap-2">
+            <div className="flex h-7 w-7 items-center justify-center rounded-xl bg-violet-600 text-white shadow-xs">
+              {isImage ? <ImageIcon className="h-3.5 w-3.5" /> : <Type className="h-3.5 w-3.5" />}
+            </div>
+            <div>
+              <h2 className="text-xs font-bold uppercase tracking-wider text-zinc-900 dark:text-white">
+                {selectedElement.label || selectedElement.elementType}
+              </h2>
+              <span className="text-[10px] text-zinc-400 font-mono">
+                {selectedElement.elementPath}
+              </span>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setSelectedElement(null)}
+            className="flex h-6 w-6 items-center justify-center rounded-full text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-white transition"
+            title="Deselect Element"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+
+        {/* Content Controls */}
+        <div className="space-y-4">
+          {isImage ? (
+            <div className="space-y-3">
+              <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300">
+                Image Source URL
+              </label>
+              <InputField
+                label=""
+                placeholder="https://images.unsplash.com/..."
+                value={currentValue}
+                onChange={(e) => updateElementValue(selectedElement.elementPath, e.target.value)}
+              />
+
+              <button
+                type="button"
+                onClick={() => setIsImageModalOpen(true)}
+                className="w-full flex items-center justify-center gap-2 rounded-xl bg-violet-600 py-3 text-xs font-bold text-white shadow-md shadow-violet-500/20 hover:bg-violet-700 transition"
+              >
+                <ImageIcon className="h-4 w-4" />
+                Browse & Replace Image
+              </button>
+            </div>
+          ) : selectedElement.elementType === "paragraph" || currentValue.length > 70 ? (
+            <TextAreaField
+              label="Element Text"
+              rows={5}
+              value={currentValue}
+              onChange={(e) => updateElementValue(selectedElement.elementPath, e.target.value)}
+            />
+          ) : (
+            <InputField
+              label="Element Content"
+              value={currentValue}
+              onChange={(e) => updateElementValue(selectedElement.elementPath, e.target.value)}
+            />
+          )}
+
+          <div className="rounded-2xl border border-zinc-200/60 bg-zinc-50/50 p-3.5 dark:border-white/5 dark:bg-zinc-900/40 text-xs text-zinc-500">
+            <div className="flex items-center gap-1.5 font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+              <MousePointerClick className="h-3.5 w-3.5 text-violet-500" />
+              Direct Editing Active
+            </div>
+            Changes synchronize immediately with the canvas and autosave.
+          </div>
+        </div>
+
+        {isImageModalOpen && (
+          <ImageMediaModal
+            isOpen={isImageModalOpen}
+            currentUrl={currentValue}
+            onClose={() => setIsImageModalOpen(false)}
+            onSelectImage={(newUrl) => {
+              updateElementValue(selectedElement.elementPath, newUrl);
+            }}
+          />
+        )}
+      </div>
+    );
+  }
+
+  // 2. Section Inspector Mode
   if (!website || !selectedSection) {
     return (
       <div className="flex h-full w-full flex-col items-center justify-center p-8 text-center">
@@ -39,7 +150,7 @@ export default function SectionEditor() {
           No Section Selected
         </p>
         <p className="text-xs text-zinc-500 mt-1 max-w-[200px]">
-          Click any section on the canvas or sidebar to inspect and edit its content.
+          Click any section or element on the canvas to inspect and edit.
         </p>
       </div>
     );
@@ -49,7 +160,6 @@ export default function SectionEditor() {
   const baseType = selectedSection.split("_")[0];
   const Icon = SECTION_ICONS[baseType] || Sliders;
 
-  // Safe polymorphic update handler: preserves Arrays as Arrays and Objects as Objects
   const handleUpdate = (updates: unknown) => {
     if (Array.isArray(updates)) {
       updateWebsiteSection(selectedSection, updates as unknown as Parameters<typeof updateWebsiteSection>[1]);
@@ -74,6 +184,7 @@ export default function SectionEditor() {
           title?: string;
           subtitle?: string;
           button?: string;
+          image?: string;
         };
         return (
           <div className="space-y-4">
@@ -96,6 +207,12 @@ export default function SectionEditor() {
               value={hero.button || ""}
               onChange={(e) => handleUpdate({ button: e.target.value })}
             />
+            <InputField
+              label="Hero Showcase Image URL"
+              placeholder="https://images.unsplash.com/..."
+              value={hero.image || ""}
+              onChange={(e) => handleUpdate({ image: e.target.value })}
+            />
           </div>
         );
       }
@@ -106,6 +223,7 @@ export default function SectionEditor() {
           : {}) as {
           title?: string;
           content?: string;
+          image?: string;
         };
         return (
           <div className="space-y-4">
@@ -121,6 +239,12 @@ export default function SectionEditor() {
               rows={6}
               value={about.content || ""}
               onChange={(e) => handleUpdate({ content: e.target.value })}
+            />
+            <InputField
+              label="About Photo Image URL"
+              placeholder="https://images.unsplash.com/..."
+              value={about.image || ""}
+              onChange={(e) => handleUpdate({ image: e.target.value })}
             />
           </div>
         );
@@ -140,56 +264,49 @@ export default function SectionEditor() {
 
         return (
           <div className="space-y-4">
-            {services.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-zinc-300 p-6 text-center text-xs text-zinc-500 dark:border-white/10">
-                No service items currently. Click below to add a service.
-              </div>
-            ) : (
-              services.map((svc, i) => (
-                <div
-                  key={i}
-                  className="space-y-3 rounded-2xl border border-zinc-200 bg-zinc-50 p-4 dark:border-white/10 dark:bg-zinc-900/60"
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold uppercase tracking-wider text-violet-600 dark:text-violet-400">
-                      Service {i + 1}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const newServices = services.filter((_, idx) => idx !== i);
-                        handleUpdate(newServices);
-                      }}
-                      className="text-zinc-400 hover:text-red-500 transition p-1"
-                      title="Remove Service"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                  <InputField
-                    label="Service Title"
-                    value={svc.title || ""}
-                    onChange={(e) => {
-                      const newServices = services.map((s, idx) =>
-                        idx === i ? { ...s, title: e.target.value } : s
-                      );
+            {services.map((svc, i) => (
+              <div
+                key={i}
+                className="space-y-3 rounded-2xl border border-zinc-200 bg-zinc-50 p-4 dark:border-white/10 dark:bg-zinc-900/60"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold uppercase tracking-wider text-violet-600 dark:text-violet-400">
+                    Service {i + 1}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const newServices = services.filter((_, idx) => idx !== i);
                       handleUpdate(newServices);
                     }}
-                  />
-                  <TextAreaField
-                    label="Description"
-                    rows={2}
-                    value={svc.description || ""}
-                    onChange={(e) => {
-                      const newServices = services.map((s, idx) =>
-                        idx === i ? { ...s, description: e.target.value } : s
-                      );
-                      handleUpdate(newServices);
-                    }}
-                  />
+                    className="text-zinc-400 hover:text-red-500 transition p-1"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
                 </div>
-              ))
-            )}
+                <InputField
+                  label="Service Title"
+                  value={svc.title || ""}
+                  onChange={(e) => {
+                    const newServices = services.map((s, idx) =>
+                      idx === i ? { ...s, title: e.target.value } : s
+                    );
+                    handleUpdate(newServices);
+                  }}
+                />
+                <TextAreaField
+                  label="Description"
+                  rows={2}
+                  value={svc.description || ""}
+                  onChange={(e) => {
+                    const newServices = services.map((s, idx) =>
+                      idx === i ? { ...s, description: e.target.value } : s
+                    );
+                    handleUpdate(newServices);
+                  }}
+                />
+              </div>
+            ))}
 
             <button
               type="button"
@@ -223,56 +340,49 @@ export default function SectionEditor() {
 
         return (
           <div className="space-y-4">
-            {features.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-zinc-300 p-6 text-center text-xs text-zinc-500 dark:border-white/10">
-                No feature items currently. Click below to add a feature.
-              </div>
-            ) : (
-              features.map((ft, i) => (
-                <div
-                  key={i}
-                  className="space-y-3 rounded-2xl border border-zinc-200 bg-zinc-50 p-4 dark:border-white/10 dark:bg-zinc-900/60"
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold uppercase tracking-wider text-violet-600 dark:text-violet-400">
-                      Feature {i + 1}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const newFeatures = features.filter((_, idx) => idx !== i);
-                        handleUpdate(newFeatures);
-                      }}
-                      className="text-zinc-400 hover:text-red-500 transition p-1"
-                      title="Remove Feature"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                  <InputField
-                    label="Feature Title"
-                    value={ft.title || ""}
-                    onChange={(e) => {
-                      const newFeatures = features.map((f, idx) =>
-                        idx === i ? { ...f, title: e.target.value } : f
-                      );
+            {features.map((ft, i) => (
+              <div
+                key={i}
+                className="space-y-3 rounded-2xl border border-zinc-200 bg-zinc-50 p-4 dark:border-white/10 dark:bg-zinc-900/60"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold uppercase tracking-wider text-violet-600 dark:text-violet-400">
+                    Feature {i + 1}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const newFeatures = features.filter((_, idx) => idx !== i);
                       handleUpdate(newFeatures);
                     }}
-                  />
-                  <TextAreaField
-                    label="Description"
-                    rows={2}
-                    value={ft.description || ""}
-                    onChange={(e) => {
-                      const newFeatures = features.map((f, idx) =>
-                        idx === i ? { ...f, description: e.target.value } : f
-                      );
-                      handleUpdate(newFeatures);
-                    }}
-                  />
+                    className="text-zinc-400 hover:text-red-500 transition p-1"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
                 </div>
-              ))
-            )}
+                <InputField
+                  label="Feature Title"
+                  value={ft.title || ""}
+                  onChange={(e) => {
+                    const newFeatures = features.map((f, idx) =>
+                      idx === i ? { ...f, title: e.target.value } : f
+                    );
+                    handleUpdate(newFeatures);
+                  }}
+                />
+                <TextAreaField
+                  label="Description"
+                  rows={2}
+                  value={ft.description || ""}
+                  onChange={(e) => {
+                    const newFeatures = features.map((f, idx) =>
+                      idx === i ? { ...f, description: e.target.value } : f
+                    );
+                    handleUpdate(newFeatures);
+                  }}
+                />
+              </div>
+            ))}
 
             <button
               type="button"
@@ -306,56 +416,49 @@ export default function SectionEditor() {
 
         return (
           <div className="space-y-4">
-            {faq.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-zinc-300 p-6 text-center text-xs text-zinc-500 dark:border-white/10">
-                No FAQ items currently. Click below to add a question.
-              </div>
-            ) : (
-              faq.map((item, i) => (
-                <div
-                  key={i}
-                  className="space-y-3 rounded-2xl border border-zinc-200 bg-zinc-50 p-4 dark:border-white/10 dark:bg-zinc-900/60"
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold uppercase tracking-wider text-violet-600 dark:text-violet-400">
-                      Question {i + 1}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const newFaq = faq.filter((_, idx) => idx !== i);
-                        handleUpdate(newFaq);
-                      }}
-                      className="text-zinc-400 hover:text-red-500 transition p-1"
-                      title="Remove Question"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                  <InputField
-                    label="Question"
-                    value={item.question || ""}
-                    onChange={(e) => {
-                      const newFaq = faq.map((q, idx) =>
-                        idx === i ? { ...q, question: e.target.value } : q
-                      );
+            {faq.map((item, i) => (
+              <div
+                key={i}
+                className="space-y-3 rounded-2xl border border-zinc-200 bg-zinc-50 p-4 dark:border-white/10 dark:bg-zinc-900/60"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold uppercase tracking-wider text-violet-600 dark:text-violet-400">
+                    Question {i + 1}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const newFaq = faq.filter((_, idx) => idx !== i);
                       handleUpdate(newFaq);
                     }}
-                  />
-                  <TextAreaField
-                    label="Answer"
-                    rows={2}
-                    value={item.answer || ""}
-                    onChange={(e) => {
-                      const newFaq = faq.map((q, idx) =>
-                        idx === i ? { ...q, answer: e.target.value } : q
-                      );
-                      handleUpdate(newFaq);
-                    }}
-                  />
+                    className="text-zinc-400 hover:text-red-500 transition p-1"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
                 </div>
-              ))
-            )}
+                <InputField
+                  label="Question"
+                  value={item.question || ""}
+                  onChange={(e) => {
+                    const newFaq = faq.map((q, idx) =>
+                      idx === i ? { ...q, question: e.target.value } : q
+                    );
+                    handleUpdate(newFaq);
+                  }}
+                />
+                <TextAreaField
+                  label="Answer"
+                  rows={2}
+                  value={item.answer || ""}
+                  onChange={(e) => {
+                    const newFaq = faq.map((q, idx) =>
+                      idx === i ? { ...q, answer: e.target.value } : q
+                    );
+                    handleUpdate(newFaq);
+                  }}
+                />
+              </div>
+            ))}
 
             <button
               type="button"
@@ -387,7 +490,7 @@ export default function SectionEditor() {
           <div className="space-y-4">
             <InputField
               label="Direct Phone Number"
-              placeholder="+1 (555) 000-0000"
+              placeholder="+91 98765 43210"
               value={contact.phone || ""}
               onChange={(e) => handleUpdate({ phone: e.target.value })}
             />
@@ -401,7 +504,7 @@ export default function SectionEditor() {
             <TextAreaField
               label="Physical Address / Location"
               rows={2}
-              placeholder="123 Innovation Way, Suite 400..."
+              placeholder="City, State, Country..."
               value={contact.address || ""}
               onChange={(e) => handleUpdate({ address: e.target.value })}
             />
@@ -433,18 +536,18 @@ export default function SectionEditor() {
   };
 
   return (
-    <div className="h-[calc(100vh-4rem)] w-full overflow-y-auto p-5 border-l border-zinc-200/80 bg-white/90 dark:border-white/10 dark:bg-zinc-950/90 select-none">
+    <div className="h-full w-full overflow-y-auto p-5 select-none space-y-6">
       {/* Inspector Header */}
-      <div className="mb-6 flex items-center justify-between pb-3 border-b border-zinc-200/80 dark:border-white/10">
+      <div className="flex items-center justify-between pb-3 border-b border-zinc-200 dark:border-white/10">
         <div className="flex items-center gap-2">
-          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-violet-100 text-violet-600 dark:bg-violet-950/60 dark:text-violet-400">
-            <Icon className="h-4 w-4" />
+          <div className="flex h-7 w-7 items-center justify-center rounded-xl bg-violet-600 text-white shadow-xs">
+            <Icon className="h-3.5 w-3.5" />
           </div>
           <div>
-            <h2 className="text-sm font-bold capitalize text-zinc-900 dark:text-white">
+            <h2 className="text-xs font-bold uppercase tracking-wider text-zinc-900 dark:text-white">
               {baseType} Properties
             </h2>
-            <span className="text-[10px] font-mono text-zinc-400">Live Synchronized</span>
+            <span className="text-[10px] text-zinc-400 font-mono">Live Synchronized</span>
           </div>
         </div>
       </div>
