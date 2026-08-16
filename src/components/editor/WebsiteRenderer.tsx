@@ -1,5 +1,7 @@
 "use client";
 
+import React from "react";
+import Link from "next/link";
 import { useBuilderStore } from "@/store/builderStore";
 import { useGeneratedWebsiteStore } from "@/store/generatedWebsiteStore";
 import { resolveWebsiteTheme } from "@/lib/websiteTheme";
@@ -16,7 +18,7 @@ import FAQSection from "./FAQSection";
 import ContactSection from "./ContactSection";
 import FooterSection from "./FooterSection";
 
-import { MessageCircle } from "lucide-react";
+import { MessageCircle, Globe } from "lucide-react";
 
 import type {
   WebsiteData,
@@ -29,6 +31,7 @@ import type {
   Footer,
   ProductItem,
   ProductsSectionData,
+  WebsitePage,
 } from "@/types/website";
 
 const SECTION_LABELS: Record<string, string> = {
@@ -51,6 +54,8 @@ interface WebsiteRendererProps {
   category?: string | null;
   businessName?: string | null;
   isPublic?: boolean;
+  activePageSlug?: string;
+  publicSlug?: string;
 }
 
 export default function WebsiteRenderer({
@@ -61,6 +66,8 @@ export default function WebsiteRenderer({
   category,
   businessName,
   isPublic = false,
+  activePageSlug,
+  publicSlug,
 }: WebsiteRendererProps) {
   const storeWebsite = useGeneratedWebsiteStore((state) => state.website);
   const storePrimaryColor = useBuilderStore((state) => state.primaryColor);
@@ -75,6 +82,8 @@ export default function WebsiteRenderer({
   const selectedSection = useGeneratedWebsiteStore((state) => state.selectedSection);
   const setSelectedSection = useGeneratedWebsiteStore((state) => state.setSelectedSection);
   const isPreviewMode = useGeneratedWebsiteStore((state) => state.isPreviewMode);
+  const activePageId = useGeneratedWebsiteStore((state) => state.activePageId);
+  const setActivePage = useGeneratedWebsiteStore((state) => state.setActivePage);
 
   const rawWebsite = data || storeWebsite;
   const primaryColor = pColor !== undefined ? pColor : storePrimaryColor;
@@ -105,9 +114,31 @@ export default function WebsiteRenderer({
 
   const isInteractiveStudio = !isPublic && !isPreviewMode;
 
+  // Determine active page & section order
+  const pages: WebsitePage[] = Array.isArray(rawWebsite?.pages) && rawWebsite.pages.length > 0
+    ? rawWebsite.pages
+    : [
+        {
+          id: "home",
+          slug: "",
+          title: "Home",
+          isHome: true,
+          sectionOrder: rawWebsite?.sectionOrder || website.sectionOrder || ["hero", "about", "services", "contact", "footer"],
+        },
+      ];
+
+  let activePage: WebsitePage = pages[0];
+  if (activePageSlug !== undefined) {
+    activePage = pages.find((p) => p.slug === activePageSlug) || pages[0];
+  } else if (!isPublic && activePageId) {
+    activePage = pages.find((p) => p.id === activePageId) || pages[0];
+  }
+
+  const activeSectionOrder = activePage?.sectionOrder || website.sectionOrder || [];
+
   return (
     <div
-      className="wb-website-root min-h-full w-full transition-colors duration-300"
+      className="wb-website-root min-h-full w-full transition-colors duration-300 relative"
       style={{
         backgroundColor: theme.bg,
         color: theme.fg,
@@ -130,7 +161,69 @@ export default function WebsiteRenderer({
         "--wb-gradient-hero": theme.gradientHeroOverlay,
       } as React.CSSProperties}
     >
-      {(website.sectionOrder || []).map((key) => {
+      {/* Multi-Page Sticky Navigation Bar if website has multiple pages */}
+      {pages.length > 1 && (
+        <nav
+          className="sticky top-0 z-30 w-full backdrop-blur-xl border-b transition-colors px-4 sm:px-8 py-3 flex items-center justify-between"
+          style={{
+            backgroundColor: `${theme.surface}e6`,
+            borderColor: theme.border,
+          }}
+        >
+          <div className="flex items-center gap-2">
+            <Globe className="h-4 w-4" style={{ color: theme.primary }} />
+            <span className="font-extrabold text-xs sm:text-sm tracking-tight" style={{ color: theme.fg }}>
+              {resolvedBusinessName || "Website"}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-1 sm:gap-2">
+            {pages.map((p) => {
+              const isPageActive = p.id === activePage.id;
+              if (isPublic && publicSlug) {
+                const href = p.isHome || !p.slug ? `/p/${publicSlug}` : `/p/${publicSlug}/${p.slug}`;
+                return (
+                  <Link
+                    key={p.id}
+                    href={href}
+                    className={cn(
+                      "px-3 py-1 rounded-lg text-xs font-bold transition",
+                      isPageActive ? "shadow-xs" : "opacity-70 hover:opacity-100"
+                    )}
+                    style={{
+                      backgroundColor: isPageActive ? theme.primary : "transparent",
+                      color: isPageActive ? "#ffffff" : theme.fg,
+                    }}
+                  >
+                    {p.title}
+                  </Link>
+                );
+              }
+
+              return (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => setActivePage(p.id)}
+                  className={cn(
+                    "px-3 py-1 rounded-lg text-xs font-bold transition cursor-pointer",
+                    isPageActive ? "shadow-xs" : "opacity-70 hover:opacity-100"
+                  )}
+                  style={{
+                    backgroundColor: isPageActive ? theme.primary : "transparent",
+                    color: isPageActive ? "#ffffff" : theme.fg,
+                  }}
+                >
+                  {p.title}
+                </button>
+              );
+            })}
+          </div>
+        </nav>
+      )}
+
+      {/* Render Active Page Sections */}
+      {activeSectionOrder.map((key) => {
         const rawSectionData = (rawWebsite as Record<string, unknown> | null | undefined)?.[key] ?? (website as Record<string, unknown>)[key];
         const baseType = key.split("_")[0];
         const isSelected = isInteractiveStudio && selectedSection === key;

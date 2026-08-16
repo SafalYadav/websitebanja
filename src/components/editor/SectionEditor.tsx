@@ -144,6 +144,7 @@ export default function SectionEditor() {
                 <div className="grid grid-cols-2 gap-1.5">
                   {[
                     { id: "scroll", label: "Scroll Section", icon: Compass },
+                    { id: "page", label: "Open Page", icon: Layers },
                     { id: "whatsapp", label: "WhatsApp", icon: MessageCircle },
                     { id: "url", label: "Web Link", icon: Globe },
                     { id: "call", label: "Phone Call", icon: Phone },
@@ -159,7 +160,12 @@ export default function SectionEditor() {
                         onClick={() =>
                           setButtonAction(selectedElement.elementPath, {
                             type: act.id as ButtonActionType,
-                            target: act.id === "scroll" ? availableSections[0]?.key || "contact" : existingAction.target || "",
+                            target:
+                              act.id === "scroll"
+                                ? availableSections[0]?.key || "contact"
+                                : act.id === "page"
+                                ? website?.pages?.[0]?.slug || ""
+                                : existingAction.target || "",
                           })
                         }
                         className={`flex items-center gap-2 rounded-xl p-2 text-xs font-bold transition ${
@@ -176,6 +182,31 @@ export default function SectionEditor() {
                 </div>
 
                 {/* Target Configuration Input according to selected action type */}
+                {existingAction.type === "page" && (
+                  <div className="pt-2">
+                    <label className="block text-[11px] font-bold text-zinc-600 dark:text-zinc-400 mb-1">
+                      Destination Page
+                    </label>
+                    <select
+                      value={existingAction.target || ""}
+                      onChange={(e) =>
+                        setButtonAction(selectedElement.elementPath, {
+                          ...existingAction,
+                          type: "page",
+                          target: e.target.value,
+                        })
+                      }
+                      className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-800 outline-none dark:border-white/10 dark:bg-zinc-800 dark:text-zinc-200"
+                    >
+                      {(website?.pages || [{ id: "home", title: "Home", slug: "", isHome: true }]).map((p) => (
+                        <option key={p.id} value={p.slug}>
+                          {p.title} {p.isHome ? "(Home)" : `(/${p.slug})`}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
                 {existingAction.type === "scroll" && (
                   <div className="pt-2">
                     <label className="block text-[11px] font-bold text-zinc-600 dark:text-zinc-400 mb-1">

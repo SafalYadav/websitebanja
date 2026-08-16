@@ -1,4 +1,4 @@
-import type { WebsiteData, ProductItem, ButtonActionConfig, ButtonActionType } from "@/types/website";
+import type { WebsiteData, ProductItem, ButtonActionConfig, ButtonActionType, WebsitePage, PageSeoConfig } from "@/types/website";
 import { sanitizeActionUrl } from "@/lib/buttonActions";
 
 export interface StudioAiAction {
@@ -8,6 +8,7 @@ export interface StudioAiAction {
     | "update_button"
     | "set_button_action"
     | "set_button_scroll_target"
+    | "set_button_page_target"
     | "set_button_whatsapp"
     | "set_button_external_url"
     | "set_button_call"
@@ -19,6 +20,10 @@ export interface StudioAiAction {
     | "add_product"
     | "update_product"
     | "delete_product"
+    | "add_page"
+    | "delete_page"
+    | "set_page_seo"
+    | "toggle_admin_dashboard"
     | "update_theme";
   payload: Record<string, unknown>;
   summary: string;
@@ -50,7 +55,6 @@ export function resolveSemanticSectionTarget(targetText: string, sectionOrder: s
 
   for (const [canonicalType, keywords] of Object.entries(synonymMap)) {
     if (keywords.some((kw) => clean.includes(kw) || kw.includes(clean))) {
-      // Find actual section in sectionOrder matching this canonical type
       const matched = sectionOrder.find(
         (key) => key === canonicalType || key.startsWith(`${canonicalType}_`) || key === "catalog"
       );
@@ -59,15 +63,12 @@ export function resolveSemanticSectionTarget(targetText: string, sectionOrder: s
     }
   }
 
-  // 3. Prefix matching
   const prefixMatch = sectionOrder.find((k) => k.toLowerCase().startsWith(clean));
   if (prefixMatch) return prefixMatch;
 
-  // 4. Default fallback: first section or "contact"
   return sectionOrder[0] || "contact";
 }
 
-// Safely sets a deep value using a path string e.g. "hero.title" or "services[0].title"
 function setDeepValue(obj: Record<string, unknown>, path: string, value: unknown): Record<string, unknown> {
   const root = JSON.parse(JSON.stringify(obj)) as Record<string, unknown>;
   const keys = path.replace(/\[(\w+)\]/g, ".$1").split(".");
@@ -166,6 +167,21 @@ export function executeStudioActions(
           break;
         }
 
+        case "set_button_page_target": {
+          const buttonPath = String(act.payload.path || "hero.button");
+          const pageSlug = String(act.payload.slug || act.payload.target || "");
+          const basePath = buttonPath.replace(/\.button$/, "");
+
+          const actionConfig: ButtonActionConfig = {
+            type: "page",
+            target: pageSlug,
+          };
+
+          current = setDeepValue(current as unknown as Record<string, unknown>, `${basePath}.buttonAction`, actionConfig) as unknown as WebsiteData;
+          appliedSummaries.push(act.summary || `Configured button to open /${pageSlug} page`);
+          break;
+        }
+
         case "set_button_whatsapp": {
           const buttonPath = String(act.payload.path || "hero.button");
           const phone = String(act.payload.phone || current.contact?.phone || "+919876543210");
@@ -223,6 +239,53 @@ export function executeStudioActions(
 
           current = setDeepValue(current as unknown as Record<string, unknown>, `${basePath}.buttonAction`, actionConfig) as unknown as WebsiteData;
           appliedSummaries.push(act.summary || `Configured button to send email to ${email}`);
+          break;
+        }
+
+        case "add_page": {
+          const title = String(act.payload.title || "New Page");
+          const slug = String(act.payload.slug || title.toLowerCase().replace(/[^a-z0-9]+/g, "-"));
+          const newPage: WebsitePage = {
+            id: `page_${Date.now()}`,
+            title,
+            slug,
+            isHome: false,
+            sectionOrder: ["hero", "about", "contact", "footer"],
+            seo: { title: `${title} | Official Site` },
+          };
+          const currentPages = current.pages || [
+            { id: "home", title: "Home", slug: "", isHome: true, sectionOrder: current.sectionOrder || [] },
+          ];
+          current.pages = [...currentPages, newPage];
+          appliedSummaries.push(act.summary || `Added new page: "${title}" (/${slug})`);
+          break;
+        }
+
+        case "delete_page": {
+          const slugOrId = String(act.payload.slug || act.payload.pageId || "");
+          if (current.pages) {
+            current.pages = current.pages.filter((p) => p.id !== slugOrId && p.slug !== slugOrId);
+            appliedSummaries.push(act.summary || `Deleted page ${slugOrId}`);
+          }
+          break;
+        }
+
+        case "set_page_seo": {
+          const pageSlug = String(act.payload.slug || "");
+          const seoUpdates = act.payload.seo as PageSeoConfig;
+          if (current.pages && seoUpdates) {
+            current.pages = current.pages.map((p) =>
+              p.slug === pageSlug || (pageSlug === "" && p.isHome) ? { ...p, seo: { ...p.seo, ...seoUpdates } } : p
+            );
+            appliedSummaries.push(act.summary || `Updated SEO metadata`);
+          }
+          break;
+        }
+
+        case "toggle_admin_dashboard": {
+          const enabled = Boolean(act.payload.enabled !== undefined ? act.payload.enabled : true);
+          current.hasAdminDashboard = enabled;
+          appliedSummaries.push(act.summary || (enabled ? "Enabled Site Owner Admin Dashboard" : "Disabled Admin Dashboard"));
           break;
         }
 
@@ -295,7 +358,6 @@ export function executeStudioActions(
             const currentProds = (current.products as ProductItem[] | undefined) || [];
             current.products = [newProd, ...currentProds];
 
-            // Ensure products section exists in order
             if (!current.sectionOrder?.some((k) => k.startsWith("products") || k.startsWith("catalog"))) {
               current.sectionOrder = [...(current.sectionOrder || []), "products"];
               current.productsSection = {

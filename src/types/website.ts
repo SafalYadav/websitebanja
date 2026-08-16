@@ -1,5 +1,6 @@
 export type ButtonActionType =
   | "scroll"
+  | "page"
   | "url"
   | "whatsapp"
   | "call"
@@ -8,8 +9,18 @@ export type ButtonActionType =
 
 export interface ButtonActionConfig {
   type: ButtonActionType;
-  target: string; // section key (e.g. "contact", "services", "products"), URL, phone, or email
+  target: string; // section key (e.g. "contact"), page slug / id (e.g. "about"), URL, phone, or email
   label?: string;
+}
+
+export interface PageSeoConfig {
+  title?: string;
+  description?: string;
+  keywords?: string[];
+  ogTitle?: string;
+  ogDescription?: string;
+  ogImage?: string;
+  noIndex?: boolean;
 }
 
 export interface Hero {
@@ -76,6 +87,34 @@ export interface ProductsSectionData {
   products: ProductItem[];
 }
 
+export interface SiteLead {
+  id: string;
+  name: string;
+  email: string;
+  phone?: string;
+  message: string;
+  sourcePage?: string;
+  createdAt: string;
+  read?: boolean;
+}
+
+export interface WebsiteVersionSnapshot {
+  id: string;
+  timestamp: string;
+  description: string;
+  data: WebsiteData;
+}
+
+export interface WebsitePage {
+  id: string;
+  slug: string; // e.g. "" (home), "about", "services", "products", "contact", "pricing"
+  title: string;
+  isHome?: boolean;
+  sectionOrder: string[];
+  seo?: PageSeoConfig;
+  [key: string]: unknown;
+}
+
 export type ElementType =
   | "heading"
   | "paragraph"
@@ -85,7 +124,8 @@ export type ElementType =
   | "card"
   | "link"
   | "product"
-  | "section";
+  | "section"
+  | "page";
 
 export interface ElementSelection {
   sectionKey: string;
@@ -106,17 +146,16 @@ export interface WebsiteData {
   products?: ProductItem[];
   productsSection?: ProductsSectionData;
 
+  // Multi-page website architecture
+  pages?: WebsitePage[];
+  activePageId?: string;
+
+  // Optional Site Owner Admin Dashboard & Telemetry
+  hasAdminDashboard?: boolean;
+  leads?: SiteLead[];
+  seo?: PageSeoConfig;
+  versions?: WebsiteVersionSnapshot[];
+
   sectionOrder?: string[];
-  [key: string]:
-    | Hero
-    | About
-    | Service[]
-    | Feature[]
-    | FAQ[]
-    | Contact
-    | Footer
-    | ProductItem[]
-    | ProductsSectionData
-    | string[]
-    | undefined;
+  [key: string]: unknown;
 }

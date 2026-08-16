@@ -20,7 +20,8 @@ export function sanitizeActionUrl(url: string): string {
     lower.startsWith("https://") ||
     lower.startsWith("tel:") ||
     lower.startsWith("mailto:") ||
-    lower.startsWith("https://wa.me/")
+    lower.startsWith("https://wa.me/") ||
+    lower.startsWith("/")
   ) {
     return trimmed;
   }
@@ -62,7 +63,8 @@ export function scrollToSection(sectionKey: string): void {
 export function handleButtonActionClick(
   action: ButtonActionConfig | undefined,
   fallbackScrollTarget: string = "contact",
-  e?: React.MouseEvent
+  e?: React.MouseEvent,
+  context?: { siteSlug?: string; onSwitchPage?: (pageIdOrSlug: string) => void }
 ): void {
   if (e) {
     e.preventDefault();
@@ -78,6 +80,16 @@ export function handleButtonActionClick(
     case "scroll": {
       const target = action.target || fallbackScrollTarget;
       scrollToSection(target);
+      break;
+    }
+    case "page": {
+      const targetPage = action.target || "";
+      if (context?.onSwitchPage) {
+        context.onSwitchPage(targetPage);
+      } else if (context?.siteSlug) {
+        const dest = targetPage === "home" || !targetPage ? `/p/${context.siteSlug}` : `/p/${context.siteSlug}/${targetPage}`;
+        window.location.href = dest;
+      }
       break;
     }
     case "url": {

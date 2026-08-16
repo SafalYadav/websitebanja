@@ -14,8 +14,10 @@ interface ContactSectionProps {
 export default function ContactSection({ sectionKey = "contact", contact }: ContactSectionProps) {
   const shouldReduceMotion = useReducedMotion();
   const [submitted, setSubmitted] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [formName, setFormName] = useState("");
   const [formEmail, setFormEmail] = useState("");
+  const [formPhone, setFormPhone] = useState("");
   const [formMsg, setFormMsg] = useState("");
 
   const safeContact: Contact = {
@@ -28,16 +30,46 @@ export default function ContactSection({ sectionKey = "contact", contact }: Cont
     safeContact.phone || safeContact.email || safeContact.address
   );
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formName.trim() || !formEmail.trim()) return;
-    setSubmitted(true);
-    setTimeout(() => {
-      setSubmitted(false);
-      setFormName("");
-      setFormEmail("");
-      setFormMsg("");
-    }, 4000);
+
+    setIsSubmitting(true);
+    try {
+      let publicSlug = "";
+      if (typeof window !== "undefined") {
+        const pathParts = window.location.pathname.split("/").filter(Boolean);
+        if (pathParts[0] === "p" && pathParts[1]) {
+          publicSlug = pathParts[1];
+        }
+      }
+
+      await fetch("/api/public/submit-lead", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          slug: publicSlug,
+          name: formName.trim(),
+          email: formEmail.trim(),
+          phone: formPhone.trim() || undefined,
+          message: formMsg.trim() || "General inquiry from contact form.",
+          sourcePage: typeof window !== "undefined" ? window.location.pathname : "Contact",
+        }),
+      });
+
+      setSubmitted(true);
+      setTimeout(() => {
+        setSubmitted(false);
+        setFormName("");
+        setFormEmail("");
+        setFormPhone("");
+        setFormMsg("");
+      }, 5000);
+    } catch {
+      setSubmitted(true);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -267,6 +299,23 @@ export default function ContactSection({ sectionKey = "contact", contact }: Cont
 
                   <div>
                     <label className="block text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: "var(--wb-muted)" }}>
+                      Phone / WhatsApp (Optional)
+                    </label>
+                    <input
+                      type="tel"
+                      placeholder="+91 98765 43210"
+                      value={formPhone}
+                      onChange={(e) => setFormPhone(e.target.value)}
+                      className="w-full rounded-2xl border px-4 py-3.5 text-sm outline-none transition bg-black/[0.03] dark:bg-white/[0.05] focus:border-[var(--wb-primary)]"
+                      style={{
+                        borderColor: "var(--wb-border)",
+                        color: "var(--wb-fg)",
+                      }}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: "var(--wb-muted)" }}>
                       Your Message
                     </label>
                     <textarea
@@ -284,14 +333,15 @@ export default function ContactSection({ sectionKey = "contact", contact }: Cont
 
                   <button
                     type="submit"
-                    className="w-full inline-flex items-center justify-center gap-2 rounded-2xl py-4 px-6 text-sm font-bold text-white shadow-xl transition-all duration-200 hover:scale-[1.01] active:scale-[0.98]"
+                    disabled={isSubmitting}
+                    className="w-full inline-flex items-center justify-center gap-2 rounded-2xl py-4 px-6 text-sm font-bold text-white shadow-xl transition-all duration-200 hover:scale-[1.01] active:scale-[0.98] disabled:opacity-50"
                     style={{
                       background: "var(--wb-gradient-primary)",
                       boxShadow: "0 10px 30px -6px var(--wb-glow-primary)",
                     }}
                   >
                     <Send className="h-4 w-4" />
-                    <span>Submit Inquiry</span>
+                    <span>{isSubmitting ? "Sending..." : "Submit Inquiry"}</span>
                   </button>
                 </form>
               )}

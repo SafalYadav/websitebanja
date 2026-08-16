@@ -8,32 +8,34 @@ import type { WebsiteData } from "@/types/website";
 export async function generateMetadata({
   params,
 }: {
-  params: Promise<{ slug: string }>;
+  params: Promise<{ slug: string; pageSlug: string }>;
 }): Promise<Metadata> {
   const resolvedParams = await params;
   const { data } = await getProjectBySlug(resolvedParams.slug);
   if (!data) return { title: "Not Found" };
 
   const jsonData = (data.json_data || {}) as WebsiteData;
-  const homePage = jsonData.pages?.find((p) => p.isHome) || jsonData.pages?.[0];
-  const pageTitle = homePage?.seo?.title || `${data.business_name || data.name} | Official Site`;
-  const pageDesc = homePage?.seo?.description || data.description || "A responsive modern website created with WebsiteBanja AI";
+  const currentPage = jsonData.pages?.find((p) => p.slug === resolvedParams.pageSlug);
+  if (!currentPage) return { title: `${data.business_name || data.name}` };
+
+  const pageTitle = currentPage.seo?.title || `${currentPage.title} | ${data.business_name || data.name}`;
+  const pageDesc = currentPage.seo?.description || `Explore the ${currentPage.title} page.`;
 
   return {
     title: pageTitle,
     description: pageDesc,
     openGraph: {
-      title: homePage?.seo?.ogTitle || pageTitle,
-      description: homePage?.seo?.ogDescription || pageDesc,
-      images: homePage?.seo?.ogImage ? [{ url: homePage.seo.ogImage }] : undefined,
+      title: currentPage.seo?.ogTitle || pageTitle,
+      description: currentPage.seo?.ogDescription || pageDesc,
+      images: currentPage.seo?.ogImage ? [{ url: currentPage.seo.ogImage }] : undefined,
     },
   };
 }
 
-export default async function PublicWebsitePage({
+export default async function PublicWebsiteSubPage({
   params,
 }: {
-  params: Promise<{ slug: string }>;
+  params: Promise<{ slug: string; pageSlug: string }>;
 }) {
   const resolvedParams = await params;
   const { data: project } = await getProjectBySlug(resolvedParams.slug);
@@ -43,6 +45,13 @@ export default async function PublicWebsitePage({
   }
 
   const websiteData = project.json_data as WebsiteData;
+  const pages = websiteData.pages || [];
+  const targetPage = pages.find((p) => p.slug === resolvedParams.pageSlug);
+
+  // If page doesn't exist, redirect or notFound
+  if (!targetPage) {
+    notFound();
+  }
 
   return (
     <main className="min-h-screen relative">
@@ -55,7 +64,7 @@ export default async function PublicWebsitePage({
         businessName={project.business_name || project.name}
         isPublic={true}
         publicSlug={resolvedParams.slug}
-        activePageSlug=""
+        activePageSlug={resolvedParams.pageSlug}
       />
 
       {/* Floating WebsiteBanja Brand Badge */}

@@ -25,6 +25,12 @@ import {
   Quote,
   Users2,
   Flame,
+  Search,
+  RotateCcw,
+  History,
+  Globe,
+  ShieldCheck,
+  Clock,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -60,15 +66,39 @@ const LABELS: Record<string, string> = {
   footer: "Footer Section",
 };
 
-const AVAILABLE_BLOCKS = [
-  { type: "hero", label: "Hero Banner", desc: "Headline, CTA, and visual showcase", icon: Home },
-  { type: "about", label: "About Story", desc: "Narrative story and verified mission", icon: FileText },
-  { type: "services", label: "Services Cards", desc: "Breakdown of bespoke offerings", icon: Wrench },
-  { type: "features", label: "Feature Grid", desc: "Key benefits, advantages, tech specs", icon: Sparkles },
-  { type: "products", label: "Product Catalog", desc: "E-commerce store with INR pricing & WhatsApp", icon: ShoppingBag },
-  { type: "faq", label: "FAQ Accordion", desc: "Answers to common customer questions", icon: HelpCircle },
-  { type: "contact", label: "Contact Form", desc: "Direct phone, email, and inquiry form", icon: Phone },
-  { type: "footer", label: "Footer Section", desc: "Copyright notice and fast jump anchors", icon: Layers },
+const SECTION_CATEGORIES: { name: string; blocks: { type: string; label: string; desc: string; icon: React.ElementType }[] }[] = [
+  {
+    name: "General & Business",
+    blocks: [
+      { type: "hero", label: "Hero Showcase", desc: "Hero title, value prop & CTA", icon: Home },
+      { type: "about", label: "About Mission", desc: "Founder story & verified trust", icon: FileText },
+      { type: "services", label: "Core Services", desc: "Interactive service cards", icon: Wrench },
+      { type: "features", label: "Feature Matrix", desc: "Key benefits and specs", icon: Sparkles },
+    ],
+  },
+  {
+    name: "E-Commerce & Sales",
+    blocks: [
+      { type: "products", label: "Product Grid", desc: "Live catalog & WhatsApp checkout", icon: ShoppingBag },
+      { type: "pricing", label: "Pricing Tables", desc: "Tiered pricing plans & comparison", icon: CreditCard },
+      { type: "cta", label: "High-Converting CTA", desc: "Bold banner driving immediate action", icon: Flame },
+    ],
+  },
+  {
+    name: "Social Proof & Team",
+    blocks: [
+      { type: "testimonials", label: "Customer Reviews", desc: "Client quotes and star ratings", icon: Quote },
+      { type: "team", label: "Leadership & Team", desc: "Team bio cards and social handles", icon: Users2 },
+    ],
+  },
+  {
+    name: "Trust & Support",
+    blocks: [
+      { type: "faq", label: "FAQ Accordion", desc: "Answers to common objections", icon: HelpCircle },
+      { type: "contact", label: "Contact & Leads", desc: "Direct lead capture form & phone", icon: Phone },
+      { type: "footer", label: "Footer Links", desc: "Legal, copyright and anchors", icon: Layers },
+    ],
+  },
 ];
 
 const THEME_PRESETS = [
@@ -92,6 +122,16 @@ export default function EditorSidebar() {
     addSection,
     activeStudioTab,
     setActiveStudioTab,
+    activePageId,
+    setActivePage,
+    addPage,
+    deletePage,
+    duplicatePage,
+    setHomepage,
+    updatePageSeo,
+    toggleAdminDashboard,
+    saveVersionSnapshot,
+    restoreVersionSnapshot,
   } = useGeneratedWebsiteStore();
 
   const primaryColor = useBuilderStore((state) => state.primaryColor);
@@ -102,8 +142,17 @@ export default function EditorSidebar() {
   const setStyle = useBuilderStore((state) => state.setStyle);
 
   const [draggedItem, setDraggedItem] = useState<string | null>(null);
+  const [newPageTitle, setNewPageTitle] = useState("");
+  const [isAddingPage, setIsAddingPage] = useState(false);
+  const [snapshotDesc, setSnapshotDesc] = useState("");
 
-  if (!website || !website.sectionOrder) return null;
+  if (!website) return null;
+
+  const pages = website.pages || [
+    { id: "home", slug: "", title: "Home", isHome: true, sectionOrder: website.sectionOrder || [] },
+  ];
+  const activePage = pages.find((p) => p.id === activePageId) || pages[0];
+  const activeSectionOrder = activePage?.sectionOrder || website.sectionOrder || [];
 
   const handleSectionClick = (sectionKey: string) => {
     setSelectedSection(sectionKey);
@@ -144,7 +193,7 @@ export default function EditorSidebar() {
     e.preventDefault();
     if (!draggedItem || draggedItem === targetKey) return;
 
-    const newOrder = [...website.sectionOrder!];
+    const newOrder = [...activeSectionOrder];
     const draggedIdx = newOrder.indexOf(draggedItem);
     const targetIdx = newOrder.indexOf(targetKey);
 
@@ -161,18 +210,29 @@ export default function EditorSidebar() {
     setStyle(preset.style);
   };
 
+  const handleCreatePage = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newPageTitle.trim()) return;
+    addPage(newPageTitle.trim());
+    setNewPageTitle("");
+    setIsAddingPage(false);
+  };
+
   const TABS: { id: StudioTab; label: string; icon: React.ElementType }[] = [
+    { id: "pages", label: "Pages", icon: Globe },
     { id: "layers", label: "Layers", icon: Layers },
     { id: "elements", label: "Add", icon: LayoutGrid },
     { id: "catalog", label: "Catalog", icon: ShoppingBag },
     { id: "ai", label: "Copilot", icon: Bot },
     { id: "theme", label: "Theme", icon: Palette },
+    { id: "seo", label: "SEO", icon: Search },
+    { id: "history", label: "History", icon: History },
   ];
 
   return (
     <aside className="w-80 border-r border-zinc-200/80 bg-white/95 dark:border-white/10 dark:bg-zinc-950/95 flex flex-col h-full flex-shrink-0 select-none overflow-hidden backdrop-blur-xl">
       {/* Top Studio Mode Tab Strip */}
-      <div className="grid grid-cols-5 border-b border-zinc-200/80 dark:border-white/10 bg-zinc-50/70 dark:bg-zinc-900/60 p-1.5 gap-1">
+      <div className="grid grid-cols-4 border-b border-zinc-200/80 dark:border-white/10 bg-zinc-50/70 dark:bg-zinc-900/60 p-1 gap-1">
         {TABS.map((tab) => {
           const TabIcon = tab.icon;
           const isActive = activeStudioTab === tab.id;
@@ -182,13 +242,13 @@ export default function EditorSidebar() {
               type="button"
               onClick={() => setActiveStudioTab(tab.id)}
               className={cn(
-                "flex flex-col items-center justify-center gap-1 rounded-xl py-2 px-1 text-[10px] font-bold transition-all",
+                "flex flex-col items-center justify-center gap-1 rounded-xl py-1.5 px-0.5 text-[9px] font-bold transition-all",
                 isActive
                   ? "bg-white text-violet-600 shadow-xs dark:bg-zinc-800 dark:text-white"
                   : "text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white hover:bg-zinc-100/60 dark:hover:bg-zinc-800/40"
               )}
             >
-              <TabIcon className="h-4 w-4" />
+              <TabIcon className="h-3.5 w-3.5" />
               <span>{tab.label}</span>
             </button>
           );
@@ -197,12 +257,149 @@ export default function EditorSidebar() {
 
       {/* Main Tab Panel Area */}
       <div className="flex-1 overflow-y-auto p-4">
-        {/* 1. Layers Tab */}
+        {/* 1. Multi-Page Manager Tab */}
+        {activeStudioTab === "pages" && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+                Site Pages ({pages.length})
+              </span>
+              <button
+                type="button"
+                onClick={() => setIsAddingPage(true)}
+                className="flex items-center gap-1 text-xs font-bold text-violet-600 hover:text-violet-700"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Add Page
+              </button>
+            </div>
+
+            {isAddingPage && (
+              <form onSubmit={handleCreatePage} className="p-3 rounded-2xl border border-violet-500/50 bg-violet-50/40 dark:bg-violet-950/20 space-y-2">
+                <input
+                  type="text"
+                  placeholder="e.g. About Us, Menu, Services"
+                  value={newPageTitle}
+                  autoFocus
+                  onChange={(e) => setNewPageTitle(e.target.value)}
+                  className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-1.5 text-xs font-semibold outline-none focus:border-violet-500 dark:border-white/10 dark:bg-zinc-900"
+                />
+                <div className="flex items-center justify-end gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setIsAddingPage(false)}
+                    className="px-2.5 py-1 text-xs text-zinc-500 font-semibold"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="rounded-xl bg-violet-600 px-3 py-1 text-xs font-bold text-white hover:bg-violet-700"
+                  >
+                    Create
+                  </button>
+                </div>
+              </form>
+            )}
+
+            <div className="space-y-2">
+              {pages.map((page) => {
+                const isActive = page.id === activePage.id;
+                return (
+                  <div
+                    key={page.id}
+                    className={cn(
+                      "group flex items-center justify-between p-2.5 rounded-2xl border transition text-xs",
+                      isActive
+                        ? "border-violet-500 bg-violet-50 text-violet-950 dark:bg-violet-950/30 dark:text-white shadow-xs"
+                        : "border-zinc-200 text-zinc-700 hover:bg-zinc-50 dark:border-white/10 dark:text-zinc-300 dark:hover:bg-zinc-900"
+                    )}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => setActivePage(page.id)}
+                      className="flex items-center gap-2 flex-1 min-w-0 text-left"
+                    >
+                      <Globe className={cn("h-4 w-4 shrink-0", isActive ? "text-violet-600" : "text-zinc-400")} />
+                      <div className="min-w-0 truncate">
+                        <span className="font-bold block truncate">{page.title}</span>
+                        <span className="text-[10px] text-zinc-400 font-mono">
+                          {page.isHome ? "/ (Home)" : `/${page.slug}`}
+                        </span>
+                      </div>
+                    </button>
+
+                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      {!page.isHome && (
+                        <button
+                          type="button"
+                          onClick={() => setHomepage(page.id)}
+                          title="Set as Homepage"
+                          className="p-1 rounded-md text-zinc-400 hover:text-amber-500"
+                        >
+                          <Home className="h-3 w-3" />
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => duplicatePage(page.id)}
+                        title="Duplicate Page"
+                        className="p-1 rounded-md text-zinc-400 hover:text-zinc-900 dark:hover:text-white"
+                      >
+                        <Copy className="h-3 w-3" />
+                      </button>
+                      {!page.isHome && pages.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => deletePage(page.id)}
+                          title="Delete Page"
+                          className="p-1 rounded-md text-zinc-400 hover:text-rose-600"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Generated Website Owner Admin Toggle */}
+            <div className="mt-6 pt-4 border-t border-zinc-200 dark:border-white/10 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-zinc-800 dark:text-zinc-200 flex items-center gap-1.5">
+                  <ShieldCheck className="h-4 w-4 text-emerald-500" />
+                  Site Owner Admin
+                </span>
+                <button
+                  type="button"
+                  onClick={() => toggleAdminDashboard()}
+                  className={cn(
+                    "relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-hidden",
+                    website.hasAdminDashboard ? "bg-emerald-500" : "bg-zinc-300 dark:bg-zinc-700"
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out",
+                      website.hasAdminDashboard ? "translate-x-4" : "translate-x-0"
+                    )}
+                  />
+                </button>
+              </div>
+              <p className="text-[11px] text-zinc-500">
+                Enables a dedicated <code>/p/[slug]/admin</code> portal for managing catalog, leads & site telemetry.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* 2. Layers Tab */}
         {activeStudioTab === "layers" && (
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
-                Canvas Layers ({website.sectionOrder.length})
+                {activePage?.title} Layers ({activeSectionOrder.length})
               </span>
               <button
                 type="button"
@@ -215,7 +412,7 @@ export default function EditorSidebar() {
             </div>
 
             <div className="space-y-1.5">
-              {website.sectionOrder.map((sectionKey) => {
+              {activeSectionOrder.map((sectionKey) => {
                 const baseType = sectionKey.split("_")[0];
                 const Icon = ICONS[baseType] || Layers;
                 const label = LABELS[baseType] || baseType;
@@ -285,53 +482,56 @@ export default function EditorSidebar() {
           </div>
         )}
 
-        {/* 2. Add Elements Tab */}
+        {/* 3. Section Library Tab */}
         {activeStudioTab === "elements" && (
-          <div className="space-y-3">
-            <span className="text-xs font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
-              Insert Section Block
-            </span>
-            <div className="grid grid-cols-1 gap-2.5">
-              {AVAILABLE_BLOCKS.map((block) => {
-                const BlockIcon = block.icon;
-                return (
-                  <button
-                    key={block.type}
-                    type="button"
-                    onClick={() => {
-                      addSection(block.type);
-                      setActiveStudioTab("layers");
-                    }}
-                    className="flex items-start gap-3 rounded-2xl border border-zinc-200 bg-white p-3.5 text-left transition hover:border-violet-500 hover:bg-violet-50/40 hover:shadow-md dark:border-white/10 dark:bg-zinc-900 dark:hover:bg-zinc-800"
-                  >
-                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-violet-600/10 text-violet-600 dark:bg-violet-500/20 dark:text-violet-400 shrink-0">
-                      <BlockIcon className="h-5 w-5" />
-                    </div>
-                    <div>
-                      <span className="text-xs font-bold text-zinc-900 dark:text-white block">
-                        {block.label}
-                      </span>
-                      <span className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5 block">
-                        {block.desc}
-                      </span>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
+          <div className="space-y-5">
+            {SECTION_CATEGORIES.map((cat) => (
+              <div key={cat.name} className="space-y-2">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-400 block">
+                  {cat.name}
+                </span>
+                <div className="grid grid-cols-1 gap-2">
+                  {cat.blocks.map((block) => {
+                    const BlockIcon = block.icon;
+                    return (
+                      <button
+                        key={block.type}
+                        type="button"
+                        onClick={() => {
+                          addSection(block.type);
+                          setActiveStudioTab("layers");
+                        }}
+                        className="flex items-start gap-3 rounded-2xl border border-zinc-200 bg-white p-3 text-left transition hover:border-violet-500 hover:bg-violet-50/40 hover:shadow-xs dark:border-white/10 dark:bg-zinc-900 dark:hover:bg-zinc-800"
+                      >
+                        <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-violet-600/10 text-violet-600 dark:bg-violet-500/20 dark:text-violet-400 shrink-0">
+                          <BlockIcon className="h-4 w-4" />
+                        </div>
+                        <div>
+                          <span className="text-xs font-bold text-zinc-900 dark:text-white block">
+                            {block.label}
+                          </span>
+                          <span className="text-[11px] text-zinc-500 dark:text-zinc-400 block">
+                            {block.desc}
+                          </span>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
           </div>
         )}
 
-        {/* 3. Catalog Tab */}
+        {/* 4. Catalog Tab */}
         {activeStudioTab === "catalog" && <CatalogManager />}
 
-        {/* 4. AI Copilot Tab */}
+        {/* 5. AI Copilot Tab */}
         {activeStudioTab === "ai" && <AiStudioAssistant />}
 
-        {/* 5. Theme & Styles Tab */}
+        {/* 6. Theme & Styles Tab */}
         {activeStudioTab === "theme" && (
           <div className="space-y-6">
-            {/* Presets Grid */}
             <div>
               <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-3">
                 1-Click Theme Presets
@@ -430,6 +630,133 @@ export default function EditorSidebar() {
                   </div>
                 </div>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* 7. SEO Manager Tab */}
+        {activeStudioTab === "seo" && (
+          <div className="space-y-4">
+            <span className="text-xs font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 block">
+              SEO & Social Cards — {activePage?.title}
+            </span>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
+                  Page SEO Title
+                </label>
+                <input
+                  type="text"
+                  value={activePage?.seo?.title || ""}
+                  placeholder={`${activePage?.title || "Page"} | Business`}
+                  onChange={(e) => updatePageSeo(activePage.id, { title: e.target.value })}
+                  className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-medium dark:border-white/10 dark:bg-zinc-900"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
+                  Meta Description
+                </label>
+                <textarea
+                  rows={3}
+                  value={activePage?.seo?.description || ""}
+                  placeholder="Summary of this page for Google search results..."
+                  onChange={(e) => updatePageSeo(activePage.id, { description: e.target.value })}
+                  className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-medium dark:border-white/10 dark:bg-zinc-900"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
+                  Social Share (OG) Title
+                </label>
+                <input
+                  type="text"
+                  value={activePage?.seo?.ogTitle || ""}
+                  placeholder="Title shown on WhatsApp, Twitter, and LinkedIn"
+                  onChange={(e) => updatePageSeo(activePage.id, { ogTitle: e.target.value })}
+                  className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-medium dark:border-white/10 dark:bg-zinc-900"
+                />
+              </div>
+
+              {/* Google Search Preview Snippet */}
+              <div className="mt-4 p-3 rounded-2xl bg-zinc-50 border border-zinc-200 dark:bg-zinc-900 dark:border-white/10">
+                <span className="text-[10px] font-mono text-emerald-600 dark:text-emerald-400 block truncate">
+                  https://websitebanja.com/p/.../{activePage?.slug}
+                </span>
+                <h5 className="text-xs font-bold text-blue-600 dark:text-blue-400 mt-1 truncate">
+                  {activePage?.seo?.title || `${activePage?.title} | Official Site`}
+                </h5>
+                <p className="text-[11px] text-zinc-500 line-clamp-2 mt-0.5">
+                  {activePage?.seo?.description || "Explore our products, services, and company story."}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 8. Version History & Restore Tab */}
+        {activeStudioTab === "history" && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+                Snapshots ({website.versions?.length || 0})
+              </span>
+              <button
+                type="button"
+                onClick={() => saveVersionSnapshot(snapshotDesc || "Saved Version")}
+                className="flex items-center gap-1 text-xs font-bold text-violet-600 hover:text-violet-700"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Save Version
+              </button>
+            </div>
+
+            <div className="flex gap-2">
+              <input
+                type="text"
+                placeholder="Snapshot label..."
+                value={snapshotDesc}
+                onChange={(e) => setSnapshotDesc(e.target.value)}
+                className="flex-1 rounded-xl border border-zinc-200 bg-white px-3 py-1.5 text-xs dark:border-white/10 dark:bg-zinc-900"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  saveVersionSnapshot(snapshotDesc || "Manual Snapshot");
+                  setSnapshotDesc("");
+                }}
+                className="rounded-xl bg-violet-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-violet-700"
+              >
+                Save
+              </button>
+            </div>
+
+            <div className="space-y-2">
+              {(website.versions || []).map((ver) => (
+                <div
+                  key={ver.id}
+                  className="p-3 rounded-2xl border border-zinc-200 bg-white dark:border-white/10 dark:bg-zinc-900 flex items-center justify-between text-xs"
+                >
+                  <div>
+                    <span className="font-bold text-zinc-900 dark:text-white block">{ver.description}</span>
+                    <span className="text-[10px] text-zinc-400 flex items-center gap-1 mt-0.5">
+                      <Clock className="h-3 w-3" />
+                      {new Date(ver.timestamp).toLocaleDateString()} {new Date(ver.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => restoreVersionSnapshot(ver.id)}
+                    className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-zinc-100 hover:bg-violet-50 text-violet-700 dark:bg-zinc-800 dark:hover:bg-violet-950/40 dark:text-violet-300 font-bold transition"
+                  >
+                    <RotateCcw className="h-3 w-3" />
+                    <span>Restore</span>
+                  </button>
+                </div>
+              ))}
             </div>
           </div>
         )}

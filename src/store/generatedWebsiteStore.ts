@@ -1,8 +1,16 @@
 import { create } from "zustand";
-import type { WebsiteData, ElementSelection, ProductItem, ButtonActionConfig } from "@/types/website";
+import type {
+  WebsiteData,
+  ElementSelection,
+  ProductItem,
+  ButtonActionConfig,
+  WebsitePage,
+  PageSeoConfig,
+  WebsiteVersionSnapshot,
+} from "@/types/website";
 
 export type ViewportMode = "desktop" | "tablet" | "mobile";
-export type StudioTab = "layers" | "elements" | "catalog" | "ai" | "theme";
+export type StudioTab = "pages" | "layers" | "elements" | "catalog" | "ai" | "theme" | "seo" | "history";
 
 interface GeneratedWebsiteState {
   website: WebsiteData | null;
@@ -12,6 +20,9 @@ interface GeneratedWebsiteState {
   activeStudioTab: StudioTab;
   isPreviewMode: boolean;
   viewportMode: ViewportMode;
+
+  // Multi-Page Website State
+  activePageId: string;
 
   // Right Inspector Panel UX Controls
   isRightPanelOpen: boolean;
@@ -34,6 +45,22 @@ interface GeneratedWebsiteState {
   setActiveStudioTab: (tab: StudioTab) => void;
   setIsPreviewMode: (value: boolean) => void;
   setViewportMode: (mode: ViewportMode) => void;
+
+  // Multi-Page Handlers
+  setActivePage: (pageId: string) => void;
+  addPage: (title: string, slug?: string) => void;
+  renamePage: (pageId: string, title: string, slug: string) => void;
+  duplicatePage: (pageId: string) => void;
+  deletePage: (pageId: string) => void;
+  reorderPages: (pages: WebsitePage[]) => void;
+  setHomepage: (pageId: string) => void;
+  updatePageSeo: (pageId: string, seo: PageSeoConfig) => void;
+  toggleAdminDashboard: (enabled?: boolean) => void;
+
+  // Version Snapshots
+  saveVersionSnapshot: (description?: string) => void;
+  restoreVersionSnapshot: (versionId: string) => void;
+  deleteVersionSnapshot: (versionId: string) => void;
 
   // Panel & Window Handlers
   setIsRightPanelOpen: (isOpen: boolean) => void;
@@ -84,6 +111,25 @@ function setDeepValue(obj: Record<string, unknown>, path: string, value: unknown
   return root;
 }
 
+function ensureDefaultPages(website: WebsiteData): WebsitePage[] {
+  if (Array.isArray(website.pages) && website.pages.length > 0) {
+    return website.pages;
+  }
+  return [
+    {
+      id: "home",
+      slug: "",
+      title: "Home",
+      isHome: true,
+      sectionOrder: website.sectionOrder || [...DEFAULT_ORDER],
+      seo: {
+        title: website.hero?.title ? `${website.hero.title} | Official Site` : "Home",
+        description: website.hero?.subtitle || "Welcome to our website.",
+      },
+    },
+  ];
+}
+
 export const useGeneratedWebsiteStore = create<GeneratedWebsiteState>((set, get) => ({
   website: null,
   isGenerating: false,
@@ -92,6 +138,7 @@ export const useGeneratedWebsiteStore = create<GeneratedWebsiteState>((set, get)
   activeStudioTab: "layers",
   isPreviewMode: false,
   viewportMode: "desktop",
+  activePageId: "home",
 
   // Right Inspector starts closed by default for maximum canvas space
   isRightPanelOpen: false,
@@ -108,8 +155,12 @@ export const useGeneratedWebsiteStore = create<GeneratedWebsiteState>((set, get)
     if (!website.sectionOrder) {
       website.sectionOrder = [...DEFAULT_ORDER];
     }
+    website.pages = ensureDefaultPages(website);
+    const initialPage = website.pages.find((p) => p.isHome) || website.pages[0];
+
     set({
       website,
+      activePageId: initialPage?.id || "home",
       history: [website],
       historyIndex: 0,
     });
@@ -124,7 +175,7 @@ export const useGeneratedWebsiteStore = create<GeneratedWebsiteState>((set, get)
       set({
         selectedElement: element,
         selectedSection: element.sectionKey || get().selectedSection,
-        isRightPanelOpen: true, // Automatically open right panel on click
+        isRightPanelOpen: true,
       });
     } else {
       set({
@@ -156,6 +207,250 @@ export const useGeneratedWebsiteStore = create<GeneratedWebsiteState>((set, get)
       isProductFullScreenEditorOpen: false,
       isCatalogModalOpen: true,
     }),
+
+  // Multi-Page Handlers
+  setActivePage: (pageId) => {
+    const { website } = get();
+    if (!website) return;
+    const page = (website.pages || []).find((p) => p.id === pageId);
+    if (page) {
+      set({
+        activePageId: pageId,
+        selectedSection: page.sectionOrder[0] || null,
+        selectedElement: null,
+      });
+    }
+  },
+
+  addPage: (title, slug) => {
+    const { website, history, historyIndex } = get();
+    if (!website) return;
+
+    const rawSlug = slug || title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+    const pageId = `page_${Date.now()}`;
+    const newPage: WebsitePage = {
+      id: pageId,
+      slug: rawSlug,
+      title: title.trim(),
+      isHome: false,
+      sectionOrder: ["hero", "about", "contact", "footer"],
+      seo: {
+        title: `${title.trim()} | ${website.hero?.title || "Website"}`,
+        description: `Explore our ${title.trim()} page.`,
+      },
+    };
+
+    const currentPages = ensureDefaultPages(website);
+    const updatedPages = [...currentPages, newPage];
+
+    const newWebsite: WebsiteData = {
+      ...website,
+      pages: updatedPages,
+    };
+
+    const newHistory = [...history.slice(0, historyIndex + 1), newWebsite];
+    set({
+      website: newWebsite,
+      activePageId: pageId,
+      history: newHistory,
+      historyIndex: newHistory.length - 1,
+    });
+  },
+
+  renamePage: (pageId, title, slug) => {
+    const { website, history, historyIndex } = get();
+    if (!website || !website.pages) return;
+
+    const updatedPages = website.pages.map((p) =>
+      p.id === pageId
+        ? {
+            ...p,
+            title: title.trim(),
+            slug: p.isHome ? "" : slug.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
+          }
+        : p
+    );
+
+    const newWebsite = { ...website, pages: updatedPages };
+    const newHistory = [...history.slice(0, historyIndex + 1), newWebsite];
+
+    set({
+      website: newWebsite,
+      history: newHistory,
+      historyIndex: newHistory.length - 1,
+    });
+  },
+
+  duplicatePage: (pageId) => {
+    const { website, history, historyIndex } = get();
+    if (!website || !website.pages) return;
+
+    const pageToDup = website.pages.find((p) => p.id === pageId);
+    if (!pageToDup) return;
+
+    const newId = `page_${Date.now()}`;
+    const newPage: WebsitePage = {
+      ...JSON.parse(JSON.stringify(pageToDup)),
+      id: newId,
+      title: `${pageToDup.title} (Copy)`,
+      slug: `${pageToDup.slug}-copy`,
+      isHome: false,
+    };
+
+    const updatedPages = [...website.pages, newPage];
+    const newWebsite = { ...website, pages: updatedPages };
+    const newHistory = [...history.slice(0, historyIndex + 1), newWebsite];
+
+    set({
+      website: newWebsite,
+      activePageId: newId,
+      history: newHistory,
+      historyIndex: newHistory.length - 1,
+    });
+  },
+
+  deletePage: (pageId) => {
+    const { website, history, historyIndex, activePageId } = get();
+    if (!website || !website.pages || website.pages.length <= 1) return;
+
+    const pageToDelete = website.pages.find((p) => p.id === pageId);
+    if (pageToDelete?.isHome) return; // Prevent deleting the home page
+
+    const updatedPages = website.pages.filter((p) => p.id !== pageId);
+    const newActiveId = activePageId === pageId ? updatedPages[0]?.id || "home" : activePageId;
+
+    const newWebsite = { ...website, pages: updatedPages };
+    const newHistory = [...history.slice(0, historyIndex + 1), newWebsite];
+
+    set({
+      website: newWebsite,
+      activePageId: newActiveId,
+      history: newHistory,
+      historyIndex: newHistory.length - 1,
+    });
+  },
+
+  reorderPages: (pages) => {
+    const { website, history, historyIndex } = get();
+    if (!website) return;
+
+    const newWebsite = { ...website, pages };
+    const newHistory = [...history.slice(0, historyIndex + 1), newWebsite];
+
+    set({
+      website: newWebsite,
+      history: newHistory,
+      historyIndex: newHistory.length - 1,
+    });
+  },
+
+  setHomepage: (pageId) => {
+    const { website, history, historyIndex } = get();
+    if (!website || !website.pages) return;
+
+    const updatedPages = website.pages.map((p) => ({
+      ...p,
+      isHome: p.id === pageId,
+      slug: p.id === pageId ? "" : p.slug || p.title.toLowerCase(),
+    }));
+
+    const newWebsite = { ...website, pages: updatedPages };
+    const newHistory = [...history.slice(0, historyIndex + 1), newWebsite];
+
+    set({
+      website: newWebsite,
+      history: newHistory,
+      historyIndex: newHistory.length - 1,
+    });
+  },
+
+  updatePageSeo: (pageId, seo) => {
+    const { website, history, historyIndex } = get();
+    if (!website || !website.pages) return;
+
+    const updatedPages = website.pages.map((p) => (p.id === pageId ? { ...p, seo: { ...p.seo, ...seo } } : p));
+    const newWebsite = { ...website, pages: updatedPages };
+    const newHistory = [...history.slice(0, historyIndex + 1), newWebsite];
+
+    set({
+      website: newWebsite,
+      history: newHistory,
+      historyIndex: newHistory.length - 1,
+    });
+  },
+
+  toggleAdminDashboard: (enabled) => {
+    const { website, history, historyIndex } = get();
+    if (!website) return;
+
+    const newWebsite: WebsiteData = {
+      ...website,
+      hasAdminDashboard: enabled !== undefined ? enabled : !website.hasAdminDashboard,
+    };
+    const newHistory = [...history.slice(0, historyIndex + 1), newWebsite];
+
+    set({
+      website: newWebsite,
+      history: newHistory,
+      historyIndex: newHistory.length - 1,
+    });
+  },
+
+  saveVersionSnapshot: (description = "Manual Snapshot") => {
+    const { website } = get();
+    if (!website) return;
+
+    const snapshot: WebsiteVersionSnapshot = {
+      id: `ver_${Date.now()}`,
+      timestamp: new Date().toISOString(),
+      description,
+      data: JSON.parse(JSON.stringify(website)),
+    };
+
+    const currentVersions = website.versions || [];
+    const updatedVersions = [snapshot, ...currentVersions].slice(0, 20); // Keep last 20
+
+    set({
+      website: {
+        ...website,
+        versions: updatedVersions,
+      },
+    });
+  },
+
+  restoreVersionSnapshot: (versionId) => {
+    const { website, history, historyIndex } = get();
+    if (!website || !website.versions) return;
+
+    const targetVersion = website.versions.find((v) => v.id === versionId);
+    if (!targetVersion) return;
+
+    const restoredWebsite: WebsiteData = {
+      ...JSON.parse(JSON.stringify(targetVersion.data)),
+      versions: website.versions, // preserve version list
+    };
+
+    const newHistory = [...history.slice(0, historyIndex + 1), restoredWebsite];
+    set({
+      website: restoredWebsite,
+      history: newHistory,
+      historyIndex: newHistory.length - 1,
+      selectedElement: null,
+    });
+  },
+
+  deleteVersionSnapshot: (versionId) => {
+    const { website } = get();
+    if (!website || !website.versions) return;
+
+    const updatedVersions = website.versions.filter((v) => v.id !== versionId);
+    set({
+      website: {
+        ...website,
+        versions: updatedVersions,
+      },
+    });
+  },
 
   updateWebsiteSection: (section, data) => {
     const { website, history, historyIndex } = get();
@@ -194,7 +489,6 @@ export const useGeneratedWebsiteStore = create<GeneratedWebsiteState>((set, get)
     const { website, history, historyIndex } = get();
     if (!website) return;
 
-    // Determine target path for buttonAction e.g. "hero.buttonAction"
     const basePath = elementPath.replace(/\.button$/, "");
     const actionPath = `${basePath}.buttonAction`;
 
@@ -507,6 +801,7 @@ export const useGeneratedWebsiteStore = create<GeneratedWebsiteState>((set, get)
       activeStudioTab: "layers",
       isPreviewMode: false,
       viewportMode: "desktop",
+      activePageId: "home",
       isRightPanelOpen: false,
       rightPanelWidth: 380,
       isCatalogModalOpen: false,

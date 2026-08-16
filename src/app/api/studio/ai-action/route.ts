@@ -51,16 +51,25 @@ CRITICAL SEMANTIC INTENT RULES:
    - "Features", "Benefits" -> target: "features"
    - "Home", "Top", "Hero" -> target: "hero"
 
-3. "MOVE KARO", "ORDER BADLO" (Structural Reorder Intent):
+3. MULTI-PAGE OPERATIONS:
+   - "Create an About page" / "Ek naya Menu page banao" -> ACTION: "add_page" with title & slug.
+   - "Make this button open the Contact page" -> ACTION: "set_button_page_target" with slug.
+   - "Delete the Gallery page" -> ACTION: "delete_page".
+   - "Change SEO title of about page" -> ACTION: "set_page_seo".
+
+4. SITE OWNER ADMIN DASHBOARD:
+   - "Add an admin dashboard" / "Enable owner portal" -> ACTION: "toggle_admin_dashboard" with enabled: true.
+
+5. "MOVE KARO", "ORDER BADLO" (Structural Reorder Intent):
    - Example: "Products section ko Home ke neeche move karo"
    - INTENT: Reorder the array of sections.
    - ACTION: "reorder_sections" with the updated sectionOrder array.
 
-4. CONTEXT-AWARE REFERENCES ("is button ko", "ye heading", "ye image", "isko"):
+6. CONTEXT-AWARE REFERENCES ("is button ko", "ye heading", "ye image", "isko"):
    - Use the "Current Selected Element" provided in context.
    - If selected element is a button and user says "isko catalog le jao" -> path: selected element's path (or "hero.button").
 
-5. E-COMMERCE & PRODUCTS:
+7. E-COMMERCE & PRODUCTS:
    - "Ek product add karo" / "Add 2 products" -> ACTION: "add_product" with accurate INR pricing, name, image, description.
    - "Change product price to 1999" -> ACTION: "update_product".
 
@@ -71,12 +80,17 @@ SUPPORTED ACTION TYPES:
 - "replace_image": { "path": "hero.image", "imageUrl": "https://images.unsplash.com/..." }
 - "update_button": { "path": "hero.button", "label": "Explore Collection" }
 - "set_button_scroll_target": { "path": "hero.button", "target": "products" | "contact" | "services" | "about" | "faq" }
+- "set_button_page_target": { "path": "hero.button", "slug": "about" | "contact" | "menu" }
 - "set_button_whatsapp": { "path": "hero.button", "phone": "+919876543210" }
 - "set_button_external_url": { "path": "hero.button", "url": "https://example.com" }
 - "set_button_call": { "path": "hero.button", "phone": "+919876543210" }
 - "add_section": { "sectionType": "features" | "faq" | "products" | "services" | "about" | "contact" }
 - "delete_section": { "sectionKey": "faq" }
 - "reorder_sections": { "newOrder": ["hero", "products", "services", "about", "faq", "contact", "footer"] }
+- "add_page": { "title": "About Us", "slug": "about" }
+- "delete_page": { "slug": "about" }
+- "set_page_seo": { "slug": "about", "seo": { "title": "...", "description": "..." } }
+- "toggle_admin_dashboard": { "enabled": true }
 - "add_product": { "product": { "name": "...", "description": "...", "price": 1999, "category": "...", "image": "https://...", "badge": "Popular" } }
 - "update_product": { "productId": "prod_123", "updates": { "price": 2499, "status": "active" | "out_of_stock" } }
 - "delete_product": { "productId": "prod_123" }
@@ -95,6 +109,7 @@ Return ONLY JSON:
 
     const userMessage = `Business Context: "${businessName || "Business"}" (${category || "General"})
 Current Selected Element: ${JSON.stringify(selectedElement || null)}
+Current Active Pages: ${JSON.stringify((currentWebsite?.pages || []).map((p: { id: string; title: string; slug: string }) => ({ id: p.id, title: p.title, slug: p.slug })))}
 Current Active Section Order: ${JSON.stringify(currentWebsite?.sectionOrder || [])}
 Current Products: ${JSON.stringify(
       (currentWebsite?.products || []).map((p: { id: string; name: string; price: number }) => ({
