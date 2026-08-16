@@ -89,6 +89,8 @@ export interface ProductItem {
   description: string;
   price: number;
   originalPrice?: number;
+  currencyCode?: string; // e.g. "INR", "USD", "EUR"
+  showDiscountBadge?: boolean;
   image: string;
   category: string;
   status: "active" | "draft" | "out_of_stock";

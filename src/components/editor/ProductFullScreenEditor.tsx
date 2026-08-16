@@ -28,6 +28,15 @@ const SAMPLE_PRESET_IMAGES = [
   "https://images.unsplash.com/photo-1560343090-f0409e92791a?w=800&auto=format&fit=crop&q=80",
 ];
 
+export const CURRENCIES = [
+  { code: "INR", symbol: "₹", locale: "en-IN" },
+  { code: "USD", symbol: "$", locale: "en-US" },
+  { code: "EUR", symbol: "€", locale: "en-IE" },
+  { code: "GBP", symbol: "£", locale: "en-GB" },
+  { code: "AUD", symbol: "A$", locale: "en-AU" },
+  { code: "CAD", symbol: "C$", locale: "en-CA" },
+];
+
 interface FormProps {
   initialProduct?: ProductItem | null;
   onSave: (productData: Omit<ProductItem, "id">) => void;
@@ -41,6 +50,10 @@ function ProductEditorForm({ initialProduct, onSave, onClose, isEditing }: FormP
   const [price, setPrice] = useState<number>(initialProduct?.price ?? 1499);
   const [originalPrice, setOriginalPrice] = useState<number | undefined>(
     initialProduct?.originalPrice ?? 1999
+  );
+  const [currencyCode, setCurrencyCode] = useState(initialProduct?.currencyCode || "INR");
+  const [showDiscountBadge, setShowDiscountBadge] = useState<boolean>(
+    initialProduct?.showDiscountBadge ?? true
   );
   const [category, setCategory] = useState(initialProduct?.category || "Featured");
   const [badge, setBadge] = useState(initialProduct?.badge || "New");
@@ -72,6 +85,8 @@ function ProductEditorForm({ initialProduct, onSave, onClose, isEditing }: FormP
       description: description.trim(),
       price: Number(price),
       originalPrice: originalPrice ? Number(originalPrice) : undefined,
+      currencyCode,
+      showDiscountBadge,
       category: category.trim() || "General",
       badge: badge.trim() || undefined,
       image,
@@ -204,21 +219,36 @@ function ProductEditorForm({ initialProduct, onSave, onClose, isEditing }: FormP
             </div>
           </div>
 
-          {/* Section 2: Pricing & Currency in INR */}
+          {/* Section 2: Pricing & Currency */}
           <div className="rounded-3xl border border-zinc-200 bg-white p-6 dark:border-white/10 dark:bg-zinc-900/60 shadow-xs space-y-5">
             <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 flex items-center gap-1.5">
               <IndianRupee className="h-4 w-4 text-emerald-500" />
-              Indian Rupee (INR ₹) Pricing
+              Pricing & Currency
             </h3>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
                 <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1.5">
-                  Selling Price (₹ INR) *
+                  Currency
+                </label>
+                <select
+                  value={currencyCode}
+                  onChange={(e) => setCurrencyCode(e.target.value)}
+                  className="w-full rounded-2xl border border-zinc-200 bg-zinc-50/50 px-4 py-3 text-sm font-bold text-zinc-900 outline-none focus:border-violet-500 focus:bg-white dark:border-white/10 dark:bg-zinc-950/60 dark:text-white transition"
+                >
+                  {CURRENCIES.map(c => (
+                    <option key={c.code} value={c.code}>{c.code} ({c.symbol})</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1.5">
+                  Selling Price *
                 </label>
                 <div className="relative">
                   <span className="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-bold text-zinc-400">
-                    ₹
+                    {CURRENCIES.find(c => c.code === currencyCode)?.symbol || "₹"}
                   </span>
                   <input
                     type="number"
@@ -233,11 +263,11 @@ function ProductEditorForm({ initialProduct, onSave, onClose, isEditing }: FormP
 
               <div>
                 <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1.5">
-                  Original / Strikethrough Price (₹ INR)
+                  Original Price
                 </label>
                 <div className="relative">
                   <span className="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-bold text-zinc-400">
-                    ₹
+                    {CURRENCIES.find(c => c.code === currencyCode)?.symbol || "₹"}
                   </span>
                   <input
                     type="number"
@@ -254,9 +284,20 @@ function ProductEditorForm({ initialProduct, onSave, onClose, isEditing }: FormP
             </div>
 
             {discountPercent !== null && discountPercent > 0 && (
-              <div className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-3.5 py-1 text-xs font-bold text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                <Percent className="h-3.5 w-3.5" />
-                <span>Customers will see {discountPercent}% discount badge</span>
+              <div className="flex items-center justify-between rounded-xl bg-zinc-50 p-4 border border-zinc-100 dark:bg-zinc-900/50 dark:border-white/5">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                    <Percent className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <span className="block text-xs font-bold text-zinc-900 dark:text-white">Discount Badge</span>
+                    <span className="block text-[11px] text-zinc-500">Automatically show a {discountPercent}% OFF badge</span>
+                  </div>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input type="checkbox" className="sr-only peer" checked={showDiscountBadge} onChange={(e) => setShowDiscountBadge(e.target.checked)} />
+                  <div className="w-9 h-5 bg-zinc-200 peer-focus:outline-none rounded-full peer dark:bg-zinc-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-zinc-600 peer-checked:bg-emerald-500"></div>
+                </label>
               </div>
             )}
           </div>
@@ -327,6 +368,12 @@ function ProductEditorForm({ initialProduct, onSave, onClose, isEditing }: FormP
                 </div>
               )}
 
+              {showDiscountBadge && discountPercent !== null && discountPercent > 0 && (
+                <div className="absolute top-3 right-3 rounded-full bg-emerald-500 px-3 py-1 text-[10px] font-black uppercase tracking-wider text-white shadow-md">
+                  {discountPercent}% OFF
+                </div>
+              )}
+
               {status === "out_of_stock" && (
                 <div className="absolute inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center">
                   <span className="rounded-full bg-rose-600 px-3 py-1 text-xs font-bold text-white uppercase tracking-wider">
@@ -352,11 +399,13 @@ function ProductEditorForm({ initialProduct, onSave, onClose, isEditing }: FormP
               <div>
                 <div className="flex items-baseline gap-2 mb-3">
                   <span className="text-xl font-black text-zinc-900 dark:text-white">
-                    ₹{price.toLocaleString("en-IN")}
+                    {CURRENCIES.find(c => c.code === currencyCode)?.symbol || "₹"}
+                    {price.toLocaleString(CURRENCIES.find(c => c.code === currencyCode)?.locale || "en-IN")}
                   </span>
                   {originalPrice && originalPrice > price && (
                     <span className="text-xs text-zinc-400 line-through">
-                      ₹{originalPrice.toLocaleString("en-IN")}
+                      {CURRENCIES.find(c => c.code === currencyCode)?.symbol || "₹"}
+                      {originalPrice.toLocaleString(CURRENCIES.find(c => c.code === currencyCode)?.locale || "en-IN")}
                     </span>
                   )}
                 </div>

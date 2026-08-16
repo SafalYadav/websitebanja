@@ -2,8 +2,9 @@
 
 import React, { useState, useMemo } from "react";
 import Image from "next/image";
-import { MessageCircle, ShoppingBag } from "lucide-react";
+import { MessageCircle, ShoppingBag, ArrowRight } from "lucide-react";
 import EditableElement from "@/components/editor/EditableElement";
+import { CURRENCIES } from "@/components/editor/ProductFullScreenEditor";
 import type { ProductItem, ProductsSectionData } from "@/types/website";
 
 interface ProductsSectionProps {
@@ -153,6 +154,14 @@ export default function ProductsSection({
                   </div>
                 )}
 
+                {(product.showDiscountBadge ?? true) && product.originalPrice && product.originalPrice > product.price && (
+                  <div className="absolute top-3 right-3 z-20">
+                    <span className="rounded-full bg-emerald-500/90 backdrop-blur-md px-3 py-1 text-[11px] font-extrabold uppercase tracking-wider text-white shadow-lg">
+                      {Math.round(((product.originalPrice - product.price) / product.originalPrice) * 100)}% OFF
+                    </span>
+                  </div>
+                )}
+
                 {product.status === "out_of_stock" && (
                   <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/60 backdrop-blur-xs">
                     <span className="rounded-xl bg-rose-600 px-3 py-1.5 text-xs font-bold text-white shadow-lg uppercase">
@@ -200,11 +209,13 @@ export default function ProductsSection({
                     <span className="text-xs text-zinc-400 block font-medium">Price</span>
                     <div className="flex items-baseline gap-1.5">
                       <span className="text-xl font-extrabold text-zinc-900 dark:text-white">
-                        ₹{product.price.toLocaleString("en-IN")}
+                        {CURRENCIES.find(c => c.code === product.currencyCode)?.symbol || "₹"}
+                        {product.price.toLocaleString(CURRENCIES.find(c => c.code === product.currencyCode)?.locale || "en-IN")}
                       </span>
-                      {product.originalPrice && (
+                      {product.originalPrice && product.originalPrice > product.price && (
                         <span className="text-xs text-zinc-400 line-through">
-                          ₹{product.originalPrice.toLocaleString("en-IN")}
+                          {CURRENCIES.find(c => c.code === product.currencyCode)?.symbol || "₹"}
+                          {product.originalPrice.toLocaleString(CURRENCIES.find(c => c.code === product.currencyCode)?.locale || "en-IN")}
                         </span>
                       )}
                     </div>

@@ -14,6 +14,7 @@ import {
   Layers,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { CURRENCIES } from "@/components/editor/ProductFullScreenEditor";
 
 export default function CatalogManager() {
   const {
@@ -226,11 +227,13 @@ export default function CatalogManager() {
                       <div className="flex items-center justify-between pt-2 border-t border-zinc-100 dark:border-white/5">
                         <div className="flex items-baseline gap-1.5">
                           <span className="text-sm font-black text-zinc-900 dark:text-white">
-                            ₹{product.price.toLocaleString("en-IN")}
+                            {CURRENCIES.find(c => c.code === product.currencyCode)?.symbol || "₹"}
+                            {product.price.toLocaleString(CURRENCIES.find(c => c.code === product.currencyCode)?.locale || "en-IN")}
                           </span>
                           {product.originalPrice && product.originalPrice > product.price && (
                             <span className="text-[10px] text-zinc-400 line-through">
-                              ₹{product.originalPrice.toLocaleString("en-IN")}
+                              {CURRENCIES.find(c => c.code === product.currencyCode)?.symbol || "₹"}
+                              {product.originalPrice.toLocaleString(CURRENCIES.find(c => c.code === product.currencyCode)?.locale || "en-IN")}
                             </span>
                           )}
                         </div>
