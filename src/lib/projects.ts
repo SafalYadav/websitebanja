@@ -146,7 +146,7 @@ export async function publishProject(projectId: string, slug: string): Promise<{
       is_published: true,
       public_slug: slug,
       published_at: new Date().toISOString(),
-      preview_expires_at: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString(),
+      preview_expires_at: null, // clear any old expiry just in case
     })
     .eq("id", projectId)
     .eq("user_id", user.id)
@@ -239,4 +239,44 @@ export async function duplicateProject(projectId: string): Promise<{ data: Proje
   }
 
   return { data: newProject as Project, error: null };
+}
+
+export async function generatePreviewLink(projectId: string, jsonData: Record<string, unknown>): Promise<{ previewId: string | null; error: Error | null }> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { previewId: null, error: new Error("Unauthorized") };
+
+  // First verify the project belongs to the user
+  const { data: project } = await supabase.from("projects").select("id").eq("id", projectId).eq("user_id", user.id).single();
+  if (!project) return { previewId: null, error: new Error("Project not found or unauthorized") };
+
+  const expiresAt = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString();
+
+  const { data, error } = await supabase
+    .from("preview_links")
+    .insert({
+      project_id: projectId,
+      json_data: jsonData,
+      expires_at: expiresAt,
+    })
+    .select("id")
+    .single();
+
+  return { previewId: data?.id || null, error };
+}
+
+export async function getPreviewLinkData(previewId: string): Promise<{ data: Record<string, unknown> | null; error: Error | null; expired: boolean }> {
+  const { data, error } = await supabase
+    .from("preview_links")
+    .select("json_data, expires_at")
+    .eq("id", previewId)
+    .single();
+
+  if (error || !data) return { data: null, error, expired: false };
+
+  const isExpired = new Date() > new Date(data.expires_at);
+  if (isExpired) {
+    return { data: null, error: new Error("Preview link has expired"), expired: true };
+  }
+
+  return { data: data.json_data, error: null, expired: false };
 }

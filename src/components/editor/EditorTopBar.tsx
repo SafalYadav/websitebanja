@@ -16,11 +16,12 @@ import {
   CheckCircle2,
   CloudUpload,
   AlertCircle,
+  Share2,
 } from "lucide-react";
 import { useGeneratedWebsiteStore, type ViewportMode } from "@/store/generatedWebsiteStore";
 import { useBuilderStore } from "@/store/builderStore";
 import { dashboardRoute } from "@/lib/editorRoutes";
-import { publishProject, updateProject } from "@/lib/projects";
+import { publishProject, updateProject, generatePreviewLink } from "@/lib/projects";
 import { toast } from "@/store/toastStore";
 import ThemeToggle from "@/components/theme/ThemeToggle";
 import Logo from "@/components/brand/Logo";
@@ -31,35 +32,16 @@ interface EditorTopBarProps {
   isError?: boolean;
 }
 
-export default function EditorTopBar({
-  onOpenPublishModal,
-  isSaving = false,
-  isError = false,
-}: EditorTopBarProps) {
-  const {
-    undo,
-    redo,
-    history,
-    historyIndex,
-    viewportMode,
-    setViewportMode,
-    isPreviewMode,
-    setIsPreviewMode,
-  } = useGeneratedWebsiteStore();
-
-  const {
-    projectId,
-    businessName,
-    setBusinessName,
-    isPublished,
-    publicSlug,
-    setIsPublished,
-    setPublicSlug,
-  } = useBuilderStore();
+export default function EditorTopBar({ onOpenPublishModal, isSaving = false, isError = false }: EditorTopBarProps) {
+  const { website, isPreviewMode, setIsPreviewMode, viewportMode, setViewportMode, undo, redo, history, historyIndex } =
+    useGeneratedWebsiteStore();
+  const { projectId, businessName, setBusinessName, isPublished, setIsPublished, publicSlug, setPublicSlug } =
+    useBuilderStore();
 
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [titleValue, setTitleValue] = useState(businessName);
   const [isPublishing, setIsPublishing] = useState(false);
+  const [isSharingPreview, setIsSharingPreview] = useState(false);
 
   async function handleTitleSubmit() {
     setIsEditingTitle(false);
@@ -89,6 +71,23 @@ export default function EditorTopBar({
       toast.error("Publish failed", err instanceof Error ? err.message : "Unable to publish website.");
     } finally {
       setIsPublishing(false);
+    }
+  }
+
+  async function handleSharePreview() {
+    if (!website) return;
+    setIsSharingPreview(true);
+    try {
+      const { previewId, error } = await generatePreviewLink(projectId, website as unknown as Record<string, unknown>);
+      if (error || !previewId) throw error || new Error("Failed to generate preview link");
+      
+      const url = `${window.location.origin}/preview/${previewId}`;
+      await navigator.clipboard.writeText(url);
+      toast.success("Preview Link Copied!", "A temporary 2-day preview link has been copied to your clipboard.");
+    } catch (err) {
+      toast.error("Share failed", err instanceof Error ? err.message : "Unable to generate preview link.");
+    } finally {
+      setIsSharingPreview(false);
     }
   }
 
@@ -231,6 +230,21 @@ export default function EditorTopBar({
         >
           {isPreviewMode ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
           <span className="hidden sm:inline">{isPreviewMode ? "Edit Studio" : "Preview"}</span>
+        </button>
+
+        {/* Share Preview Toggle */}
+        <button
+          type="button"
+          onClick={handleSharePreview}
+          disabled={isSharingPreview}
+          className="flex items-center gap-1.5 rounded-xl border border-zinc-200 bg-white px-3.5 py-2 text-xs font-semibold text-zinc-700 hover:bg-zinc-100 dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800 transition disabled:opacity-50"
+        >
+          {isSharingPreview ? (
+            <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-zinc-500 border-t-transparent dark:border-zinc-400" />
+          ) : (
+            <Share2 className="h-4 w-4" />
+          )}
+          <span className="hidden sm:inline">Share Preview</span>
         </button>
 
         {/* Primary CTA: Publish */}

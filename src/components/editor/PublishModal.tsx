@@ -288,10 +288,6 @@ export default function PublishModal({ isOpen, onClose }: PublishModalProps) {
                       Unpublish
                     </button>
                   </div>
-                  <p className="text-[10px] text-zinc-500 dark:text-zinc-400 text-center flex items-center justify-center gap-1.5 mt-2 bg-zinc-100/50 dark:bg-zinc-800/50 py-1.5 rounded-lg border border-zinc-200/50 dark:border-white/5">
-                    <AlertCircle className="h-3 w-3 text-amber-500" />
-                    This free preview link will expire in 2 days. To make it permanent, add a custom domain.
-                  </p>
                 </div>
               ) : (
                 <div className="space-y-5 text-center py-3">
