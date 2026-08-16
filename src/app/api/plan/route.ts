@@ -72,8 +72,17 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
     }
 
+    const userEmail = user.email?.toLowerCase().trim() || "";
+    const rawAdminEmails = process.env.ADMIN_EMAILS || "";
+    const adminEmailList = rawAdminEmails
+      .split(",")
+      .map((e) => e.trim().toLowerCase())
+      .filter(Boolean);
+    const appRole = (user.app_metadata as Record<string, unknown> | undefined)?.role;
+    const isAdmin = adminEmailList.includes(userEmail) || appRole === "admin" || appRole === "superadmin";
+
     const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "127.0.0.1";
-    const bypass = shouldBypassRateLimit(ip);
+    const bypass = isAdmin || shouldBypassRateLimit(ip);
 
     if (userRatelimit && ipRatelimit && !bypass) {
       try {

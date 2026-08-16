@@ -8,17 +8,18 @@ export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
   try {
-    // 1. Tiered Rate Limiting: Authorized Admins get 120 reqs/min, standard users get 30 reqs/min
-    const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "127.0.0.1";
+    // 1. Skip Rate Limiting completely for authorized Admin accounts
     const authResult = await verifyAdminAuth(req);
-    const limit = authResult.isAdmin ? 120 : 30;
 
-    const { success } = checkMemoryRateLimit(`ai_action_${authResult.userId || ip}`, limit, 60 * 1000);
-    if (!success) {
-      return NextResponse.json(
-        { error: "Rate limit reached. Please wait a moment before sending more AI commands." },
-        { status: 429 }
-      );
+    if (!authResult.isAdmin) {
+      const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "127.0.0.1";
+      const { success } = checkMemoryRateLimit(`ai_action_${authResult.userId || ip}`, 30, 60 * 1000);
+      if (!success) {
+        return NextResponse.json(
+          { error: "Rate limit reached. Please wait a moment before sending more AI commands." },
+          { status: 429 }
+        );
+      }
     }
 
     const body = await req.json();

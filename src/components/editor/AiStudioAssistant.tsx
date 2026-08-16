@@ -13,6 +13,7 @@ import {
   Lightbulb,
 } from "lucide-react";
 import { toast } from "@/store/toastStore";
+import { supabase } from "@/lib/supabase";
 
 const SUGGESTED_PROMPTS = [
   "Make the hero headline more premium & punchy",
@@ -43,9 +44,15 @@ export default function AiStudioAssistant() {
 
     setIsLoading(true);
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (session?.access_token) {
+        headers["Authorization"] = `Bearer ${session.access_token}`;
+      }
+
       const res = await fetch("/api/studio/ai-action", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({
           prompt: textToRun,
           currentWebsite: website,
