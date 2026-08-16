@@ -4,6 +4,8 @@ import { Sparkles } from "lucide-react";
 import EditableElement from "@/components/editor/EditableElement";
 import type { Footer } from "@/types/website";
 
+import { useGeneratedWebsiteStore } from "@/store/generatedWebsiteStore";
+
 interface FooterSectionProps {
   sectionKey?: string;
   footer?: Footer | null;
@@ -11,6 +13,8 @@ interface FooterSectionProps {
 
 export default function FooterSection({ sectionKey = "footer", footer }: FooterSectionProps) {
   const currentYear = new Date().getFullYear();
+  const website = useGeneratedWebsiteStore((state) => state.website);
+  
   const safeCopyright =
     typeof footer?.copyright === "string" && footer.copyright.trim()
       ? footer.copyright
@@ -35,18 +39,22 @@ export default function FooterSection({ sectionKey = "footer", footer }: FooterS
       <div className="mx-auto max-w-7xl">
         <div className="flex flex-col md:flex-row items-center justify-between gap-8 pb-12 border-b border-[var(--wb-border)]">
           {/* Brand & Mission Statement */}
-          <div className="space-y-2 text-center md:text-left">
-            <div className="flex items-center justify-center md:justify-start gap-2.5">
-              <div
-                className="flex h-8 w-8 items-center justify-center rounded-xl font-bold text-white shadow-md text-xs"
-                style={{ background: "var(--wb-gradient-primary)" }}
-              >
-                ✦
+          <div className="space-y-2 text-center md:text-left flex flex-col items-center md:items-start">
+            {website?.navbar?.logo?.type === "image" && website.navbar.logo.imageUrl ? (
+              <img src={website.navbar.logo.imageUrl} alt="Logo" className="h-8 max-w-[150px] object-contain mb-2" />
+            ) : (
+              <div className="flex items-center justify-center md:justify-start gap-2.5">
+                <div
+                  className="flex h-8 w-8 items-center justify-center rounded-xl font-bold text-white shadow-md text-xs"
+                  style={{ background: "var(--wb-gradient-primary)" }}
+                >
+                  ✦
+                </div>
+                <span className="text-lg font-bold tracking-tight" style={{ color: "var(--wb-fg)" }}>
+                  {website?.navbar?.logo?.text || "Digital Excellence"}
+                </span>
               </div>
-              <span className="text-lg font-bold tracking-tight" style={{ color: "var(--wb-fg)" }}>
-                Digital Excellence
-              </span>
-            </div>
+            )}
             <p className="text-xs max-w-xs" style={{ color: "var(--wb-muted)" }}>
               Empowering ambitious brands with state-of-the-art digital experiences and lasting impact.
             </p>

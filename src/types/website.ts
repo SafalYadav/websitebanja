@@ -13,6 +13,23 @@ export interface ButtonActionConfig {
   label?: string;
 }
 
+export interface BrandLogo {
+  type: "text" | "image";
+  text?: string;
+  imageUrl?: string;
+}
+
+export interface NavLink {
+  id: string;
+  label: string;
+  action: ButtonActionConfig;
+}
+
+export interface NavbarConfig {
+  logo?: BrandLogo;
+  links?: NavLink[];
+}
+
 export interface PageSeoConfig {
   title?: string;
   description?: string;
@@ -145,6 +162,9 @@ export interface WebsiteData {
   footer: Footer;
   products?: ProductItem[];
   productsSection?: ProductsSectionData;
+
+  // Global Branding & Navigation
+  navbar?: NavbarConfig;
 
   // Multi-page website architecture
   pages?: WebsitePage[];

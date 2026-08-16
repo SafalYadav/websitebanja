@@ -6,6 +6,7 @@ import ImageWithFallback from "@/components/ui/ImageWithFallback";
 import EditableElement from "@/components/editor/EditableElement";
 import { handleButtonActionClick } from "@/lib/buttonActions";
 import type { Hero, ButtonActionConfig } from "@/types/website";
+import { useWebsiteUI } from "@/contexts/WebsiteUIContext";
 
 interface HeroSectionProps extends Partial<Hero> {
   sectionKey?: string;
@@ -22,6 +23,8 @@ export default function HeroSection({
   buttonAction,
 }: HeroSectionProps) {
   const shouldReduceMotion = useReducedMotion();
+  const { publicSlug, onSwitchPage } = useWebsiteUI();
+  const context = { siteSlug: publicSlug, onSwitchPage };
 
   const safeTitle = typeof title === "string" && title.trim() ? title : "Crafting Excellence For Modern Clients";
   const safeSubtitle =
@@ -145,7 +148,7 @@ export default function HeroSection({
               >
                 <button
                   type="button"
-                  onClick={(e) => handleButtonActionClick(buttonAction, "services", e)}
+                  onClick={(e) => handleButtonActionClick(buttonAction, "services", e, context)}
                   className="group relative inline-flex items-center gap-2 rounded-2xl px-8 py-4 text-sm font-bold text-white shadow-xl transition-all duration-200 hover:scale-[1.03] active:scale-[0.98]"
                   style={{
                     background: "var(--wb-gradient-primary)",
@@ -159,7 +162,7 @@ export default function HeroSection({
 
               <button
                 type="button"
-                onClick={(e) => handleButtonActionClick({ type: "scroll", target: "contact" }, "contact", e)}
+                onClick={(e) => handleButtonActionClick({ type: "scroll", target: "contact" }, "contact", e, context)}
                 className="inline-flex items-center gap-2 rounded-2xl px-7 py-4 text-sm font-semibold transition border backdrop-blur-md hover:bg-black/5 dark:hover:bg-white/10 shadow-sm cursor-pointer"
                 style={{
                   backgroundColor: "var(--wb-surface)",

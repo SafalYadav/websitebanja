@@ -6,6 +6,7 @@ import ImageWithFallback from "@/components/ui/ImageWithFallback";
 import EditableElement from "@/components/editor/EditableElement";
 import { handleButtonActionClick } from "@/lib/buttonActions";
 import type { Service } from "@/types/website";
+import { useWebsiteUI } from "@/contexts/WebsiteUIContext";
 
 const SERVICE_ICONS = [Wrench, Sparkles, Layers, Cpu, Gem];
 
@@ -19,6 +20,8 @@ export default function ServicesSection({
   services,
 }: ServicesSectionProps) {
   const shouldReduceMotion = useReducedMotion();
+  const { publicSlug, onSwitchPage } = useWebsiteUI();
+  const context = { siteSlug: publicSlug, onSwitchPage };
 
   // Defensive array normalization
   const safeServices = Array.isArray(services)
@@ -167,7 +170,7 @@ export default function ServicesSection({
                 {/* Footer Action */}
                 <button
                   type="button"
-                  onClick={(e) => handleButtonActionClick(service.buttonAction, "contact", e)}
+                  onClick={(e) => handleButtonActionClick(service.buttonAction, "contact", e, context)}
                   className="px-7 pb-6 pt-3 border-t border-[var(--wb-border)] flex items-center justify-between text-xs font-bold text-[var(--wb-primary)] cursor-pointer text-left"
                 >
                   <span>Explore Offering</span>

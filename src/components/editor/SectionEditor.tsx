@@ -60,6 +60,7 @@ export default function SectionEditor() {
     const isImage = selectedElement.elementType === "image";
     const isButton = selectedElement.elementType === "button";
     const isProduct = selectedElement.elementType === "product";
+    const isLogo = selectedElement.elementType === "logo";
     const currentValue = typeof selectedElement.value === "string" ? selectedElement.value : "";
 
     // Extract existing button action if element is a button
@@ -143,10 +144,10 @@ export default function SectionEditor() {
 
                 <div className="grid grid-cols-2 gap-1.5">
                   {[
-                    { id: "scroll", label: "Scroll Section", icon: Compass },
-                    { id: "page", label: "Open Page", icon: Layers },
+                    { id: "page", label: "Existing page", icon: Layers },
+                    { id: "scroll", label: "Section on current page", icon: Compass },
+                    { id: "url", label: "External URL", icon: Globe },
                     { id: "whatsapp", label: "WhatsApp", icon: MessageCircle },
-                    { id: "url", label: "Web Link", icon: Globe },
                     { id: "call", label: "Phone Call", icon: Phone },
                     { id: "email", label: "Email", icon: Mail },
                     { id: "none", label: "No Action", icon: X },
@@ -344,6 +345,58 @@ export default function SectionEditor() {
                 </button>
               </div>
             </div>
+          ) : isLogo ? (
+            <div className="space-y-4">
+              <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300">
+                Logo Type
+              </label>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => updateElementValue(selectedElement.elementPath, { ...(website.navbar?.logo || {}), type: "text" })}
+                  className={`flex-1 py-2 text-xs font-bold rounded-lg transition border ${website.navbar?.logo?.type !== "image" ? "bg-violet-600 text-white border-violet-600" : "bg-white text-zinc-700 hover:bg-zinc-50 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:border-white/10"}`}
+                >
+                  Text Logo
+                </button>
+                <button
+                  type="button"
+                  onClick={() => updateElementValue(selectedElement.elementPath, { ...(website.navbar?.logo || {}), type: "image" })}
+                  className={`flex-1 py-2 text-xs font-bold rounded-lg transition border ${website.navbar?.logo?.type === "image" ? "bg-violet-600 text-white border-violet-600" : "bg-white text-zinc-700 hover:bg-zinc-50 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:border-white/10"}`}
+                >
+                  Image Logo
+                </button>
+              </div>
+
+              {website.navbar?.logo?.type === "image" ? (
+                <div className="space-y-3 pt-2">
+                  <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300">Image Source URL</label>
+                  <InputField
+                    label=""
+                    placeholder="https://images.unsplash.com/..."
+                    value={website.navbar?.logo?.imageUrl || ""}
+                    onChange={(e) => updateElementValue(selectedElement.elementPath, { ...(website.navbar?.logo || {}), imageUrl: e.target.value })}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setIsImageModalOpen(true)}
+                    className="w-full flex items-center justify-center gap-2 rounded-xl bg-violet-600 py-3 text-xs font-bold text-white shadow-md shadow-violet-500/20 hover:bg-violet-700 transition"
+                  >
+                    <ImageIcon className="h-4 w-4" />
+                    Browse & Replace Image
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-3 pt-2">
+                  <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300">Logo Text</label>
+                  <InputField
+                    label=""
+                    placeholder="Enter business name..."
+                    value={website.navbar?.logo?.text || ""}
+                    onChange={(e) => updateElementValue(selectedElement.elementPath, { ...(website.navbar?.logo || {}), text: e.target.value })}
+                  />
+                </div>
+              )}
+            </div>
           ) : isImage ? (
             <div className="space-y-3">
               <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300">
@@ -394,8 +447,13 @@ export default function SectionEditor() {
             isOpen={isImageModalOpen}
             currentUrl={currentValue}
             onClose={() => setIsImageModalOpen(false)}
-            onSelectImage={(newUrl) => {
-              updateElementValue(selectedElement.elementPath, newUrl);
+            onSelectImage={(url) => {
+              if (isImage) {
+                updateElementValue(selectedElement.elementPath, url);
+              } else if (isLogo) {
+                updateElementValue(selectedElement.elementPath, { ...(website?.navbar?.logo || {}), type: "image", imageUrl: url });
+              }
+              setIsImageModalOpen(false);
             }}
           />
         )}

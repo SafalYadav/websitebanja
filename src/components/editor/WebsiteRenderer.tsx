@@ -7,6 +7,7 @@ import { useGeneratedWebsiteStore } from "@/store/generatedWebsiteStore";
 import { resolveWebsiteTheme } from "@/lib/websiteTheme";
 import { normalizeWebsiteData } from "@/lib/normalizeWebsite";
 import { cn } from "@/lib/utils";
+import { WebsiteUIContext } from "@/contexts/WebsiteUIContext";
 
 // Import Section components
 import HeroSection from "./HeroSection";
@@ -81,6 +82,7 @@ export default function WebsiteRenderer({
   const storeWhatsappEnabled = useBuilderStore((state) => state.whatsappEnabled);
   const selectedSection = useGeneratedWebsiteStore((state) => state.selectedSection);
   const setSelectedSection = useGeneratedWebsiteStore((state) => state.setSelectedSection);
+  const setSelectedElement = useGeneratedWebsiteStore((state) => state.setSelectedElement);
   const isPreviewMode = useGeneratedWebsiteStore((state) => state.isPreviewMode);
   const activePageId = useGeneratedWebsiteStore((state) => state.activePageId);
   const setActivePage = useGeneratedWebsiteStore((state) => state.setActivePage);
@@ -137,8 +139,9 @@ export default function WebsiteRenderer({
   const activeSectionOrder = activePage?.sectionOrder || website.sectionOrder || [];
 
   return (
-    <div
-      className="wb-website-root min-h-full w-full transition-colors duration-300 relative"
+    <WebsiteUIContext.Provider value={{ publicSlug, onSwitchPage: !isPublic ? setActivePage : undefined }}>
+      <div
+        className="wb-website-root min-h-full w-full transition-colors duration-300 relative"
       style={{
         backgroundColor: theme.bg,
         color: theme.fg,
@@ -161,52 +164,58 @@ export default function WebsiteRenderer({
         "--wb-gradient-hero": theme.gradientHeroOverlay,
       } as React.CSSProperties}
     >
-      {/* Multi-Page Sticky Navigation Bar if website has multiple pages */}
-      {pages.length > 1 && (
-        <nav
-          className="sticky top-0 z-30 w-full backdrop-blur-xl border-b transition-colors px-4 sm:px-8 py-3 flex items-center justify-between"
-          style={{
-            backgroundColor: `${theme.surface}e6`,
-            borderColor: theme.border,
+      {/* Global Navigation Bar */}
+      <nav
+        className="sticky top-0 z-30 w-full backdrop-blur-xl border-b transition-colors px-4 sm:px-8 py-3 flex items-center justify-between"
+        style={{
+          backgroundColor: `${theme.surface}e6`,
+          borderColor: theme.border,
+        }}
+      >
+        <div
+          className={cn("flex items-center gap-2", isInteractiveStudio && "cursor-pointer hover:opacity-80 ring-offset-4 ring-offset-transparent hover:ring-2 ring-violet-500 rounded p-1 -ml-1")}
+          onClick={() => {
+            if (isInteractiveStudio) {
+              setSelectedSection("navbar");
+              setSelectedElement({
+                sectionKey: "navbar",
+                elementPath: "navbar.logo",
+                elementType: "logo",
+              });
+            }
           }}
         >
-          <div className="flex items-center gap-2">
-            <Globe className="h-4 w-4" style={{ color: theme.primary }} />
-            <span className="font-extrabold text-xs sm:text-sm tracking-tight" style={{ color: theme.fg }}>
-              {resolvedBusinessName || "Website"}
-            </span>
-          </div>
+          {website.navbar?.logo?.type === "image" && website.navbar.logo.imageUrl ? (
+            <img src={website.navbar.logo.imageUrl} alt="Logo" className="h-8 max-w-[150px] object-contain" />
+          ) : (
+            <>
+              <Globe className="h-4 w-4" style={{ color: theme.primary }} />
+              <span className="font-extrabold text-xs sm:text-sm tracking-tight" style={{ color: theme.fg }}>
+                {website.navbar?.logo?.text || resolvedBusinessName || "Website"}
+              </span>
+            </>
+          )}
+        </div>
 
-          <div className="flex items-center gap-1 sm:gap-2">
-            {pages.map((p) => {
-              const isPageActive = p.id === activePage.id;
-              if (isPublic && publicSlug) {
-                const href = p.isHome || !p.slug ? `/p/${publicSlug}` : `/p/${publicSlug}/${p.slug}`;
-                return (
-                  <Link
-                    key={p.id}
-                    href={href}
-                    className={cn(
-                      "px-3 py-1 rounded-lg text-xs font-bold transition",
-                      isPageActive ? "shadow-xs" : "opacity-70 hover:opacity-100"
-                    )}
-                    style={{
-                      backgroundColor: isPageActive ? theme.primary : "transparent",
-                      color: isPageActive ? "#ffffff" : theme.fg,
-                    }}
-                  >
-                    {p.title}
-                  </Link>
-                );
-              }
-
+        <div className="flex items-center gap-1 sm:gap-2">
+          {(website.navbar?.links && website.navbar.links.length > 0 ? website.navbar.links : pages.map(p => ({
+            id: p.id,
+            label: p.title,
+            action: { type: "page" as const, target: p.slug }
+          }))).map((link) => {
+            const isPageActive = link.action.type === "page" && (link.action.target === activePage.slug || (!link.action.target && activePage.isHome));
+            
+            if (isPublic && publicSlug) {
+              const href = link.action.type === "page" 
+                ? (link.action.target ? `/p/${publicSlug}/${link.action.target}` : `/p/${publicSlug}`)
+                : "#";
+                
               return (
-                <button
-                  key={p.id}
-                  type="button"
-                  onClick={() => setActivePage(p.id)}
+                <Link
+                  key={link.id}
+                  href={href}
                   className={cn(
-                    "px-3 py-1 rounded-lg text-xs font-bold transition cursor-pointer",
+                    "px-3 py-1 rounded-lg text-xs font-bold transition",
                     isPageActive ? "shadow-xs" : "opacity-70 hover:opacity-100"
                   )}
                   style={{
@@ -214,13 +223,36 @@ export default function WebsiteRenderer({
                     color: isPageActive ? "#ffffff" : theme.fg,
                   }}
                 >
-                  {p.title}
-                </button>
+                  {link.label}
+                </Link>
               );
-            })}
-          </div>
-        </nav>
-      )}
+            }
+
+            return (
+              <button
+                key={link.id}
+                type="button"
+                onClick={() => {
+                  if (link.action.type === "page") {
+                    const targetPage = pages.find(p => p.slug === link.action.target || (p.isHome && !link.action.target));
+                    if (targetPage) setActivePage(targetPage.id);
+                  }
+                }}
+                className={cn(
+                  "px-3 py-1 rounded-lg text-xs font-bold transition cursor-pointer",
+                  isPageActive ? "shadow-xs" : "opacity-70 hover:opacity-100"
+                )}
+                style={{
+                  backgroundColor: isPageActive ? theme.primary : "transparent",
+                  color: isPageActive ? "#ffffff" : theme.fg,
+                }}
+              >
+                {link.label}
+              </button>
+            );
+          })}
+        </div>
+      </nav>
 
       {/* Render Active Page Sections */}
       {activeSectionOrder.map((key) => {
@@ -367,5 +399,6 @@ export default function WebsiteRenderer({
         </a>
       )}
     </div>
+    </WebsiteUIContext.Provider>
   );
 }
