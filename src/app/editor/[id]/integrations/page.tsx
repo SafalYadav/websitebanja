@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useParams } from "next/navigation";
 import BuilderLayout from "@/components/builder/BuilderLayout";
 import ProgressBar from "@/components/builder/ProgressBar";
 import StepNavigation from "@/components/builder/StepNavigation";
@@ -11,6 +11,7 @@ import { editorRoute } from "@/lib/editorRoutes";
 import { useProjectAutosave } from "@/hooks/useProjectAutosave";
 import { useBuilderStore } from "@/store/builderStore";
 import { validatePhone } from "@/lib/validation";
+import { toast } from "@/store/toastStore";
 import {
   MessageCircle,
   MapPin,
@@ -62,6 +63,7 @@ const INTEGRATION_OPTIONS = [
 
 export default function IntegrationsPage() {
   const router = useRouter();
+  const params = useParams<{ id: string }>();
 
   const {
     projectId,
@@ -75,9 +77,11 @@ export default function IntegrationsPage() {
     setWhatsappEnabled,
   } = useBuilderStore();
 
+  const activeProjectId = params?.id || projectId;
+
   const [whatsappError, setWhatsappError] = useState<string | null>(null);
 
-  const { saveNow } = useProjectAutosave(projectId, {
+  const { saveNow } = useProjectAutosave(activeProjectId, {
     phone: whatsappNumber.trim() || undefined,
     backend_config: {
       selected_features: selectedFeatures,
@@ -113,9 +117,9 @@ export default function IntegrationsPage() {
 
     try {
       await saveNow();
-      router.push(editorRoute(projectId, "review"));
+      router.push(editorRoute(activeProjectId, "review"));
     } catch (error) {
-      alert(error instanceof Error ? error.message : "Unable to save project.");
+      toast.error("Save Error", error instanceof Error ? error.message : "Unable to save integration settings.");
     }
   }
 

@@ -1,12 +1,13 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { useRouter, useParams } from "next/navigation";
 import BuilderLayout from "@/components/builder/BuilderLayout";
 import ProgressBar from "@/components/builder/ProgressBar";
 import StepNavigation from "@/components/builder/StepNavigation";
 import { editorRoute } from "@/lib/editorRoutes";
 import { useProjectAutosave } from "@/hooks/useProjectAutosave";
 import { useBuilderStore } from "@/store/builderStore";
+import { toast } from "@/store/toastStore";
 
 const DEFAULT_SECTIONS = [
   { name: "Hero Header", desc: "Eye-catching introduction with strong value proposition" },
@@ -20,17 +21,20 @@ const DEFAULT_SECTIONS = [
 
 export default function ContentPage() {
   const router = useRouter();
+  const params = useParams<{ id: string }>();
   const projectId = useBuilderStore((state) => state.projectId);
-  const { saveNow } = useProjectAutosave(projectId, {
+  const activeProjectId = params?.id || projectId;
+
+  const { saveNow } = useProjectAutosave(activeProjectId, {
     json_data: { content_sections: DEFAULT_SECTIONS.map((s) => s.name) },
   });
 
   async function handleNext() {
     try {
       await saveNow();
-      router.push(editorRoute(projectId, "contact"));
+      router.push(editorRoute(activeProjectId, "contact"));
     } catch (error) {
-      alert(error instanceof Error ? error.message : "Unable to save project.");
+      toast.error("Save Error", error instanceof Error ? error.message : "Unable to save content preferences.");
     }
   }
 

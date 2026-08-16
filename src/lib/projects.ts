@@ -66,12 +66,28 @@ const VALID_PROJECT_COLUMNS = new Set([
   "backend_config",
 ]);
 
+async function getAuthenticatedUser() {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) return user;
+    const { data: { session } } = await supabase.auth.getSession();
+    return session?.user ?? null;
+  } catch {
+    const { data: { session } } = await supabase.auth.getSession();
+    return session?.user ?? null;
+  }
+}
+
 export async function updateProject(
   projectId: string,
   updates: ProjectUpdates
 ): Promise<{ data: Project | null; error: Error | null }> {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { data: null, error: new Error("Unauthorized") };
+  if (!projectId) {
+    return { data: null, error: new Error("Project ID is missing.") };
+  }
+
+  const user = await getAuthenticatedUser();
+  if (!user) return { data: null, error: new Error("Authentication session expired. Please refresh or sign in again.") };
 
   // Filter updates to only contain valid database columns
   const cleanUpdates: Record<string, unknown> = {};
@@ -81,15 +97,22 @@ export async function updateProject(
     }
   }
 
+  if (Object.keys(cleanUpdates).length === 0) {
+    return { data: null, error: null };
+  }
+
   const { data, error } = await supabase
     .from("projects")
     .update(cleanUpdates)
     .eq("id", projectId)
     .eq("user_id", user.id)
-    .select()
-    .single();
+    .select();
 
-  return { data: data as Project | null, error };
+  if (error) {
+    return { data: null, error: new Error(error.message) };
+  }
+
+  return { data: (data && data.length > 0 ? data[0] : null) as Project | null, error: null };
 }
 
 export async function getProject(projectId: string): Promise<{ data: Project | null; error: Error | null }> {

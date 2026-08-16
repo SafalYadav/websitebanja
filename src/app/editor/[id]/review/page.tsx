@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
 import { Edit3, CheckCircle2, MessageCircle, Globe } from "lucide-react";
 
@@ -12,9 +12,11 @@ import StepNavigation from "@/components/builder/StepNavigation";
 import { editorRoute } from "@/lib/editorRoutes";
 import { useProjectAutosave } from "@/hooks/useProjectAutosave";
 import { useBuilderStore } from "@/store/builderStore";
+import { toast } from "@/store/toastStore";
 
 export default function ReviewPage() {
   const router = useRouter();
+  const params = useParams<{ id: string }>();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const {
@@ -38,7 +40,9 @@ export default function ReviewPage() {
     whatsappEnabled,
   } = useBuilderStore();
 
-  const { saveNow } = useProjectAutosave(projectId, {
+  const activeProjectId = params?.id || projectId;
+
+  const { saveNow } = useProjectAutosave(activeProjectId, {
     business_name: businessName,
     category,
     description,
@@ -65,10 +69,10 @@ export default function ReviewPage() {
     setIsSubmitting(true);
     try {
       await saveNow();
-      router.push(editorRoute(projectId, "loading"));
+      router.push(editorRoute(activeProjectId, "loading"));
     } catch (error) {
       setIsSubmitting(false);
-      alert(error instanceof Error ? error.message : "Unable to save project.");
+      toast.error("Save Error", error instanceof Error ? error.message : "Unable to save project details.");
     }
   }
 

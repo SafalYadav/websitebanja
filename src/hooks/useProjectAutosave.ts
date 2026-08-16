@@ -17,14 +17,17 @@ export function useProjectAutosave(projectId: string, updates: ProjectUpdates) {
   });
 
   const saveNow = useCallback(async () => {
-    if (!projectId) throw new Error("Project not found");
+    if (!projectId) return;
     const nextFingerprint = JSON.stringify(updatesRef.current);
     if (nextFingerprint === lastSavedRef.current) return;
     setIsSaving(true);
-    const { error } = await updateProject(projectId, updatesRef.current);
-    setIsSaving(false);
-    if (error) throw error;
-    lastSavedRef.current = nextFingerprint;
+    try {
+      const { error } = await updateProject(projectId, updatesRef.current);
+      if (error) throw error;
+      lastSavedRef.current = nextFingerprint;
+    } finally {
+      setIsSaving(false);
+    }
   }, [projectId]);
 
   useEffect(() => {

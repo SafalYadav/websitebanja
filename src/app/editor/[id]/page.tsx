@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 
 import BuilderLayout from "@/components/builder/BuilderLayout";
@@ -70,6 +70,7 @@ const FEATURE_CHIPS = [
 
 export default function OnboardingStartPage() {
   const router = useRouter();
+  const params = useParams<{ id: string }>();
 
   const {
     projectId,
@@ -99,13 +100,15 @@ export default function OnboardingStartPage() {
     setWhatsappEnabled,
   } = useBuilderStore();
 
+  const activeProjectId = params?.id || projectId;
+
   const [isExtracting, setIsExtracting] = useState(false);
   const [businessNameError, setBusinessNameError] = useState<string | null>(null);
   const [categoryError, setCategoryError] = useState<string | null>(null);
   const [descriptionError, setDescriptionError] = useState<string | null>(null);
   const [promptError, setPromptError] = useState<string | null>(null);
 
-  const { saveNow } = useProjectAutosave(projectId, {
+  const { saveNow } = useProjectAutosave(activeProjectId, {
     name: businessName.trim() || undefined,
     business_name: businessName.trim() || undefined,
     category,
@@ -251,9 +254,9 @@ export default function OnboardingStartPage() {
 
     try {
       await saveNow();
-      router.push(editorRoute(projectId, "branding"));
+      router.push(editorRoute(activeProjectId, "branding"));
     } catch (error) {
-      alert(error instanceof Error ? error.message : "Unable to save project.");
+      toast.error("Save Error", error instanceof Error ? error.message : "Unable to save project details.");
     }
   }
 

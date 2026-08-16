@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useParams } from "next/navigation";
 
 import BuilderLayout from "@/components/builder/BuilderLayout";
 import ProgressBar from "@/components/builder/ProgressBar";
@@ -13,9 +13,11 @@ import { editorRoute } from "@/lib/editorRoutes";
 import { useProjectAutosave } from "@/hooks/useProjectAutosave";
 import { useBuilderStore } from "@/store/builderStore";
 import { validateEmail, validatePhone, validateUrl } from "@/lib/validation";
+import { toast } from "@/store/toastStore";
 
 export default function ContactPage() {
   const router = useRouter();
+  const params = useParams<{ id: string }>();
 
   const {
     projectId,
@@ -33,11 +35,13 @@ export default function ContactPage() {
     setFacebook,
   } = useBuilderStore();
 
+  const activeProjectId = params?.id || projectId;
+
   const [phoneError, setPhoneError] = useState<string | null>(null);
   const [emailError, setEmailError] = useState<string | null>(null);
   const [websiteError, setWebsiteError] = useState<string | null>(null);
 
-  const { saveNow } = useProjectAutosave(projectId, { phone, email, website, instagram, facebook, address });
+  const { saveNow } = useProjectAutosave(activeProjectId, { phone, email, website, instagram, facebook, address });
 
   function handlePhoneBlur() {
     if (!phone.trim()) {
@@ -126,9 +130,9 @@ export default function ContactPage() {
 
     try {
       await saveNow();
-      router.push(editorRoute(projectId, "integrations"));
+      router.push(editorRoute(activeProjectId, "integrations"));
     } catch (error) {
-      alert(error instanceof Error ? error.message : "Unable to save project.");
+      toast.error("Save Error", error instanceof Error ? error.message : "Unable to save contact details.");
     }
   }
 

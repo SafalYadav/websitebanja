@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useParams } from "next/navigation";
 
 import BuilderLayout from "@/components/builder/BuilderLayout";
 import ProgressBar from "@/components/builder/ProgressBar";
@@ -13,9 +13,11 @@ import UploadField from "@/components/builder/UploadField";
 import { editorRoute } from "@/lib/editorRoutes";
 import { useProjectAutosave } from "@/hooks/useProjectAutosave";
 import { useBuilderStore } from "@/store/builderStore";
+import { toast } from "@/store/toastStore";
 
 export default function BrandingPage() {
   const router = useRouter();
+  const params = useParams<{ id: string }>();
 
   const {
     projectId,
@@ -27,11 +29,13 @@ export default function BrandingPage() {
     setSecondaryColor,
   } = useBuilderStore();
 
+  const activeProjectId = params?.id || projectId;
+
   const [styleError, setStyleError] = useState<string | null>(null);
   const [primaryColorError, setPrimaryColorError] = useState<string | null>(null);
   const [secondaryColorError, setSecondaryColorError] = useState<string | null>(null);
 
-  const { saveNow } = useProjectAutosave(projectId, { style, primary_color: primaryColor, secondary_color: secondaryColor });
+  const { saveNow } = useProjectAutosave(activeProjectId, { style, primary_color: primaryColor, secondary_color: secondaryColor });
 
   async function handleNext() {
     let hasError = false;
@@ -61,9 +65,9 @@ export default function BrandingPage() {
 
     try {
       await saveNow();
-      router.push(editorRoute(projectId, "content"));
+      router.push(editorRoute(activeProjectId, "content"));
     } catch (error) {
-      alert(error instanceof Error ? error.message : "Unable to save project.");
+      toast.error("Save Error", error instanceof Error ? error.message : "Unable to save brand preferences.");
     }
   }
 
