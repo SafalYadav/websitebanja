@@ -6,8 +6,9 @@ import type { WebsiteData } from "@/types/website";
 
 export const dynamic = "force-dynamic";
 
-export default async function PreviewPage({ params }: { params: { id: string } }) {
-  const { data, error, expired, projectId } = await getPreviewLinkData(params.id);
+export default async function PreviewPage({ params }: { params: Promise<{ id: string }> }) {
+  const resolvedParams = await params;
+  const { data, error, expired, projectId } = await getPreviewLinkData(resolvedParams.id);
 
   if (expired) {
     return (

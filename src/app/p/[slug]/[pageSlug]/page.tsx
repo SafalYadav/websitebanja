@@ -19,7 +19,11 @@ export async function generateMetadata({
   if (!data) return { title: "Not Found" };
 
   const { snapshot_data } = await getPublishedSnapshot(data.id);
-  const jsonData = (snapshot_data || data.json_data || {}) as WebsiteData;
+  if (!snapshot_data || Object.keys(snapshot_data).length === 0) {
+    return { title: "Not Found" };
+  }
+  
+  const jsonData = snapshot_data as WebsiteData;
   const currentPage = jsonData.pages?.find((p) => p.slug === resolvedParams.pageSlug);
   if (!currentPage) return { title: `${data.business_name || data.name}` };
 

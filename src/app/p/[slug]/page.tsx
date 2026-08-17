@@ -19,7 +19,11 @@ export async function generateMetadata({
   if (!data) return { title: "Not Found" };
 
   const { snapshot_data } = await getPublishedSnapshot(data.id);
-  const jsonData = (snapshot_data || data.json_data || {}) as WebsiteData;
+  if (!snapshot_data || Object.keys(snapshot_data).length === 0) {
+    return { title: "Not Found" };
+  }
+  
+  const jsonData = snapshot_data as WebsiteData;
   const homePage = jsonData.pages?.find((p) => p.isHome) || jsonData.pages?.[0];
   const pageTitle = homePage?.seo?.title || `${data.business_name || data.name} | Official Site`;
   const pageDesc = homePage?.seo?.description || data.description || "A responsive modern website created with WebsiteBanja AI";

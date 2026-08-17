@@ -129,20 +129,16 @@ export async function getProjectBySlug(slug: string): Promise<{ data: Project | 
   const decoded = decodeURIComponent(slug).trim().toLowerCase();
   const raw = slug.trim().toLowerCase();
 
-  let query = supabase
-    .from("projects")
-    .select("*")
-    .eq("is_published", true);
+  const { data, error } = await supabase.rpc("get_published_project_by_slug", {
+    p_slug: raw,
+    p_slug_decoded: decoded,
+  });
 
-  if (decoded !== raw) {
-    query = query.or(`public_slug.eq.${raw},public_slug.eq.${decoded}`);
-  } else {
-    query = query.eq("public_slug", raw);
+  if (error || !data || data.length === 0) {
+    return { data: null, error };
   }
 
-  const { data, error } = await query.maybeSingle();
-
-  return { data: data as Project | null, error };
+  return { data: data[0] as Project, error: null };
 }
 
 export async function getPublishedSnapshot(projectId: string): Promise<{ snapshot_data: Record<string, unknown> | null; error: Error | null }> {
@@ -179,35 +175,23 @@ export async function publishProject(
 
   const snapshotToSave = latestJsonData || currentProject.json_data || {};
 
-  // Create published version snapshot — this MUST succeed for publish to proceed
-  const { error: snapshotError } = await supabase
-    .from("published_versions")
-    .insert({
-      project_id: projectId,
-      snapshot_data: snapshotToSave,
-    });
+  // Execute atomic publish transaction via RPC
+  const { error: rpcError } = await supabase.rpc("publish_project_atomic", {
+    p_project_id: projectId,
+    p_slug: slug,
+    p_snapshot_data: snapshotToSave,
+  });
 
-  if (snapshotError) {
-    return { data: null, error: new Error(`Failed to create publish snapshot: ${snapshotError.message}`) };
+  if (rpcError) {
+    return { data: null, error: new Error(`Atomic publish failed: ${rpcError.message}`) };
   }
 
-  const updatePayload: Record<string, unknown> = {
-    is_published: true,
-    public_slug: slug,
-    published_at: new Date().toISOString(),
-    preview_expires_at: null,
-  };
-
-  if (latestJsonData && Object.keys(latestJsonData).length > 0) {
-    updatePayload.json_data = latestJsonData;
-  }
-
+  // Fetch the updated project state to return it
   const { data, error } = await supabase
     .from("projects")
-    .update(updatePayload)
+    .select("*")
     .eq("id", projectId)
     .eq("user_id", user.id)
-    .select()
     .single();
 
   if (error) {
