@@ -52,10 +52,16 @@ export async function getCatalogItems(projectId: string): Promise<{ data: Catalo
 
 export async function createCatalogItem(item: CatalogItemInsert): Promise<{ data: CatalogItem | null; error: Error | null }> {
   if (!item.project_id) {
-    return { data: null, error: new Error("Project ID is required to create a catalog item.") };
+    return { data: null, error: new Error("Project ID is missing. Please reload the workspace.") };
   }
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { data: null, error: new Error("Unauthorized: Please sign in to add catalog items.") };
+
+  let user = (await supabase.auth.getUser()).data.user;
+  if (!user) {
+    user = (await supabase.auth.getSession()).data.session?.user || null;
+  }
+  if (!user) {
+    return { data: null, error: new Error("Unauthorized: Please sign in to add catalog items.") };
+  }
 
   const { data, error } = await supabase
     .from("catalog_items")
@@ -66,7 +72,10 @@ export async function createCatalogItem(item: CatalogItemInsert): Promise<{ data
     .select()
     .single();
 
-  if (error) return { data: null, error: new Error(error.message) };
+  if (error) {
+    console.error("[createCatalogItem Supabase Error]:", error);
+    return { data: null, error: new Error(error.message) };
+  }
   return { data: data as CatalogItem, error: null };
 }
 

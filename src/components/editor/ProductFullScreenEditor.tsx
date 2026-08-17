@@ -86,6 +86,7 @@ function ProductEditorForm({ initialProduct, onSave, onClose, isEditing, project
       : null;
 
   const handleSubmit = async () => {
+    setErrorMsg(null);
     if (!name.trim()) {
       setErrorMsg("Product name is required.");
       return;
@@ -103,6 +104,11 @@ function ProductEditorForm({ initialProduct, onSave, onClose, isEditing, project
       }
     }
 
+    if (!projectId) {
+      setErrorMsg("Project ID is missing. Please reload the workspace.");
+      return;
+    }
+
     setIsSaving(true);
     try {
       const payload: CatalogItemInsert | CatalogItemUpdate = {
@@ -110,17 +116,17 @@ function ProductEditorForm({ initialProduct, onSave, onClose, isEditing, project
         name: name.trim(),
         description: description.trim(),
         item_type: itemType,
-        price: itemType !== "rental" ? Number(price) : null,
-        original_price: originalPrice && itemType !== "rental" ? Number(originalPrice) : null,
-        hourly_price: itemType === "rental" && hourlyPrice ? Number(hourlyPrice) : null,
-        daily_price: itemType === "rental" && dailyPrice ? Number(dailyPrice) : null,
-        weekly_price: itemType === "rental" && weeklyPrice ? Number(weeklyPrice) : null,
-        monthly_price: itemType === "rental" && monthlyPrice ? Number(monthlyPrice) : null,
+        price: itemType !== "rental" && price !== undefined && !isNaN(Number(price)) ? Number(price) : null,
+        original_price: originalPrice && itemType !== "rental" && !isNaN(Number(originalPrice)) ? Number(originalPrice) : null,
+        hourly_price: itemType === "rental" && hourlyPrice && !isNaN(Number(hourlyPrice)) ? Number(hourlyPrice) : null,
+        daily_price: itemType === "rental" && dailyPrice && !isNaN(Number(dailyPrice)) ? Number(dailyPrice) : null,
+        weekly_price: itemType === "rental" && weeklyPrice && !isNaN(Number(weeklyPrice)) ? Number(weeklyPrice) : null,
+        monthly_price: itemType === "rental" && monthlyPrice && !isNaN(Number(monthlyPrice)) ? Number(monthlyPrice) : null,
         currency_code: currencyCode,
         show_discount_badge: showDiscountBadge,
         category: category.trim() || "General",
         badge: badge.trim() || null,
-        images,
+        images: images && images.length > 0 ? images : [],
         status,
         cta_text: ctaText.trim() || "Order on WhatsApp",
         display_order: initialProduct?.display_order ?? 0,
@@ -128,8 +134,9 @@ function ProductEditorForm({ initialProduct, onSave, onClose, isEditing, project
 
       await onSave(payload);
     } catch (err) {
-      setErrorMsg("Failed to save catalog item.");
-      console.error(err);
+      const msg = err instanceof Error ? err.message : "Failed to save catalog item.";
+      setErrorMsg(msg);
+      console.error("[handleSubmit error]:", err);
     } finally {
       setIsSaving(false);
     }
@@ -483,7 +490,7 @@ function ProductEditorForm({ initialProduct, onSave, onClose, isEditing, project
             <div className="grid grid-cols-2 gap-2 pt-2">
               {images.map((imgUrl, i) => (
                 <div key={i} className="relative aspect-square rounded-xl overflow-hidden border border-zinc-200 dark:border-white/10 group">
-                  <Image src={imgUrl} alt={`Image ${i+1}`} fill className="object-cover" />
+                  <Image src={imgUrl} alt={`Image ${i+1}`} fill unoptimized className="object-cover" />
                   <button
                     type="button"
                     onClick={() => removeImage(i)}
@@ -514,6 +521,7 @@ function ProductEditorForm({ initialProduct, onSave, onClose, isEditing, project
                 src={primaryImage}
                 alt={name || "Product preview"}
                 fill
+                unoptimized
                 className="object-cover"
                 sizes="380px"
               />
