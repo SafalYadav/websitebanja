@@ -123,7 +123,7 @@ export async function createCatalogItem(item: CatalogItemInsert): Promise<{ data
       .single()
       .setHeader("Authorization", `Bearer ${session?.access_token}`);
 
-    const { data, error } = await withTimeout(query, 10000, "Catalog save timed out. Please check your network connection.");
+    const { data, error } = await withTimeout(query, 60000, "Catalog save timed out. Please check your network connection.");
 
     if (error) {
       console.error("[createCatalogItem Supabase Error]:", error);
@@ -159,7 +159,7 @@ export async function updateCatalogItem(
       .maybeSingle()
       .setHeader("Authorization", `Bearer ${session?.access_token}`);
 
-    const { data, error } = await withTimeout(query, 10000, "Catalog update timed out. Please check your network connection.");
+    const { data, error } = await withTimeout(query, 60000, "Catalog update timed out. Please check your network connection.");
 
     if (error) {
       console.error("[updateCatalogItem Supabase Error]:", error);

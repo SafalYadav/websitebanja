@@ -29,19 +29,18 @@ export default function ImageWithFallback({
     
     // Check if the new image is already cached/complete
     if (imgRef.current?.complete) {
-      if (imgRef.current.naturalWidth === 0) {
-        // If complete is true but naturalWidth is 0, it might be a broken image,
-        // or Chrome is still decoding it. We check again in a microtask.
-        const timer = setTimeout(() => {
-          if (imgRef.current?.naturalWidth === 0) {
-            setHasError(true);
-          } else {
-            setIsLoaded(true);
-          }
-        }, 50);
-        return () => clearTimeout(timer);
-      } else {
+      if (imgRef.current.naturalWidth > 0) {
         setIsLoaded(true);
+      } else {
+        // If complete is true but naturalWidth is 0, it might be a broken image,
+        // or Chrome is still decoding it. We use the native decode() API to find out.
+        imgRef.current.decode()
+          .then(() => setIsLoaded(true))
+          .catch((err) => {
+            // Safari throws an EncodingError if the image is actually broken
+            // Chrome throws a DOMException
+            setHasError(true);
+          });
       }
     }
   }, [src]);
