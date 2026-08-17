@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import type { WebsiteData, ProductItem } from "@/types/website";
+import type { WebsiteData } from "@/types/website";
 
 export const dynamic = "force-dynamic";
 

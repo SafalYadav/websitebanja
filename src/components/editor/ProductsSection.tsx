@@ -2,12 +2,11 @@
 
 import React, { useState, useMemo } from "react";
 import Image from "next/image";
-import { MessageCircle, ShoppingBag, ArrowRight } from "lucide-react";
+import { MessageCircle, ShoppingBag } from "lucide-react";
 import EditableElement from "@/components/editor/EditableElement";
 import { CURRENCIES } from "@/components/editor/ProductFullScreenEditor";
 import type { ProductsSectionData } from "@/types/website";
 import type { CatalogItem } from "@/lib/catalog";
-import { cn } from "@/lib/utils";
 
 interface ProductsSectionProps {
   sectionKey?: string;

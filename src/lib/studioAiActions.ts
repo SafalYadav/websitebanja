@@ -381,8 +381,9 @@ export function executeStudioActions(
               category: product.category || "General",
               ctaText: product.ctaText || "Order on WhatsApp",
             };
-            const currentProds = ((current as any).products as ProductItem[] | undefined) || [];
-            (current as any).products = [newProd, ...currentProds];
+            const currentProds = (current.products || current.productsSection?.products || []) as ProductItem[];
+            const updatedProds = [newProd, ...currentProds];
+            current.products = updatedProds;
 
             const activeOrder = activePageId && current.pages?.find(p => p.id === activePageId)?.sectionOrder || current.sectionOrder || [];
             if (!activeOrder.some((k) => k.startsWith("products") || k.startsWith("catalog"))) {
@@ -397,7 +398,7 @@ export function executeStudioActions(
               current.productsSection = {
                 title: "Featured Offerings",
                 subtitle: "Explore our collection.",
-                products: (current as any).products,
+                products: updatedProds,
               };
             }
             appliedSummaries.push(act.summary || `Added product: ${newProd.name} (₹${newProd.price})`);

@@ -76,7 +76,7 @@ export default function CatalogManager({ projectId: propProjectId }: CatalogMana
 
   const handleDelete = async (id: string) => {
     if (!confirm("Are you sure you want to delete this item?")) return;
-    const { error } = await deleteCatalogItem(id);
+    const { error } = await deleteCatalogItem(id, effectiveProjectId);
     if (error) {
       toast.error("Failed to delete item");
     } else {

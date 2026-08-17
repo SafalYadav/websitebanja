@@ -2,7 +2,6 @@ import { create } from "zustand";
 import type {
   WebsiteData,
   ElementSelection,
-  ProductItem,
   ButtonActionConfig,
   WebsitePage,
   PageSeoConfig,
@@ -529,10 +528,10 @@ export const useGeneratedWebsiteStore = create<GeneratedWebsiteState>((set, get)
     if (!website) return;
 
     // Deep merge buttonAction to prevent CTA loss
-    const existingSectionData = website[section as keyof WebsiteData] as any;
-    const incomingSectionData = data as any;
+    const existingSectionData = website[section as keyof WebsiteData] as Record<string, unknown> | undefined;
+    const incomingSectionData = (typeof data === "object" && data !== null ? { ...data } : data) as Record<string, unknown>;
     
-    if (existingSectionData?.buttonAction && incomingSectionData && typeof incomingSectionData === 'object' && !incomingSectionData.buttonAction) {
+    if (existingSectionData?.buttonAction && typeof incomingSectionData === 'object' && !incomingSectionData.buttonAction) {
       incomingSectionData.buttonAction = existingSectionData.buttonAction;
     }
 

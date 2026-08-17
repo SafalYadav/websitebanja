@@ -30,7 +30,6 @@ import type {
   FAQ,
   Contact,
   Footer,
-  ProductItem,
   ProductsSectionData,
   WebsitePage,
 } from "@/types/website";

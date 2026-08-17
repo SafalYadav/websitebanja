@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { getPreviewLinkData } from "@/lib/projects";
-import { getCatalogItems } from "@/lib/catalog";
+import { getCatalogItems, type CatalogItem } from "@/lib/catalog";
 import WebsiteRenderer from "@/components/editor/WebsiteRenderer";
 import type { WebsiteData } from "@/types/website";
 
@@ -24,18 +24,18 @@ export default async function PreviewPage({ params }: { params: { id: string } }
     notFound();
   }
 
-  // Inject current theme explicitly for preview (defaulting to system/light if none)
   const previewData = { ...data } as WebsiteData;
-  const themeData = (previewData as any).theme;
-  
-  let catalogItems: any[] = [];
+  const themeConfig = previewData.theme as { colors?: { background?: string } } | undefined;
+  const bgColor = themeConfig?.colors?.background || "#ffffff";
+
+  let catalogItems: CatalogItem[] = [];
   if (projectId) {
     const { data: items } = await getCatalogItems(projectId);
     if (items) catalogItems = items;
   }
 
   return (
-    <div className="min-h-screen w-full" style={{ backgroundColor: themeData?.colors?.background || "#ffffff" }}>
+    <div className="min-h-screen w-full" style={{ backgroundColor: bgColor }}>
       <WebsiteRenderer data={previewData} catalogItems={catalogItems} isPublic={true} activePageSlug="" />
     </div>
   );

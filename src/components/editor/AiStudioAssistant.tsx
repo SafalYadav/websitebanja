@@ -74,24 +74,24 @@ export default function AiStudioAssistant() {
         const { createCatalogItem, updateCatalogItem } = await import("@/lib/catalog");
         for (const act of (data.actions || []) as StudioAiAction[]) {
           if (act.action === "add_product") {
-            const product = act.payload.product as any;
-            if (product && product.name) {
+            const product = act.payload.product as Record<string, unknown> | undefined;
+            if (product && typeof product.name === "string") {
               await createCatalogItem({
                 project_id: projectId,
                 name: product.name,
                 item_type: "product",
                 price: Number(product.price) || 0,
-                description: product.description || "",
-                category: product.category || "General",
+                description: typeof product.description === "string" ? product.description : "",
+                category: typeof product.category === "string" ? product.category : "General",
                 status: "active",
-                images: product.image ? [product.image] : [],
+                images: typeof product.image === "string" ? [product.image] : [],
               });
             }
           } else if (act.action === "update_product") {
             const productId = String(act.payload.productId);
-            const updates = act.payload.updates as any;
+            const updates = act.payload.updates as Record<string, unknown> | undefined;
             if (productId && updates) {
-              await updateCatalogItem(productId, updates);
+              await updateCatalogItem(productId, updates, projectId);
             }
           }
         }

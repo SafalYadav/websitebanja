@@ -19,7 +19,6 @@ import {
   Eye,
   MessageCircle,
   Percent,
-  Calendar,
   Layers,
   Trash2,
 } from "lucide-react";
@@ -230,15 +229,15 @@ function ProductEditorForm({ initialProduct, onSave, onClose, isEditing, project
                 </label>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                   {[
-                    { id: "product", label: "Product (Sale)" },
-                    { id: "rental", label: "Rental" },
-                    { id: "service", label: "Service" },
-                    { id: "showcase", label: "Showcase (No Price)" },
+                    { id: "product" as const, label: "Product (Sale)" },
+                    { id: "rental" as const, label: "Rental" },
+                    { id: "service" as const, label: "Service" },
+                    { id: "showcase" as const, label: "Showcase (No Price)" },
                   ].map((type) => (
                     <button
                       key={type.id}
                       type="button"
-                      onClick={() => setItemType(type.id as any)}
+                      onClick={() => setItemType(type.id)}
                       className={cn(
                         "rounded-xl border p-3 text-xs font-bold transition flex items-center justify-center text-center",
                         itemType === type.id
