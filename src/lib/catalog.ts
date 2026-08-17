@@ -112,6 +112,7 @@ export async function createCatalogItem(item: CatalogItemInsert): Promise<{ data
   }
 
   try {
+    const { data: { session } } = await supabase.auth.getSession();
     const query = supabase
       .from("catalog_items")
       .insert({
@@ -119,7 +120,8 @@ export async function createCatalogItem(item: CatalogItemInsert): Promise<{ data
         user_id: user.id,
       })
       .select()
-      .single();
+      .single()
+      .setHeader("Authorization", `Bearer ${session?.access_token}`);
 
     const { data, error } = await withTimeout(query, 10000, "Catalog save timed out. Please check your network connection.");
 
@@ -147,13 +149,15 @@ export async function updateCatalogItem(
   }
 
   try {
+    const { data: { session } } = await supabase.auth.getSession();
     const query = supabase
       .from("catalog_items")
       .update(updates)
       .eq("id", itemId)
       .eq("user_id", user.id)
       .select()
-      .maybeSingle();
+      .maybeSingle()
+      .setHeader("Authorization", `Bearer ${session?.access_token}`);
 
     const { data, error } = await withTimeout(query, 10000, "Catalog update timed out. Please check your network connection.");
 
@@ -182,11 +186,13 @@ export async function deleteCatalogItem(itemId: string): Promise<{ error: Error 
   }
 
   try {
+    const { data: { session } } = await supabase.auth.getSession();
     const query = supabase
       .from("catalog_items")
       .delete()
       .eq("id", itemId)
-      .eq("user_id", user.id);
+      .eq("user_id", user.id)
+      .setHeader("Authorization", `Bearer ${session?.access_token}`);
 
     const { error } = await withTimeout(query, 10000, "Catalog delete timed out.");
 
@@ -213,12 +219,14 @@ export async function updateCatalogOrder(
   }
 
   try {
+    const { data: { session } } = await supabase.auth.getSession();
     const promises = updates.map((update) =>
       supabase
         .from("catalog_items")
         .update({ display_order: update.display_order })
         .eq("id", update.id)
         .eq("user_id", user.id)
+        .setHeader("Authorization", `Bearer ${session?.access_token}`)
     );
 
     const results = await withTimeout(Promise.all(promises), 10000, "Reordering catalog timed out.");
