@@ -325,3 +325,15 @@ export async function getPreviewLinkData(previewId: string): Promise<{ data: Rec
 
   return { data: data.json_data, error: null, expired: false, projectId: data.project_id };
 }
+
+export async function getPreviewProject(previewId: string): Promise<{ data: Project | null; error: Error | null }> {
+  const { data, error } = await supabase.rpc("get_preview_project", {
+    p_preview_id: previewId,
+  });
+
+  if (error || !data || data.length === 0) {
+    return { data: null, error: error || new Error("Project not found for preview") };
+  }
+
+  return { data: data[0] as Project, error: null };
+}

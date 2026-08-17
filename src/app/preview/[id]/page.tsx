@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
-import { getPreviewLinkData, getProject } from "@/lib/projects";
-import { getCatalogItems, type CatalogItem } from "@/lib/catalog";
+import { getPreviewLinkData, getPreviewProject } from "@/lib/projects";
+import { getPreviewCatalogItems, type CatalogItem } from "@/lib/catalog";
 import WebsiteRenderer from "@/components/editor/WebsiteRenderer";
 import type { WebsiteData } from "@/types/website";
 
@@ -32,10 +32,11 @@ export default async function PreviewPage({ params }: { params: Promise<{ id: st
   let catalogItems: CatalogItem[] = [];
   let project = null;
   if (projectId) {
-    const { data: items } = await getCatalogItems(projectId);
+    const { data: items } = await getPreviewCatalogItems(resolvedParams.id);
     if (items) catalogItems = items;
     
-    const { data: pData } = await getProject(projectId);
+    // Use the secure RPC that bypasses RLS for valid preview links
+    const { data: pData } = await getPreviewProject(resolvedParams.id);
     if (pData) project = pData;
   }
 

@@ -241,3 +241,23 @@ export async function updateCatalogOrder(
     return { error: err instanceof Error ? err : new Error("Failed to reorder catalog items.") };
   }
 }
+
+/**
+ * Securely fetch catalog items for an active preview link, bypassing RLS.
+ */
+export async function getPreviewCatalogItems(previewId: string): Promise<{ data: CatalogItem[] | null; error: Error | null }> {
+  try {
+    const { data, error } = await supabase.rpc("get_preview_catalog", {
+      p_preview_id: previewId,
+    });
+
+    if (error) {
+      console.error("[getPreviewCatalogItems Error]:", error);
+      return { data: null, error: new Error(error.message) };
+    }
+
+    return { data: data as CatalogItem[], error: null };
+  } catch (err) {
+    return { data: null, error: err instanceof Error ? err : new Error("Failed to fetch preview catalog.") };
+  }
+}

@@ -368,3 +368,91 @@ $$;
 
 -- Reload schema cache to instantly reflect RPC and policy changes
 NOTIFY pgrst, 'reload schema';
+
+-- RPC to securely fetch project branding for an active preview link
+CREATE OR REPLACE FUNCTION public.get_preview_project(p_preview_id uuid)
+RETURNS TABLE (
+  id uuid,
+  name text,
+  business_name text,
+  category text,
+  style text,
+  primary_color text,
+  secondary_color text,
+  whatsapp_number text,
+  phone text,
+  whatsapp_message text,
+  whatsapp_enabled boolean
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  RETURN QUERY
+  SELECT 
+    p.id,
+    p.name,
+    p.business_name,
+    p.category,
+    p.style,
+    p.primary_color,
+    p.secondary_color,
+    p.whatsapp_number,
+    p.phone,
+    p.whatsapp_message,
+    p.whatsapp_enabled
+  FROM public.projects p
+  JOIN public.preview_links pl ON pl.project_id = p.id
+  WHERE pl.id = p_preview_id
+  AND pl.expires_at > now();
+END;
+$$;
+
+-- RPC to securely fetch catalog items for an active preview link
+CREATE OR REPLACE FUNCTION public.get_preview_catalog(p_preview_id uuid)
+RETURNS TABLE (
+  id uuid,
+  project_id uuid,
+  user_id uuid,
+  name text,
+  description text,
+  item_type text,
+  category text,
+  status text,
+  images text[],
+  price numeric,
+  original_price numeric,
+  currency_code text,
+  show_discount_badge boolean,
+  hourly_price numeric,
+  daily_price numeric,
+  weekly_price numeric,
+  monthly_price numeric,
+  cta_text text,
+  cta_link text,
+  button_action jsonb,
+  display_order integer,
+  badge text,
+  created_at timestamptz,
+  updated_at timestamptz
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  RETURN QUERY
+  SELECT 
+    c.id, c.project_id, c.user_id, c.name, c.description, c.item_type, c.category, c.status,
+    c.images, c.price, c.original_price, c.currency_code, c.show_discount_badge,
+    c.hourly_price, c.daily_price, c.weekly_price, c.monthly_price,
+    c.cta_text, c.cta_link, c.button_action, c.display_order, c.badge,
+    c.created_at, c.updated_at
+  FROM public.catalog_items c
+  JOIN public.preview_links pl ON pl.project_id = c.project_id
+  WHERE pl.id = p_preview_id
+  AND pl.expires_at > now()
+  ORDER BY c.display_order ASC, c.created_at DESC;
+END;
+$$;
