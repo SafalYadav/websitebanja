@@ -527,11 +527,27 @@ export const useGeneratedWebsiteStore = create<GeneratedWebsiteState>((set, get)
     const { website, history, historyIndex } = get();
     if (!website) return;
 
-    // Deep merge buttonAction to prevent CTA loss
+    // Deep merge buttonAction to prevent CTA loss (only for objects, not arrays)
+    let incomingSectionData: any;
+    if (Array.isArray(data)) {
+      incomingSectionData = [...data];
+    } else if (typeof data === "object" && data !== null) {
+      incomingSectionData = { ...data };
+    } else {
+      incomingSectionData = data;
+    }
+
     const existingSectionData = website[section as keyof WebsiteData] as Record<string, unknown> | undefined;
-    const incomingSectionData = (typeof data === "object" && data !== null ? { ...data } : data) as Record<string, unknown>;
     
-    if (existingSectionData?.buttonAction && typeof incomingSectionData === 'object' && !incomingSectionData.buttonAction) {
+    if (
+      existingSectionData && 
+      !Array.isArray(existingSectionData) && 
+      existingSectionData.buttonAction && 
+      incomingSectionData && 
+      !Array.isArray(incomingSectionData) && 
+      typeof incomingSectionData === "object" && 
+      !incomingSectionData.buttonAction
+    ) {
       incomingSectionData.buttonAction = existingSectionData.buttonAction;
     }
 

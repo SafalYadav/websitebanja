@@ -107,13 +107,18 @@ export default function WebsiteRenderer({
   const [fetchedCatalog, setFetchedCatalog] = React.useState<CatalogItem[]>([]);
 
   React.useEffect(() => {
+    let isCancelled = false;
     if (!isPublic && projectId && !catalogItems) {
+      setFetchedCatalog([]); // Prevent stale catalog from previous project
       import("@/lib/catalog").then((mod) => {
         mod.getCatalogItems(projectId).then(({ data }) => {
-          if (data) setFetchedCatalog(data);
+          if (!isCancelled && data) setFetchedCatalog(data);
         });
       });
     }
+    return () => {
+      isCancelled = true;
+    };
   }, [isPublic, projectId, catalogItems, catalogVersion]);
 
   const finalCatalogItems = catalogItems || fetchedCatalog;
