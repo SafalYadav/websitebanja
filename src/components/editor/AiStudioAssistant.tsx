@@ -91,7 +91,7 @@ export default function AiStudioAssistant() {
             const productId = String(act.payload.productId);
             const updates = act.payload.updates as Record<string, unknown> | undefined;
             if (productId && updates) {
-              await updateCatalogItem(productId, updates, projectId);
+              await updateCatalogItem(productId, updates);
             }
           }
         }
