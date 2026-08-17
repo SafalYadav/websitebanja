@@ -346,9 +346,10 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 BEGIN
-  -- 1. Authorization: Ensure caller owns the project
-  IF NOT EXISTS (SELECT 1 FROM public.projects WHERE id = p_project_id AND user_id = auth.uid()) THEN
-    RAISE EXCEPTION 'Unauthorized: Only the project owner can publish this project.';
+  -- 1. Authorization: Ensure caller owns the project OR is an authorized member
+  IF NOT EXISTS (SELECT 1 FROM public.projects WHERE id = p_project_id AND user_id = auth.uid()) 
+  AND NOT public.is_website_member(p_project_id, ARRAY['OWNER', 'ADMIN', 'EDITOR']::public.admin_role[]) THEN
+    RAISE EXCEPTION 'Unauthorized: Only the project owner or authorized members can publish this project.';
   END IF;
 
   -- 2. Insert new immutable snapshot (Fails transaction if constraints violated)
@@ -365,6 +366,9 @@ BEGIN
   WHERE id = p_project_id;
 END;
 $$;
+
+REVOKE EXECUTE ON FUNCTION public.publish_project_atomic(uuid, text, jsonb) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.publish_project_atomic(uuid, text, jsonb) TO authenticated;
 
 -- Reload schema cache to instantly reflect RPC and policy changes
 NOTIFY pgrst, 'reload schema';
@@ -408,6 +412,9 @@ BEGIN
   AND pl.expires_at > now();
 END;
 $$;
+
+REVOKE EXECUTE ON FUNCTION public.get_preview_project(uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.get_preview_project(uuid) TO anon, authenticated;
 
 -- RPC to securely fetch catalog items for an active preview link
 CREATE OR REPLACE FUNCTION public.get_preview_catalog(p_preview_id uuid)
@@ -456,3 +463,6 @@ BEGIN
   ORDER BY c.display_order ASC, c.created_at DESC;
 END;
 $$;
+
+REVOKE EXECUTE ON FUNCTION public.get_preview_catalog(uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.get_preview_catalog(uuid) TO anon, authenticated;

@@ -26,10 +26,13 @@ export async function GET(
       return NextResponse.json({ success: false, message: "Invalid session." }, { status: 401 });
     }
 
-    const supabaseKey =
-      process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-    const supabase = createClient(supabaseUrl, supabaseKey, {
+    const supabase = createClient(supabaseUrl, supabaseAnonKey, {
       auth: { persistSession: false, autoRefreshToken: false },
+      global: {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      }
     });
 
     const { data: project, error: projErr } = await supabase
@@ -152,10 +155,13 @@ export async function PATCH(
       return NextResponse.json({ success: false, message: "Invalid session." }, { status: 401 });
     }
 
-    const supabaseKey =
-      process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-    const supabase = createClient(supabaseUrl, supabaseKey, {
+    const supabase = createClient(supabaseUrl, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
       auth: { persistSession: false, autoRefreshToken: false },
+      global: {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      }
     });
 
     const { data: project } = await supabase

@@ -59,6 +59,8 @@ export default async function PublicWebsitePage({
   }
 
   const websiteData = snapshot_data as WebsiteData;
+  // Use metadata injected at publish time if available, fallback to current project
+  const meta = (snapshot_data._project_meta as Record<string, any>) || project;
   const { data: catalogItems } = await getCatalogItems(project.id);
 
   return (
@@ -66,18 +68,18 @@ export default async function PublicWebsitePage({
       <WebsiteRenderer
         data={websiteData}
         catalogItems={catalogItems || undefined}
-        pColor={project.primary_color}
-        sColor={project.secondary_color}
-        brandStyle={project.style}
-        category={project.category}
-        businessName={project.business_name || project.name}
+        pColor={meta.primary_color}
+        sColor={meta.secondary_color}
+        brandStyle={meta.style}
+        category={meta.category}
+        businessName={meta.business_name || meta.name}
         isPublic={true}
         publicSlug={resolvedParams.slug}
         activePageSlug=""
-        whatsappNumber={project.whatsapp_number}
-        phone={project.phone}
-        whatsappMessage={project.whatsapp_message}
-        whatsappEnabled={project.whatsapp_enabled}
+        whatsappNumber={meta.whatsapp_number}
+        phone={meta.phone}
+        whatsappMessage={meta.whatsapp_message}
+        whatsappEnabled={meta.whatsapp_enabled}
       />
 
       {/* Floating WebsiteBanja Brand Badge */}

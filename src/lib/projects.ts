@@ -161,10 +161,10 @@ export async function publishProject(
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { data: null, error: new Error("Unauthorized") };
 
-  // Fetch current project to get json_data for snapshot (ensure ownership)
+  // Fetch current project to get json_data and metadata for snapshot (ensure ownership)
   const { data: currentProject, error: fetchError } = await supabase
     .from("projects")
-    .select("json_data")
+    .select("*")
     .eq("id", projectId)
     .eq("user_id", user.id)
     .maybeSingle();
@@ -173,7 +173,19 @@ export async function publishProject(
     return { data: null, error: fetchError ?? new Error("Project not found or unauthorized") };
   }
 
-  const snapshotToSave = latestJsonData || currentProject.json_data || {};
+  const snapshotToSave = (latestJsonData || currentProject.json_data || {}) as Record<string, unknown>;
+  snapshotToSave._project_meta = {
+    primary_color: currentProject.primary_color,
+    secondary_color: currentProject.secondary_color,
+    style: currentProject.style,
+    category: currentProject.category,
+    business_name: currentProject.business_name,
+    name: currentProject.name,
+    whatsapp_number: currentProject.whatsapp_number,
+    phone: currentProject.phone,
+    whatsapp_message: currentProject.whatsapp_message,
+    whatsapp_enabled: currentProject.whatsapp_enabled,
+  };
 
   // Execute atomic publish transaction via RPC
   const { error: rpcError } = await supabase.rpc("publish_project_atomic", {
