@@ -27,21 +27,13 @@ export default function ImageWithFallback({
     setHasError(false);
     setIsLoaded(false);
     
-    // Check if the new image is already cached/complete
+    // Check if the new image is already cached/complete (hydration)
     if (imgRef.current?.complete) {
-      if (imgRef.current.naturalWidth > 0) {
-        setIsLoaded(true);
-      } else {
-        // If complete is true but naturalWidth is 0, it might be a broken image,
-        // or Chrome is still decoding it. We use the native decode() API to find out.
-        imgRef.current.decode()
-          .then(() => setIsLoaded(true))
-          .catch((err) => {
-            // Safari throws an EncodingError if the image is actually broken
-            // Chrome throws a DOMException
-            setHasError(true);
-          });
-      }
+      // Unconditionally set isLoaded to true.
+      // In Chrome, a lazy-loaded cached image may be complete=true but naturalWidth=0
+      // because it delays decoding until it enters the viewport. 
+      // We must NOT mark it as an error manually here. We rely strictly on onError.
+      setIsLoaded(true);
     }
   }, [src]);
 
