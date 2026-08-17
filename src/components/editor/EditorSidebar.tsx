@@ -3,7 +3,6 @@
 import React, { useState } from "react";
 import { useGeneratedWebsiteStore, type StudioTab } from "@/store/generatedWebsiteStore";
 import { useBuilderStore } from "@/store/builderStore";
-import CatalogManager from "@/components/editor/CatalogManager";
 import AiStudioAssistant from "@/components/editor/AiStudioAssistant";
 import {
   GripVertical,
@@ -132,6 +131,8 @@ export default function EditorSidebar() {
     toggleAdminDashboard,
     saveVersionSnapshot,
     restoreVersionSnapshot,
+    setIsCatalogModalOpen,
+    openProductEditor,
   } = useGeneratedWebsiteStore();
 
   const primaryColor = useBuilderStore((state) => state.primaryColor);
@@ -524,7 +525,44 @@ export default function EditorSidebar() {
         )}
 
         {/* 4. Catalog Tab */}
-        {activeStudioTab === "catalog" && <CatalogManager />}
+        {activeStudioTab === "catalog" && (
+          <div className="space-y-4">
+            <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4 dark:border-white/10 dark:bg-zinc-900/50">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-violet-600 text-white shadow-xs">
+                  <ShoppingBag className="h-4 w-4" />
+                </div>
+                <div>
+                  <h4 className="text-xs font-bold text-zinc-900 dark:text-white">
+                    Product Catalog
+                  </h4>
+                  <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                    Manage products, rentals, and services
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsCatalogModalOpen(true)}
+                className="w-full flex items-center justify-center gap-2 rounded-xl bg-violet-600 py-2.5 px-4 text-xs font-bold text-white shadow-md shadow-violet-600/20 hover:bg-violet-700 active:scale-98 transition"
+              >
+                <ShoppingBag className="h-4 w-4" />
+                <span>Open Catalog Workspace</span>
+              </button>
+            </div>
+
+            <div className="pt-2">
+              <button
+                type="button"
+                onClick={() => openProductEditor(null)}
+                className="w-full flex items-center justify-center gap-2 rounded-xl border border-dashed border-zinc-300 dark:border-white/20 py-2.5 px-4 text-xs font-bold text-zinc-700 dark:text-zinc-300 hover:border-violet-500 hover:text-violet-600 transition"
+              >
+                <Plus className="h-4 w-4" />
+                <span>Add New Item Directly</span>
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* 5. AI Copilot Tab */}
         {activeStudioTab === "ai" && <AiStudioAssistant />}

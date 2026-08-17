@@ -1,5 +1,5 @@
 import { getCategoryImages } from "./categoryImages";
-import type { WebsiteData, Hero, About, Service, Feature, FAQ, Contact, Footer } from "@/types/website";
+import type { WebsiteData, Hero, About, Service, Feature, FAQ, Contact, Footer, ButtonActionConfig } from "@/types/website";
 
 export interface NormalizedWebsiteData {
   hero: Hero & { image?: string };
@@ -13,7 +13,7 @@ export interface NormalizedWebsiteData {
   navbar?: import("@/types/website").NavbarConfig;
   pages?: import("@/types/website").WebsitePage[];
   products?: import("@/types/website").ProductItem[];
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 const DEFAULT_ORDER = ["hero", "about", "services", "features", "faq", "contact", "footer"];
@@ -36,7 +36,8 @@ export function normalizeWebsiteData(
         ? rawHero.subtitle
         : "Discover tailored solutions, superior craftsmanship, and dedicated service designed to accelerate your growth.",
     button: typeof rawHero.button === "string" && rawHero.button.trim() ? rawHero.button : "Explore Services",
-    image: images.hero,
+    image: typeof rawHero.image === "string" && rawHero.image.trim() ? rawHero.image : images.hero,
+    buttonAction: rawHero.buttonAction,
   };
 
   // 2. Normalize About
@@ -47,7 +48,7 @@ export function normalizeWebsiteData(
       typeof rawAbout.content === "string" && rawAbout.content.trim()
         ? rawAbout.content
         : "We are a dedicated team committed to delivering exceptional experiences that empower our clients to succeed with confidence.",
-    image: images.about,
+    image: typeof rawAbout.image === "string" && rawAbout.image.trim() ? rawAbout.image : images.about,
   };
 
   // 3. Normalize Services
@@ -69,7 +70,8 @@ export function normalizeWebsiteData(
         typeof s.description === "string" && s.description.trim()
           ? s.description
           : "Tailored to your requirements with precision and high standards.",
-      image: images.services[idx % images.services.length],
+      image: typeof s.image === "string" && s.image.trim() ? s.image : images.services[idx % images.services.length],
+      buttonAction: (s.buttonAction as ButtonActionConfig | undefined),
     }));
 
   // 4. Normalize Features
@@ -91,7 +93,8 @@ export function normalizeWebsiteData(
         typeof f.description === "string" && f.description.trim()
           ? f.description
           : "Built for speed, security, and exceptional performance.",
-      image: images.features[idx % images.features.length],
+      image: typeof f.image === "string" && f.image.trim() ? f.image : images.features[idx % images.features.length],
+      buttonAction: ((f as Record<string, unknown>).buttonAction as ButtonActionConfig | undefined),
     }));
 
   // 5. Normalize FAQ

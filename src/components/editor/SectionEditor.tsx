@@ -5,7 +5,6 @@ import { useGeneratedWebsiteStore } from "@/store/generatedWebsiteStore";
 import InputField from "@/components/builder/InputField";
 import TextAreaField from "@/components/builder/TextAreaField";
 import ImageMediaModal from "@/components/editor/ImageMediaModal";
-import { sanitizeActionUrl } from "@/lib/buttonActions";
 import type { ButtonActionType, ButtonActionConfig, ProductItem } from "@/types/website";
 import {
   Home,
@@ -44,6 +43,7 @@ const SECTION_ICONS: Record<string, React.ElementType> = {
 
 export default function SectionEditor() {
   const website = useGeneratedWebsiteStore((state) => state.website);
+  const currentProjectId = useGeneratedWebsiteStore((state) => state.currentProjectId);
   const selectedSection = useGeneratedWebsiteStore((state) => state.selectedSection);
   const updateWebsiteSection = useGeneratedWebsiteStore((state) => state.updateWebsiteSection);
   const selectedElement = useGeneratedWebsiteStore((state) => state.selectedElement);
@@ -63,10 +63,24 @@ export default function SectionEditor() {
     const isLogo = selectedElement.elementType === "logo";
     const currentValue = typeof selectedElement.value === "string" ? selectedElement.value : "";
 
-    // Extract existing button action if element is a button
+    // Extract existing button action dynamically from any section element path
+    const getNestedValue = (obj: unknown, path: string): unknown => {
+      const keys = path.replace(/\[(\w+)\]/g, ".$1").split(".");
+      let cur: unknown = obj;
+      for (const k of keys) {
+        if (!cur || typeof cur !== "object") return undefined;
+        cur = (cur as Record<string, unknown>)[k];
+      }
+      return cur;
+    };
+
+    const basePath = selectedElement.elementPath.replace(/\.button$/, "");
     let existingAction: ButtonActionConfig = { type: "scroll", target: "contact" };
     if (isButton && website) {
-      if (selectedElement.elementPath.startsWith("hero")) {
+      const foundAction = getNestedValue(website, `${basePath}.buttonAction`) || getNestedValue(website, `${selectedElement.elementPath}Action`);
+      if (foundAction && typeof foundAction === "object" && "type" in foundAction) {
+        existingAction = foundAction as ButtonActionConfig;
+      } else if (selectedElement.elementPath.startsWith("hero")) {
         existingAction = (website.hero?.buttonAction as ButtonActionConfig) || {
           type: "scroll",
           target: "services",
@@ -246,7 +260,7 @@ export default function SectionEditor() {
                         setButtonAction(selectedElement.elementPath, {
                           ...existingAction,
                           type: "url",
-                          target: sanitizeActionUrl(e.target.value),
+                          target: e.target.value,
                         })
                       }
                       className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-900 outline-none dark:border-white/10 dark:bg-zinc-800 dark:text-white"
@@ -446,6 +460,7 @@ export default function SectionEditor() {
           <ImageMediaModal
             isOpen={isImageModalOpen}
             currentUrl={currentValue}
+            projectId={currentProjectId || undefined}
             onClose={() => setIsImageModalOpen(false)}
             onSelectImage={(url) => {
               if (isImage) {

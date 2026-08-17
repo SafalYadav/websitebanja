@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useRef, useCallback } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { cn } from "@/lib/utils";
 
@@ -44,8 +44,9 @@ export default function WorkspacePage() {
   const setCategory = useBuilderStore((state) => state.setCategory);
 
   const {
+    currentProjectId,
     website,
-    setWebsite,
+    setWebsiteForProject,
     isPreviewMode,
     setIsPreviewMode,
     viewportMode,
@@ -64,12 +65,15 @@ export default function WorkspacePage() {
   const [mobileTab, setMobileTab] = useState<"canvas" | "layers" | "edit">("canvas");
   const [isResizing, setIsResizing] = useState(false);
 
-  const hasFetchedRef = useRef(false);
-
-  // Auto-save any changes to website data back to Supabase
-  const { isSaving, isError } = useProjectAutosave(effectiveProjectId, {
-    json_data: website || undefined,
-  });
+  // Auto-save only when workspace is fully loaded and matches the active project ID
+  const isAutosaveEnabled = !isLoading && currentProjectId === effectiveProjectId && Boolean(website);
+  const { isSaving, isError } = useProjectAutosave(
+    effectiveProjectId,
+    {
+      json_data: website || undefined,
+    },
+    isAutosaveEnabled
+  );
 
   // Global Keyboard Shortcuts for Undo & Redo
   useEffect(() => {
@@ -138,18 +142,22 @@ export default function WorkspacePage() {
   }, [isResizing, handleMouseMove, handleMouseUp]);
 
   useEffect(() => {
+    let isCancelled = false;
+
     async function loadWorkspace() {
       if (!effectiveProjectId) return;
 
-      if (website && !hasFetchedRef.current) {
+      // If store already has this exact project loaded, we are ready
+      if (currentProjectId === effectiveProjectId && website) {
         setIsLoading(false);
         return;
       }
 
-      if (hasFetchedRef.current) return;
-      hasFetchedRef.current = true;
+      setIsLoading(true);
 
       const { data, error } = await getProject(effectiveProjectId);
+      if (isCancelled) return;
+
       if (error || !data) {
         router.push("/dashboard");
         return;
@@ -165,21 +173,25 @@ export default function WorkspacePage() {
       if (data.secondary_color) setSecondaryColor(data.secondary_color);
 
       if (data.json_data && Object.keys(data.json_data).length > 0) {
-        setWebsite(data.json_data as WebsiteData);
+        setWebsiteForProject(effectiveProjectId, data.json_data as WebsiteData);
       } else {
-        router.push(`/editor/${projectId}`);
+        router.push(`/editor/${effectiveProjectId}`);
         return;
       }
 
       setIsLoading(false);
     }
 
-    loadWorkspace();
+    void loadWorkspace();
+
+    return () => {
+      isCancelled = true;
+    };
   }, [
-    projectId,
     effectiveProjectId,
+    currentProjectId,
     website,
-    setWebsite,
+    setWebsiteForProject,
     router,
     setBusinessName,
     setCategory,
@@ -401,15 +413,16 @@ export default function WorkspacePage() {
       )}
 
       {/* Floating Product Catalog Workspace Modal */}
-      <CatalogManager />
+      <CatalogManager projectId={effectiveProjectId} />
 
       {/* Full-Screen E-Commerce Product Workspace Editor */}
-      <ProductFullScreenEditor />
+      <ProductFullScreenEditor projectId={effectiveProjectId} />
 
       {/* Publish Modal */}
       <PublishModal
         isOpen={isPublishModalOpen}
         onClose={() => setIsPublishModalOpen(false)}
+        projectId={effectiveProjectId}
       />
     </div>
   );

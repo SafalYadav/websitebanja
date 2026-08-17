@@ -21,6 +21,7 @@ interface ImageMediaModalProps {
   onClose: () => void;
   onSelectImage: (newUrl: string) => void;
   title?: string;
+  projectId?: string;
 }
 
 const STOCK_CATEGORIES = [
@@ -77,6 +78,7 @@ export default function ImageMediaModal({
   onClose,
   onSelectImage,
   title = "Replace Image",
+  projectId,
 }: ImageMediaModalProps) {
   const [activeTab, setActiveTab] = useState<"library" | "upload" | "url">("library");
   const [selectedUrl, setSelectedUrl] = useState(currentUrl || "");
@@ -102,8 +104,9 @@ export default function ImageMediaModal({
 
     setIsUploading(true);
     try {
-      // Try uploading to Supabase Storage if user has session
-      const fileName = `uploads/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.-]/g, "_")}`;
+      // Try uploading to Supabase Storage with strict project scoping
+      const projectPrefix = projectId ? `${projectId}/` : "general/";
+      const fileName = `${projectPrefix}uploads/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.-]/g, "_")}`;
       const { data, error } = await supabase.storage
         .from("project-assets")
         .upload(fileName, file, { cacheControl: "3600", upsert: true });

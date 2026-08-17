@@ -13,6 +13,7 @@ export type ViewportMode = "desktop" | "tablet" | "mobile";
 export type StudioTab = "pages" | "layers" | "elements" | "catalog" | "ai" | "theme" | "seo" | "history";
 
 interface GeneratedWebsiteState {
+  currentProjectId: string | null;
   website: WebsiteData | null;
   isGenerating: boolean;
   selectedSection: string | null;
@@ -32,6 +33,8 @@ interface GeneratedWebsiteState {
   isCatalogModalOpen: boolean;
   isProductFullScreenEditorOpen: boolean;
   editingProductId: string | null;
+  catalogVersion: number;
+  refreshCatalog: () => void;
 
   // History for Undo/Redo
   history: WebsiteData[];
@@ -39,6 +42,8 @@ interface GeneratedWebsiteState {
 
   // Setters
   setWebsite: (website: WebsiteData) => void;
+  setWebsiteForProject: (projectId: string, website: WebsiteData) => void;
+  clearWebsite: () => void;
   setIsGenerating: (value: boolean) => void;
   setSelectedSection: (section: string | null) => void;
   setSelectedElement: (element: ElementSelection | null) => void;
@@ -125,6 +130,7 @@ function ensureDefaultPages(website: WebsiteData): WebsitePage[] {
 }
 
 export const useGeneratedWebsiteStore = create<GeneratedWebsiteState>((set, get) => ({
+  currentProjectId: null,
   website: null,
   isGenerating: false,
   selectedSection: "hero",
@@ -141,9 +147,64 @@ export const useGeneratedWebsiteStore = create<GeneratedWebsiteState>((set, get)
   isCatalogModalOpen: false,
   isProductFullScreenEditorOpen: false,
   editingProductId: null,
+  catalogVersion: 0,
+  refreshCatalog: () => set((state) => ({ catalogVersion: state.catalogVersion + 1 })),
 
   history: [],
   historyIndex: -1,
+
+  setWebsiteForProject: (projectId, website) => {
+    if (!website) {
+      set({
+        currentProjectId: projectId,
+        website: null,
+        activePageId: "home",
+        selectedSection: "hero",
+        selectedElement: null,
+        history: [],
+        historyIndex: -1,
+        isGenerating: false,
+      });
+      return;
+    }
+    const cleanWebsite = { ...website };
+    if (!cleanWebsite.sectionOrder) {
+      cleanWebsite.sectionOrder = [...DEFAULT_ORDER];
+    }
+    cleanWebsite.pages = ensureDefaultPages(cleanWebsite);
+    const initialPage = cleanWebsite.pages.find((p) => p.isHome) || cleanWebsite.pages[0];
+
+    set({
+      currentProjectId: projectId,
+      website: cleanWebsite,
+      activePageId: initialPage?.id || "home",
+      selectedSection: "hero",
+      selectedElement: null,
+      history: [cleanWebsite],
+      historyIndex: 0,
+      isGenerating: false,
+    });
+  },
+
+  clearWebsite: () =>
+    set({
+      currentProjectId: null,
+      website: null,
+      isGenerating: false,
+      selectedSection: "hero",
+      selectedElement: null,
+      activeStudioTab: "layers",
+      isPreviewMode: false,
+      viewportMode: "desktop",
+      activePageId: "home",
+      isRightPanelOpen: false,
+      rightPanelWidth: 380,
+      isCatalogModalOpen: false,
+      isProductFullScreenEditorOpen: false,
+      editingProductId: null,
+      history: [],
+      historyIndex: -1,
+    }),
 
   setWebsite: (website) => {
     if (!website.sectionOrder) {

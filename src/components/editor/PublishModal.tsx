@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useBuilderStore } from "@/store/builderStore";
+import { useGeneratedWebsiteStore } from "@/store/generatedWebsiteStore";
 import { publishProject, unpublishProject } from "@/lib/projects";
 import { toast } from "@/store/toastStore";
 import { detectBackendRequirement } from "@/lib/backendDetection";
@@ -27,13 +28,14 @@ import { cn } from "@/lib/utils";
 interface PublishModalProps {
   isOpen: boolean;
   onClose: () => void;
+  projectId?: string;
 }
 
 type TabType = "wb_url" | "custom_domain" | "backend";
 
-export default function PublishModal({ isOpen, onClose }: PublishModalProps) {
+export default function PublishModal({ isOpen, onClose, projectId: propProjectId }: PublishModalProps) {
   const {
-    projectId,
+    projectId: storeProjectId,
     businessName,
     category,
     isPublished,
@@ -41,6 +43,8 @@ export default function PublishModal({ isOpen, onClose }: PublishModalProps) {
     setIsPublished,
     setPublicSlug,
   } = useBuilderStore();
+
+  const projectId = propProjectId || storeProjectId;
 
   const [activeTab, setActiveTab] = useState<TabType>("wb_url");
   const [copied, setCopied] = useState(false);
@@ -75,7 +79,8 @@ export default function PublishModal({ isOpen, onClose }: PublishModalProps) {
       let baseSlug = businessName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
       if (!baseSlug) baseSlug = "website";
       const slug = publicSlug || `${baseSlug}-${Math.floor(Math.random() * 10000)}`;
-      const { error } = await publishProject(projectId, slug);
+      const currentWebsite = useGeneratedWebsiteStore.getState().website;
+      const { error } = await publishProject(projectId, slug, currentWebsite || undefined);
       if (error) throw error;
       setIsPublished(true);
       setPublicSlug(slug);

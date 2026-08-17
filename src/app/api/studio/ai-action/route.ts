@@ -125,17 +125,28 @@ Current Website Outline: ${JSON.stringify({
 
 User Command: "${prompt.trim()}"`;
 
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      response_format: { type: "json_object" },
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userMessage },
-      ],
-      temperature: 0.1,
-    });
+    let rawResponse = "{}";
+    try {
+      const completion = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        response_format: { type: "json_object" },
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userMessage },
+        ],
+        temperature: 0.1,
+      });
+      rawResponse = completion.choices[0]?.message?.content || "{}";
+    } catch (openaiErr: unknown) {
+      console.error("[OpenAI Execution Error]", openaiErr);
+      const errMsg = openaiErr instanceof Error ? openaiErr.message : String(openaiErr);
+      // Map cryptic schema errors from OpenAI SDK
+      if (errMsg.includes("pattern")) {
+        throw new Error("Invalid URL or text format provided to AI Copilot.");
+      }
+      throw openaiErr;
+    }
 
-    const rawResponse = completion.choices[0]?.message?.content || "{}";
     const parsed = JSON.parse(rawResponse);
 
     const actions: StudioAiAction[] = Array.isArray(parsed.actions) ? parsed.actions : [];

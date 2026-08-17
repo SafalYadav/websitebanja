@@ -43,6 +43,7 @@ interface BuilderState {
   // Project Actions
   setProjectId: (value: string) => void;
   hydrateFromProject: (project: Project) => void;
+  clearProject: () => void;
 
   // Onboarding Mode Actions
   setOnboardingMode: (value: OnboardingMode) => void;
@@ -139,6 +140,32 @@ export const useBuilderStore = create<BuilderState>((set) => ({
       whatsappEnabled: project.whatsapp_enabled ?? true,
       isPublished: project.is_published ?? false,
       publicSlug: project.public_slug ?? null,
+    }),
+
+  clearProject: () =>
+    set({
+      projectId: "",
+      onboardingMode: "prompt",
+      userPrompt: "",
+      selectedFeatures: ["whatsapp", "contact_form", "testimonials", "google_maps"],
+      businessName: "",
+      category: "",
+      description: "",
+      targetAudience: "",
+      style: "",
+      primaryColor: "",
+      secondaryColor: "",
+      phone: "",
+      email: "",
+      website: "",
+      instagram: "",
+      facebook: "",
+      address: "",
+      whatsappNumber: "",
+      whatsappMessage: "Hi, I found your website and would like to know more about your services.",
+      whatsappEnabled: true,
+      isPublished: false,
+      publicSlug: null,
     }),
 
   // Onboarding Mode Actions

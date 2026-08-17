@@ -38,11 +38,17 @@ export function sanitizeActionUrl(url: string): string {
  * Smoothly scrolls to a section in either the Studio canvas or full viewport.
  */
 export function scrollToSection(sectionKey: string): void {
-  const targetId = sectionKey.startsWith("wb-section-")
-    ? sectionKey
-    : `wb-section-${sectionKey.replace(/^#/, "")}`;
+  if (!sectionKey) return;
+  const cleanKey = sectionKey.replace(/^#/, "").replace(/^wb-section-/, "");
 
-  const targetElement = document.getElementById(targetId);
+  // 1. Try exact element ID
+  let targetElement = document.getElementById(`wb-section-${cleanKey}`) || document.getElementById(cleanKey);
+
+  // 2. Try prefix match (for dynamically keyed sections like services_17823901)
+  if (!targetElement) {
+    targetElement = document.querySelector(`[id^="wb-section-${cleanKey}"]`) as HTMLElement | null;
+  }
+
   if (!targetElement) return;
 
   const canvasContainer = document.getElementById("canvas-scroll-container");
@@ -71,8 +77,14 @@ export function handleButtonActionClick(
     e.stopPropagation();
   }
 
-  if (!action || action.type === "none") {
+  // If no action defined at all, fall back to default scroll
+  if (!action) {
     scrollToSection(fallbackScrollTarget);
+    return;
+  }
+
+  // If action is explicitly "none", do nothing
+  if (action.type === "none") {
     return;
   }
 
@@ -83,7 +95,7 @@ export function handleButtonActionClick(
       break;
     }
     case "page": {
-      const targetPage = action.target || "";
+      const targetPage = (action.target || "").trim();
       if (context?.onSwitchPage) {
         context.onSwitchPage(targetPage);
       } else if (context?.siteSlug) {
@@ -93,8 +105,9 @@ export function handleButtonActionClick(
       break;
     }
     case "url": {
-      if (action.target) {
-        const safeUrl = sanitizeActionUrl(action.target);
+      const rawTarget = (action.target || "").trim();
+      if (rawTarget) {
+        const safeUrl = sanitizeActionUrl(rawTarget);
         if (safeUrl && safeUrl !== "#") {
           window.open(safeUrl, "_blank", "noopener,noreferrer");
         }
@@ -102,9 +115,11 @@ export function handleButtonActionClick(
       break;
     }
     case "whatsapp": {
-      const cleanPhone = (action.target || "+919876543210").replace(/[^0-9]/g, "");
-      const msg = encodeURIComponent("Hello! I would like to inquire about your services.");
-      window.open(`https://wa.me/${cleanPhone}?text=${msg}`, "_blank", "noopener,noreferrer");
+      const cleanPhone = (action.target || "").replace(/[^0-9]/g, "");
+      if (cleanPhone) {
+        const msg = encodeURIComponent("Hello! I would like to inquire about your services.");
+        window.open(`https://wa.me/${cleanPhone}?text=${msg}`, "_blank", "noopener,noreferrer");
+      }
       break;
     }
     case "call": {
@@ -115,13 +130,13 @@ export function handleButtonActionClick(
       break;
     }
     case "email": {
-      if (action.target) {
-        window.location.href = `mailto:${action.target.trim()}`;
+      const cleanEmail = (action.target || "").trim();
+      if (cleanEmail) {
+        window.location.href = `mailto:${cleanEmail}`;
       }
       break;
     }
     default: {
-      scrollToSection(fallbackScrollTarget);
       break;
     }
   }

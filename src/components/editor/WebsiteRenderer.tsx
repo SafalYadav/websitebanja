@@ -47,9 +47,11 @@ const SECTION_LABELS: Record<string, string> = {
   footer: "Footer Section",
 };
 
+import type { CatalogItem } from "@/lib/catalog";
+
 interface WebsiteRendererProps {
   data?: WebsiteData;
-  catalogItems?: any[]; // We will pass CatalogItem[] here
+  catalogItems?: CatalogItem[];
   pColor?: string | null;
   sColor?: string | null;
   brandStyle?: string | null;
@@ -89,7 +91,8 @@ export default function WebsiteRenderer({
   const isPreviewMode = useGeneratedWebsiteStore((state) => state.isPreviewMode);
   const activePageId = useGeneratedWebsiteStore((state) => state.activePageId);
   const setActivePage = useGeneratedWebsiteStore((state) => state.setActivePage);
-  const [fetchedCatalog, setFetchedCatalog] = React.useState<any[]>([]);
+  const catalogVersion = useGeneratedWebsiteStore((state) => state.catalogVersion);
+  const [fetchedCatalog, setFetchedCatalog] = React.useState<CatalogItem[]>([]);
 
   React.useEffect(() => {
     if (!isPublic && projectId && !catalogItems) {
@@ -99,16 +102,16 @@ export default function WebsiteRenderer({
         });
       });
     }
-  }, [isPublic, projectId, catalogItems]);
+  }, [isPublic, projectId, catalogItems, catalogVersion]);
 
   const finalCatalogItems = catalogItems || fetchedCatalog;
 
-  const rawWebsite = data || storeWebsite;
-  const primaryColor = pColor !== undefined ? pColor : storePrimaryColor;
-  const secondaryColor = sColor !== undefined ? sColor : storeSecondaryColor;
-  const resolvedStyle = brandStyle !== undefined ? brandStyle : storeStyle;
-  const resolvedCategory = category !== undefined ? category : storeCategory;
-  const resolvedBusinessName = businessName !== undefined ? businessName : storeBusinessName;
+  const rawWebsite = isPublic ? data : (data || storeWebsite);
+  const primaryColor = isPublic ? (pColor ?? null) : (pColor !== undefined ? pColor : storePrimaryColor);
+  const secondaryColor = isPublic ? (sColor ?? null) : (sColor !== undefined ? sColor : storeSecondaryColor);
+  const resolvedStyle = isPublic ? (brandStyle ?? null) : (brandStyle !== undefined ? brandStyle : storeStyle);
+  const resolvedCategory = isPublic ? (category ?? null) : (category !== undefined ? category : storeCategory);
+  const resolvedBusinessName = isPublic ? (businessName ?? null) : (businessName !== undefined ? businessName : storeBusinessName);
 
   // 1. Resolve isolated website theme tokens
   const theme = resolveWebsiteTheme({

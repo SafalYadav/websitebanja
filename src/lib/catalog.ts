@@ -1,5 +1,5 @@
 import { supabase } from "./supabase";
-// Authentication handled via supabase.auth.getUser()
+import type { ButtonActionConfig } from "@/types/website";
 
 export interface CatalogItem {
   id: string;
@@ -24,7 +24,7 @@ export interface CatalogItem {
   
   cta_text?: string | null;
   cta_link?: string | null;
-  button_action?: any; // ButtonActionConfig
+  button_action?: ButtonActionConfig | null;
   
   display_order: number;
   badge?: string | null;
@@ -51,8 +51,11 @@ export async function getCatalogItems(projectId: string): Promise<{ data: Catalo
 }
 
 export async function createCatalogItem(item: CatalogItemInsert): Promise<{ data: CatalogItem | null; error: Error | null }> {
+  if (!item.project_id) {
+    return { data: null, error: new Error("Project ID is required to create a catalog item.") };
+  }
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { data: null, error: new Error("Unauthorized") };
+  if (!user) return { data: null, error: new Error("Unauthorized: Please sign in to add catalog items.") };
 
   const { data, error } = await supabase
     .from("catalog_items")
@@ -69,13 +72,12 @@ export async function createCatalogItem(item: CatalogItemInsert): Promise<{ data
 
 export async function updateCatalogItem(itemId: string, updates: CatalogItemUpdate): Promise<{ data: CatalogItem | null; error: Error | null }> {
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { data: null, error: new Error("Unauthorized") };
+  if (!user) return { data: null, error: new Error("Unauthorized: Please sign in.") };
 
   const { data, error } = await supabase
     .from("catalog_items")
     .update(updates)
     .eq("id", itemId)
-    .eq("user_id", user.id)
     .select()
     .single();
 
@@ -85,13 +87,12 @@ export async function updateCatalogItem(itemId: string, updates: CatalogItemUpda
 
 export async function deleteCatalogItem(itemId: string): Promise<{ error: Error | null }> {
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: new Error("Unauthorized") };
+  if (!user) return { error: new Error("Unauthorized: Please sign in.") };
 
   const { error } = await supabase
     .from("catalog_items")
     .delete()
-    .eq("id", itemId)
-    .eq("user_id", user.id);
+    .eq("id", itemId);
 
   if (error) return { error: new Error(error.message) };
   return { error: null };

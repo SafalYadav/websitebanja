@@ -131,7 +131,7 @@ export async function getProjectBySlug(slug: string): Promise<{ data: Project | 
     .select("*")
     .eq("public_slug", slug)
     .eq("is_published", true)
-    .single();
+    .maybeSingle();
 
   return { data: data as Project | null, error };
 }
@@ -143,52 +143,73 @@ export async function getPublishedSnapshot(projectId: string): Promise<{ snapsho
     .eq("project_id", projectId)
     .order("published_at", { ascending: false })
     .limit(1)
-    .single();
+    .maybeSingle();
 
   return { snapshot_data: data?.snapshot_data || null, error };
 }
 
-export async function publishProject(projectId: string, slug: string): Promise<{ data: Project | null; error: Error | null }> {
+export async function publishProject(
+  projectId: string,
+  slug: string,
+  latestJsonData?: Record<string, unknown>
+): Promise<{ data: Project | null; error: Error | null }> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { data: null, error: new Error("Unauthorized") };
 
-  // Fetch current project to get json_data for snapshot
+  // Fetch current project to get json_data for snapshot (ensure ownership)
   const { data: currentProject, error: fetchError } = await supabase
     .from("projects")
     .select("json_data")
     .eq("id", projectId)
-    .single();
+    .eq("user_id", user.id)
+    .maybeSingle();
 
   if (fetchError || !currentProject) {
-    return { data: null, error: fetchError ?? new Error("Project not found") };
+    return { data: null, error: fetchError ?? new Error("Project not found or unauthorized") };
   }
 
-  // Create published version snapshot
-  const { error: snapshotError } = await supabase
-    .from("published_versions")
-    .insert({
-      project_id: projectId,
-      snapshot_data: currentProject.json_data || {},
-    });
+  const snapshotToSave = latestJsonData || currentProject.json_data || {};
 
-  if (snapshotError) {
-    return { data: null, error: new Error("Failed to create publish snapshot") };
+  // Create published version snapshot
+  try {
+    const { error: snapshotError } = await supabase
+      .from("published_versions")
+      .insert({
+        project_id: projectId,
+        snapshot_data: snapshotToSave,
+      });
+
+    if (snapshotError) {
+      console.warn("[Publish Snapshot Notice]:", snapshotError.message);
+    }
+  } catch (snapErr) {
+    console.warn("[Publish Snapshot Notice]:", snapErr);
+  }
+
+  const updatePayload: Record<string, unknown> = {
+    is_published: true,
+    public_slug: slug,
+    published_at: new Date().toISOString(),
+    preview_expires_at: null,
+  };
+
+  if (latestJsonData && Object.keys(latestJsonData).length > 0) {
+    updatePayload.json_data = latestJsonData;
   }
 
   const { data, error } = await supabase
     .from("projects")
-    .update({
-      is_published: true,
-      public_slug: slug,
-      published_at: new Date().toISOString(),
-      preview_expires_at: null, // clear any old expiry just in case
-    })
+    .update(updatePayload)
     .eq("id", projectId)
     .eq("user_id", user.id)
     .select()
     .single();
 
-  return { data: data as Project | null, error };
+  if (error) {
+    return { data: null, error: new Error(error.message) };
+  }
+
+  return { data: data as Project | null, error: null };
 }
 
 export async function unpublishProject(projectId: string): Promise<{ data: Project | null; error: Error | null }> {

@@ -612,23 +612,30 @@ function ProductEditorForm({ initialProduct, onSave, onClose, isEditing, project
   );
 }
 
-export default function ProductFullScreenEditor() {
+interface ProductFullScreenEditorProps {
+  projectId?: string;
+}
+
+export default function ProductFullScreenEditor({ projectId: propProjectId }: ProductFullScreenEditorProps) {
   const {
     isProductFullScreenEditorOpen,
     editingProductId,
     closeProductEditor,
+    currentProjectId,
+    refreshCatalog,
   } = useGeneratedWebsiteStore();
-  const { projectId } = useBuilderStore();
+  const builderProjectId = useBuilderStore((state) => state.projectId);
+  const effectiveProjectId = propProjectId || currentProjectId || builderProjectId;
 
   const [initialProduct, setInitialProduct] = useState<CatalogItem | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     async function load() {
-      if (editingProductId && projectId) {
+      if (editingProductId && effectiveProjectId) {
         setIsLoading(true);
-        const { data } = await getCatalogItems(projectId);
-        const match = data?.find(d => d.id === editingProductId);
+        const { data } = await getCatalogItems(effectiveProjectId);
+        const match = data?.find((d) => d.id === editingProductId);
         if (match) setInitialProduct(match);
         setIsLoading(false);
       } else {
@@ -636,18 +643,50 @@ export default function ProductFullScreenEditor() {
         setIsLoading(false);
       }
     }
-    load();
-  }, [editingProductId, projectId]);
+    void load();
+  }, [editingProductId, effectiveProjectId]);
 
   if (!isProductFullScreenEditorOpen) return null;
 
   const handleSave = async (productData: CatalogItemInsert | CatalogItemUpdate) => {
+    if (!effectiveProjectId) {
+      toast.error("Project ID is missing");
+      throw new Error("Project ID is missing");
+    }
+
     if (editingProductId) {
-      await updateCatalogItem(editingProductId, productData as CatalogItemUpdate);
+      const { data, error } = await updateCatalogItem(editingProductId, {
+        ...productData,
+        project_id: effectiveProjectId,
+      } as CatalogItemUpdate);
+      if (error) {
+        toast.error("Failed to update item", error.message);
+        throw error;
+      }
+      console.log("[Catalog Row Updated]:", {
+        id: data?.id,
+        project_id: data?.project_id,
+        name: data?.name,
+        created_at: data?.created_at,
+      });
     } else {
-      await createCatalogItem(productData as CatalogItemInsert);
+      const { data, error } = await createCatalogItem({
+        ...productData,
+        project_id: effectiveProjectId,
+      } as CatalogItemInsert);
+      if (error) {
+        toast.error("Failed to create item", error.message);
+        throw error;
+      }
+      console.log("[Catalog Row Created]:", {
+        id: data?.id,
+        project_id: data?.project_id,
+        name: data?.name,
+        created_at: data?.created_at,
+      });
     }
     toast.success("Saved to catalog");
+    refreshCatalog();
     closeProductEditor();
   };
 
@@ -667,7 +706,7 @@ export default function ProductFullScreenEditor() {
         isEditing={Boolean(editingProductId)}
         onSave={handleSave}
         onClose={closeProductEditor}
-        projectId={projectId!}
+        projectId={effectiveProjectId}
       />
     </div>
   );

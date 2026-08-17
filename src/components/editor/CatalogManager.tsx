@@ -20,36 +20,59 @@ import { cn } from "@/lib/utils";
 import { CURRENCIES } from "@/components/editor/ProductFullScreenEditor";
 import { toast } from "@/store/toastStore";
 
-export default function CatalogManager() {
+interface CatalogManagerProps {
+  projectId?: string;
+}
+
+export default function CatalogManager({ projectId: propProjectId }: CatalogManagerProps) {
   const {
     website,
     isCatalogModalOpen,
     setIsCatalogModalOpen,
     openProductEditor,
     addSection,
+    currentProjectId,
+    catalogVersion,
+    refreshCatalog,
   } = useGeneratedWebsiteStore();
-  const { projectId } = useBuilderStore();
+  const builderProjectId = useBuilderStore((state) => state.projectId);
+  const effectiveProjectId = propProjectId || currentProjectId || builderProjectId;
 
   const [products, setProducts] = useState<CatalogItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
 
-  const loadCatalog = async () => {
-    if (!projectId) return;
+  const loadCatalog = React.useCallback(async () => {
+    if (!effectiveProjectId) return;
     setIsLoading(true);
-    const { data, error } = await getCatalogItems(projectId);
-    if (!error && data) {
+    const { data, error } = await getCatalogItems(effectiveProjectId);
+    if (error) {
+      console.error("[Catalog Fetch Error]:", error);
+      toast.error("Failed to load catalog", error.message);
+    } else if (data) {
       setProducts(data);
     }
     setIsLoading(false);
-  };
+  }, [effectiveProjectId]);
 
   useEffect(() => {
-    if (isCatalogModalOpen) {
-      loadCatalog();
+    let isCancelled = false;
+    if (isCatalogModalOpen && effectiveProjectId) {
+      getCatalogItems(effectiveProjectId).then(({ data, error }) => {
+        if (isCancelled) return;
+        if (error) {
+          console.error("[Catalog Fetch Error]:", error);
+          toast.error("Failed to load catalog", error.message);
+        } else if (data) {
+          setProducts(data);
+        }
+      });
     }
-  }, [isCatalogModalOpen, projectId]);
+    return () => {
+      isCancelled = true;
+    };
+  }, [isCatalogModalOpen, effectiveProjectId, catalogVersion]);
 
   const handleDelete = async (id: string) => {
     if (!confirm("Are you sure you want to delete this item?")) return;
@@ -58,6 +81,7 @@ export default function CatalogManager() {
       toast.error("Failed to delete item");
     } else {
       toast.success("Item deleted");
+      refreshCatalog();
       loadCatalog();
     }
   };
