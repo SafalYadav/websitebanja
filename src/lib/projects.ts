@@ -126,12 +126,21 @@ export async function getProject(projectId: string): Promise<{ data: Project | n
 }
 
 export async function getProjectBySlug(slug: string): Promise<{ data: Project | null; error: Error | null }> {
-  const { data, error } = await supabase
+  const decoded = decodeURIComponent(slug).trim().toLowerCase();
+  const raw = slug.trim().toLowerCase();
+
+  let query = supabase
     .from("projects")
     .select("*")
-    .eq("public_slug", slug)
-    .eq("is_published", true)
-    .maybeSingle();
+    .eq("is_published", true);
+
+  if (decoded !== raw) {
+    query = query.or(`public_slug.eq.${raw},public_slug.eq.${decoded}`);
+  } else {
+    query = query.eq("public_slug", raw);
+  }
+
+  const { data, error } = await query.maybeSingle();
 
   return { data: data as Project | null, error };
 }

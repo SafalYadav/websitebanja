@@ -39,14 +39,31 @@ export type CatalogItemInsert = Omit<CatalogItem, "id" | "user_id" | "created_at
 export type CatalogItemUpdate = Partial<CatalogItemInsert>;
 
 /**
- * Retrieves the current authenticated user with session fallback.
+ * Safe helper to execute promises with a timeout guard.
+ */
+async function withTimeout<T>(promise: PromiseLike<T>, timeoutMs = 10000, errorMsg = "Operation timed out"): Promise<T> {
+  let timer: ReturnType<typeof setTimeout>;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(errorMsg)), timeoutMs);
+  });
+  return Promise.race([promise, timeoutPromise]).finally(() => clearTimeout(timer));
+}
+
+/**
+ * Retrieves the current authenticated user safely without locking or hanging.
  */
 async function getAuthUser() {
   try {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (user) return user;
+    // 1. Check local session storage first (instant, synchronous cache, no network/lock contention)
     const { data: { session } } = await supabase.auth.getSession();
-    return session?.user ?? null;
+    if (session?.user) return session.user;
+
+    // 2. Race getUser() with a 3-second timeout so it never hangs indefinitely
+    const userPromise = supabase.auth.getUser().then(({ data }) => data.user ?? null).catch(() => null);
+    const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 3000));
+    const user = await Promise.race([userPromise, timeoutPromise]);
+
+    return user ?? session?.user ?? null;
   } catch {
     const { data: { session } } = await supabase.auth.getSession();
     return session?.user ?? null;
@@ -61,12 +78,14 @@ export async function getCatalogItems(projectId: string): Promise<{ data: Catalo
   if (!projectId) return { data: null, error: new Error("Project ID is missing.") };
 
   try {
-    const { data, error } = await supabase
+    const query = supabase
       .from("catalog_items")
       .select("*")
       .eq("project_id", projectId)
       .order("display_order", { ascending: true })
       .order("created_at", { ascending: false });
+
+    const { data, error } = await withTimeout(query, 10000, "Fetching catalog timed out.");
 
     if (error) {
       console.error("[getCatalogItems Supabase Error]:", error);
@@ -93,7 +112,7 @@ export async function createCatalogItem(item: CatalogItemInsert): Promise<{ data
   }
 
   try {
-    const { data, error } = await supabase
+    const query = supabase
       .from("catalog_items")
       .insert({
         ...item,
@@ -101,6 +120,8 @@ export async function createCatalogItem(item: CatalogItemInsert): Promise<{ data
       })
       .select()
       .single();
+
+    const { data, error } = await withTimeout(query, 10000, "Catalog save timed out. Please check your network connection.");
 
     if (error) {
       console.error("[createCatalogItem Supabase Error]:", error);
@@ -126,17 +147,23 @@ export async function updateCatalogItem(
   }
 
   try {
-    const { data, error } = await supabase
+    const query = supabase
       .from("catalog_items")
       .update(updates)
       .eq("id", itemId)
       .eq("user_id", user.id)
       .select()
-      .single();
+      .maybeSingle();
+
+    const { data, error } = await withTimeout(query, 10000, "Catalog update timed out. Please check your network connection.");
 
     if (error) {
       console.error("[updateCatalogItem Supabase Error]:", error);
       return { data: null, error: new Error(error.message) };
+    }
+
+    if (!data) {
+      return { data: null, error: new Error("Item not found or unauthorized to edit.") };
     }
 
     return { data: data as CatalogItem, error: null };
@@ -155,11 +182,13 @@ export async function deleteCatalogItem(itemId: string): Promise<{ error: Error 
   }
 
   try {
-    const { error } = await supabase
+    const query = supabase
       .from("catalog_items")
       .delete()
       .eq("id", itemId)
       .eq("user_id", user.id);
+
+    const { error } = await withTimeout(query, 10000, "Catalog delete timed out.");
 
     if (error) {
       console.error("[deleteCatalogItem Supabase Error]:", error);
@@ -192,7 +221,7 @@ export async function updateCatalogOrder(
         .eq("user_id", user.id)
     );
 
-    const results = await Promise.all(promises);
+    const results = await withTimeout(Promise.all(promises), 10000, "Reordering catalog timed out.");
     const firstErr = results.find((r) => r.error)?.error;
 
     if (firstErr) {

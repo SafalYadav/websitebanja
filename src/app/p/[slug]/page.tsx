@@ -6,6 +6,9 @@ import { getCatalogItems } from "@/lib/catalog";
 import type { Metadata } from "next";
 import type { WebsiteData } from "@/types/website";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export async function generateMetadata({
   params,
 }: {

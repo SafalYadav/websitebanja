@@ -61,7 +61,11 @@ export default function EditorTopBar({ onOpenPublishModal, isSaving = false, isE
       let baseSlug = businessName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
       if (!baseSlug) baseSlug = "website";
       const slug = publicSlug || `${baseSlug}-${Math.floor(Math.random() * 10000)}`;
-      const { error } = await publishProject(projectId, slug);
+      const { error } = await publishProject(
+        projectId,
+        slug,
+        (website as unknown as Record<string, unknown>) || undefined
+      );
       if (error) throw error;
       setIsPublished(true);
       setPublicSlug(slug);
