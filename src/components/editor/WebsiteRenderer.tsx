@@ -184,7 +184,7 @@ export default function WebsiteRenderer({
   };
 
   return (
-    <WebsiteUIContext.Provider value={{ publicSlug, onSwitchPage: !isPublic ? handleSwitchPage : undefined }}>
+    <WebsiteUIContext.Provider value={{ publicSlug, onSwitchPage: !isPublic ? handleSwitchPage : undefined, isPublic }}>
       <div
         className="wb-website-root min-h-full w-full transition-colors duration-300 relative"
       style={{

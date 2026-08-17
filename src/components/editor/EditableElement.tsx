@@ -3,6 +3,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useGeneratedWebsiteStore } from "@/store/generatedWebsiteStore";
 import { cn } from "@/lib/utils";
+import { useWebsiteUI } from "@/contexts/WebsiteUIContext";
 import type { ElementType } from "@/types/website";
 import { Edit3, Image as ImageIcon, Sparkles, Check, X } from "lucide-react";
 
@@ -29,12 +30,14 @@ export default function EditableElement({
   allowInlineEdit = true,
   onImageClick,
 }: EditableElementProps) {
+  const { isPublic } = useWebsiteUI();
   const isPreviewMode = useGeneratedWebsiteStore((state) => state.isPreviewMode);
   const selectedElement = useGeneratedWebsiteStore((state) => state.selectedElement);
   const setSelectedElement = useGeneratedWebsiteStore((state) => state.setSelectedElement);
   const updateElementValue = useGeneratedWebsiteStore((state) => state.updateElementValue);
 
   const isSelected =
+    !isPublic &&
     !isPreviewMode &&
     selectedElement?.sectionKey === sectionKey &&
     selectedElement?.elementPath === elementPath;
@@ -53,8 +56,8 @@ export default function EditableElement({
     }
   }, [isEditingInline]);
 
-  // If in pure preview mode, render child without editor wrappers
-  if (isPreviewMode) {
+  // If in pure preview mode or public live mode, render child without editor wrappers
+  if (isPublic || isPreviewMode) {
     return <>{children}</>;
   }
 

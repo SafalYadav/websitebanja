@@ -25,15 +25,24 @@ export default function ImageWithFallback({
   React.useEffect(() => {
     // Reset states for new src
     setHasError(false);
+    setIsLoaded(false);
     
     // Check if the new image is already cached/complete
     if (imgRef.current?.complete) {
-      // Natural width is 0 if it failed to load (broken image), otherwise > 0
-      if (imgRef.current.naturalWidth > 0) {
+      if (imgRef.current.naturalWidth === 0) {
+        // If complete is true but naturalWidth is 0, it might be a broken image,
+        // or Chrome is still decoding it. We check again in a microtask.
+        const timer = setTimeout(() => {
+          if (imgRef.current?.naturalWidth === 0) {
+            setHasError(true);
+          } else {
+            setIsLoaded(true);
+          }
+        }, 50);
+        return () => clearTimeout(timer);
+      } else {
         setIsLoaded(true);
       }
-    } else {
-      setIsLoaded(false);
     }
   }, [src]);
 
