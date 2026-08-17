@@ -111,9 +111,9 @@ export async function GET(
           customDomain: project.custom_domain,
         },
         overview: {
-          pageViews: Math.max(pageViews, 12),
-          ctaClicks: Math.max(ctaClicks, 3),
-          whatsappClicks: Math.max(whatsappClicks, 2),
+          pageViews,
+          ctaClicks,
+          whatsappClicks,
           totalLeads,
           unreadLeads: leads.filter((l) => !l.read).length,
           totalProducts: products.length,

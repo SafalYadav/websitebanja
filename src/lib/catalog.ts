@@ -130,6 +130,7 @@ export async function updateCatalogItem(
       .from("catalog_items")
       .update(updates)
       .eq("id", itemId)
+      .eq("user_id", user.id)
       .select()
       .single();
 
@@ -157,7 +158,8 @@ export async function deleteCatalogItem(itemId: string): Promise<{ error: Error 
     const { error } = await supabase
       .from("catalog_items")
       .delete()
-      .eq("id", itemId);
+      .eq("id", itemId)
+      .eq("user_id", user.id);
 
     if (error) {
       console.error("[deleteCatalogItem Supabase Error]:", error);
@@ -187,6 +189,7 @@ export async function updateCatalogOrder(
         .from("catalog_items")
         .update({ display_order: update.display_order })
         .eq("id", update.id)
+        .eq("user_id", user.id)
     );
 
     const results = await Promise.all(promises);

@@ -59,6 +59,10 @@ interface WebsiteRendererProps {
   isPublic?: boolean;
   activePageSlug?: string;
   publicSlug?: string;
+  whatsappNumber?: string | null;
+  phone?: string | null;
+  whatsappMessage?: string | null;
+  whatsappEnabled?: boolean | null;
 }
 
 export default function WebsiteRenderer({
@@ -72,6 +76,10 @@ export default function WebsiteRenderer({
   isPublic = false,
   activePageSlug,
   publicSlug,
+  whatsappNumber,
+  phone,
+  whatsappMessage,
+  whatsappEnabled,
 }: WebsiteRendererProps) {
   const storeWebsite = useGeneratedWebsiteStore((state) => state.website);
   const projectId = useBuilderStore((state) => state.projectId);
@@ -84,6 +92,11 @@ export default function WebsiteRenderer({
   const storePhone = useBuilderStore((state) => state.phone);
   const storeWhatsappMessage = useBuilderStore((state) => state.whatsappMessage);
   const storeWhatsappEnabled = useBuilderStore((state) => state.whatsappEnabled);
+
+  const resolvedWhatsappNumber = isPublic ? (whatsappNumber ?? "") : storeWhatsappNumber;
+  const resolvedPhone = isPublic ? (phone ?? "") : storePhone;
+  const resolvedWhatsappMessage = isPublic ? (whatsappMessage ?? "") : storeWhatsappMessage;
+  const resolvedWhatsappEnabled = isPublic ? (whatsappEnabled ?? false) : storeWhatsappEnabled;
   const selectedSection = useGeneratedWebsiteStore((state) => state.selectedSection);
   const setSelectedSection = useGeneratedWebsiteStore((state) => state.setSelectedSection);
   const setSelectedElement = useGeneratedWebsiteStore((state) => state.setSelectedElement);
@@ -334,7 +347,7 @@ export default function WebsiteRenderer({
                 sectionKey={key}
                 data={productsData}
                 catalogItems={finalCatalogItems}
-                whatsappNumber={storeWhatsappNumber || storePhone}
+                whatsappNumber={resolvedWhatsappNumber || resolvedPhone}
                 isPublic={isPublic}
               />
             );
@@ -408,10 +421,10 @@ export default function WebsiteRenderer({
       })}
 
       {/* Floating WhatsApp Quick Action Button */}
-      {storeWhatsappEnabled && (storeWhatsappNumber || storePhone) && (
+      {resolvedWhatsappEnabled && (resolvedWhatsappNumber || resolvedPhone) && (
         <a
-          href={`https://wa.me/${(storeWhatsappNumber || storePhone).replace(/[^0-9]/g, "")}?text=${encodeURIComponent(
-            storeWhatsappMessage || "Hi, I would like to know more about your services."
+          href={`https://wa.me/${(resolvedWhatsappNumber || resolvedPhone).replace(/[^0-9]/g, "")}?text=${encodeURIComponent(
+            resolvedWhatsappMessage || "Hi, I would like to know more about your services."
           )}`}
           target="_blank"
           rel="noopener noreferrer"

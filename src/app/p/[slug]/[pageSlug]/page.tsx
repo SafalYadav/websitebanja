@@ -48,11 +48,11 @@ export default async function PublicWebsiteSubPage({
 
   const { snapshot_data } = await getPublishedSnapshot(project.id);
 
-  if (!snapshot_data && (!project.json_data || Object.keys(project.json_data).length === 0)) {
+  if (!snapshot_data || Object.keys(snapshot_data).length === 0) {
     notFound();
   }
 
-  const websiteData = (snapshot_data || project.json_data) as WebsiteData;
+  const websiteData = snapshot_data as WebsiteData;
   const pages = websiteData.pages || [];
   const targetPage = pages.find((p) => p.slug === resolvedParams.pageSlug);
 
@@ -76,6 +76,10 @@ export default async function PublicWebsiteSubPage({
         isPublic={true}
         publicSlug={resolvedParams.slug}
         activePageSlug={resolvedParams.pageSlug}
+        whatsappNumber={project.whatsapp_number}
+        phone={project.phone}
+        whatsappMessage={project.whatsapp_message}
+        whatsappEnabled={project.whatsapp_enabled}
       />
 
       {/* Floating WebsiteBanja Brand Badge */}

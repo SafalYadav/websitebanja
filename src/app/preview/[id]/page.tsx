@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { getPreviewLinkData } from "@/lib/projects";
+import { getPreviewLinkData, getProject } from "@/lib/projects";
 import { getCatalogItems, type CatalogItem } from "@/lib/catalog";
 import WebsiteRenderer from "@/components/editor/WebsiteRenderer";
 import type { WebsiteData } from "@/types/website";
@@ -29,14 +29,32 @@ export default async function PreviewPage({ params }: { params: { id: string } }
   const bgColor = themeConfig?.colors?.background || "#ffffff";
 
   let catalogItems: CatalogItem[] = [];
+  let project = null;
   if (projectId) {
     const { data: items } = await getCatalogItems(projectId);
     if (items) catalogItems = items;
+    
+    const { data: pData } = await getProject(projectId);
+    if (pData) project = pData;
   }
 
   return (
     <div className="min-h-screen w-full" style={{ backgroundColor: bgColor }}>
-      <WebsiteRenderer data={previewData} catalogItems={catalogItems} isPublic={true} activePageSlug="" />
+      <WebsiteRenderer 
+        data={previewData} 
+        catalogItems={catalogItems} 
+        isPublic={true} 
+        activePageSlug=""
+        pColor={project?.primary_color}
+        sColor={project?.secondary_color}
+        brandStyle={project?.style}
+        category={project?.category}
+        businessName={project?.business_name || project?.name}
+        whatsappNumber={project?.whatsapp_number}
+        phone={project?.phone}
+        whatsappMessage={project?.whatsapp_message}
+        whatsappEnabled={project?.whatsapp_enabled}
+      />
     </div>
   );
 }

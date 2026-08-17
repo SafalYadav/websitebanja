@@ -170,20 +170,16 @@ export async function publishProject(
 
   const snapshotToSave = latestJsonData || currentProject.json_data || {};
 
-  // Create published version snapshot
-  try {
-    const { error: snapshotError } = await supabase
-      .from("published_versions")
-      .insert({
-        project_id: projectId,
-        snapshot_data: snapshotToSave,
-      });
+  // Create published version snapshot — this MUST succeed for publish to proceed
+  const { error: snapshotError } = await supabase
+    .from("published_versions")
+    .insert({
+      project_id: projectId,
+      snapshot_data: snapshotToSave,
+    });
 
-    if (snapshotError) {
-      console.warn("[Publish Snapshot Notice]:", snapshotError.message);
-    }
-  } catch (snapErr) {
-    console.warn("[Publish Snapshot Notice]:", snapErr);
+  if (snapshotError) {
+    return { data: null, error: new Error(`Failed to create publish snapshot: ${snapshotError.message}`) };
   }
 
   const updatePayload: Record<string, unknown> = {

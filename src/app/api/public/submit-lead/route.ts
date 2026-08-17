@@ -49,21 +49,11 @@ export async function POST(req: NextRequest) {
       read: false,
     };
 
-    const currentJson = (projectData.json_data || {}) as WebsiteData;
-    const currentLeads = currentJson.leads || [];
-    const updatedLeads = [newLead, ...currentLeads];
-
-    // Save lead into project json_data
-    const { error: updateErr } = await supabase
-      .from("projects")
-      .update({
-        json_data: {
-          ...currentJson,
-          leads: updatedLeads,
-        },
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", projectData.id);
+    // Atomically append lead to project json_data->'leads' using RPC
+    const { error: updateErr } = await supabase.rpc("append_lead_to_project", {
+      p_project_id: projectData.id,
+      p_lead_data: newLead,
+    });
 
     if (updateErr) {
       console.warn("[Submit Lead DB update warning]", updateErr);
