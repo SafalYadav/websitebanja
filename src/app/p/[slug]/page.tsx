@@ -24,9 +24,10 @@ export async function generateMetadata({
   }
   
   const jsonData = snapshot_data as WebsiteData;
+  const meta = (snapshot_data._project_meta as Record<string, any>) || data;
   const homePage = jsonData.pages?.find((p) => p.isHome) || jsonData.pages?.[0];
-  const pageTitle = homePage?.seo?.title || `${data.business_name || data.name} | Official Site`;
-  const pageDesc = homePage?.seo?.description || data.description || "A responsive modern website created with WebsiteBanja AI";
+  const pageTitle = homePage?.seo?.title || `${meta.business_name || meta.name} | Official Site`;
+  const pageDesc = homePage?.seo?.description || meta.description || "A responsive modern website created with WebsiteBanja AI";
 
   return {
     title: pageTitle,

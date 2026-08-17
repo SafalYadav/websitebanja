@@ -24,10 +24,11 @@ export async function generateMetadata({
   }
   
   const jsonData = snapshot_data as WebsiteData;
+  const meta = (snapshot_data._project_meta as Record<string, any>) || data;
   const currentPage = jsonData.pages?.find((p) => p.slug === resolvedParams.pageSlug);
-  if (!currentPage) return { title: `${data.business_name || data.name}` };
+  if (!currentPage) return { title: `${meta.business_name || meta.name}` };
 
-  const pageTitle = currentPage.seo?.title || `${currentPage.title} | ${data.business_name || data.name}`;
+  const pageTitle = currentPage.seo?.title || `${currentPage.title} | ${meta.business_name || meta.name}`;
   const pageDesc = currentPage.seo?.description || `Explore the ${currentPage.title} page.`;
 
   return {

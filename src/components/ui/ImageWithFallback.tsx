@@ -23,8 +23,17 @@ export default function ImageWithFallback({
   const imgRef = React.useRef<HTMLImageElement>(null);
 
   React.useEffect(() => {
+    // Reset states for new src
+    setHasError(false);
+    
+    // Check if the new image is already cached/complete
     if (imgRef.current?.complete) {
-      setIsLoaded(true);
+      // Natural width is 0 if it failed to load (broken image), otherwise > 0
+      if (imgRef.current.naturalWidth > 0) {
+        setIsLoaded(true);
+      }
+    } else {
+      setIsLoaded(false);
     }
   }, [src]);
 
@@ -54,6 +63,7 @@ export default function ImageWithFallback({
       {/* Actual Image */}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
+        key={src || 'empty'}
         ref={imgRef}
         src={src}
         alt={alt}
