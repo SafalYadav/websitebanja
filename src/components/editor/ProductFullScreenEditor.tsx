@@ -567,19 +567,32 @@ function ProductEditorForm({ initialProduct, onSave, onClose, isEditing, project
               <div>
                 <div className="flex items-baseline gap-2 mb-3 flex-wrap">
                   {itemType === "rental" ? (
-                    <>
-                      {dailyPrice ? (
-                        <span className="text-lg font-black text-zinc-900 dark:text-white">
-                          {CURRENCIES.find(c => c.code === currencyCode)?.symbol || "₹"}{dailyPrice}/day
-                        </span>
-                      ) : hourlyPrice ? (
-                        <span className="text-lg font-black text-zinc-900 dark:text-white">
-                          {CURRENCIES.find(c => c.code === currencyCode)?.symbol || "₹"}{hourlyPrice}/hr
-                        </span>
-                      ) : (
-                        <span className="text-sm font-bold text-zinc-400">Ask for pricing</span>
-                      )}
-                    </>
+                    (() => {
+                      const sym = CURRENCIES.find((c) => c.code === currencyCode)?.symbol || "₹";
+                      const loc = CURRENCIES.find((c) => c.code === currencyCode)?.locale || "en-IN";
+                      const rates: string[] = [];
+                      if (hourlyPrice && Number(hourlyPrice) > 0) rates.push(`${sym}${Number(hourlyPrice).toLocaleString(loc)}/hr`);
+                      if (dailyPrice && Number(dailyPrice) > 0) rates.push(`${sym}${Number(dailyPrice).toLocaleString(loc)}/day`);
+                      if (weeklyPrice && Number(weeklyPrice) > 0) rates.push(`${sym}${Number(weeklyPrice).toLocaleString(loc)}/wk`);
+                      if (monthlyPrice && Number(monthlyPrice) > 0) rates.push(`${sym}${Number(monthlyPrice).toLocaleString(loc)}/mo`);
+
+                      if (rates.length === 0) {
+                        return <span className="text-sm font-bold text-zinc-400">Ask for pricing</span>;
+                      }
+
+                      return (
+                        <div className="flex flex-wrap items-baseline gap-1.5">
+                          <span className="text-lg font-black text-zinc-900 dark:text-white">
+                            {rates[0]}
+                          </span>
+                          {rates.slice(1).map((r, i) => (
+                            <span key={i} className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 rounded-md">
+                              {r}
+                            </span>
+                          ))}
+                        </div>
+                      );
+                    })()
                   ) : itemType !== "showcase" ? (
                     <>
                       <span className="text-xl font-black text-zinc-900 dark:text-white">

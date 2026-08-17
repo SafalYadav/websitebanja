@@ -296,12 +296,31 @@ export default function CatalogManager({ projectId: propProjectId }: CatalogMana
                       </div>
 
                       <div className="flex items-center justify-between pt-2 border-t border-zinc-100 dark:border-white/5">
-                        <div className="flex items-baseline gap-1.5">
+                        <div className="flex items-baseline gap-1.5 flex-wrap">
                           {product.item_type === 'rental' ? (
-                            <span className="text-xs font-black text-zinc-900 dark:text-white">
-                              {CURRENCIES.find(c => c.code === product.currency_code)?.symbol || "₹"}
-                              {product.daily_price ? `${product.daily_price}/day` : product.hourly_price ? `${product.hourly_price}/hr` : "Ask for price"}
-                            </span>
+                            (() => {
+                              const sym = CURRENCIES.find(c => c.code === product.currency_code)?.symbol || "₹";
+                              const loc = CURRENCIES.find(c => c.code === product.currency_code)?.locale || "en-IN";
+                              const rates: string[] = [];
+                              if (product.hourly_price && Number(product.hourly_price) > 0) rates.push(`${sym}${Number(product.hourly_price).toLocaleString(loc)}/hr`);
+                              if (product.daily_price && Number(product.daily_price) > 0) rates.push(`${sym}${Number(product.daily_price).toLocaleString(loc)}/day`);
+                              if (product.weekly_price && Number(product.weekly_price) > 0) rates.push(`${sym}${Number(product.weekly_price).toLocaleString(loc)}/wk`);
+                              if (product.monthly_price && Number(product.monthly_price) > 0) rates.push(`${sym}${Number(product.monthly_price).toLocaleString(loc)}/mo`);
+
+                              if (rates.length === 0) return <span className="text-xs font-black text-zinc-400">Ask for price</span>;
+                              return (
+                                <div className="flex flex-wrap items-baseline gap-1">
+                                  <span className="text-xs font-black text-zinc-900 dark:text-white">
+                                    {rates[0]}
+                                  </span>
+                                  {rates.slice(1).map((r, i) => (
+                                    <span key={i} className="text-[9px] font-semibold text-zinc-500 bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded">
+                                      {r}
+                                    </span>
+                                  ))}
+                                </div>
+                              );
+                            })()
                           ) : (
                             <>
                               <span className="text-sm font-black text-zinc-900 dark:text-white">

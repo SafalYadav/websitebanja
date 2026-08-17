@@ -118,13 +118,28 @@ export default function ProductsSection({
           {filteredProducts.map((product, idx) => {
             const displayImage = product.images?.[0] || "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=800&auto=format&fit=crop&q=80";
             
-            // Format Price Text for WhatsApp
+            // Format Price Text for WhatsApp & Display
             const currencySymbol = CURRENCIES.find(c => c.code === product.currency_code)?.symbol || "₹";
+            const locale = CURRENCIES.find(c => c.code === product.currency_code)?.locale || "en-IN";
             let priceText = "Price on Request";
+            const rentalRates: string[] = [];
+
             if (product.item_type === "rental") {
-              priceText = product.daily_price ? `${currencySymbol}${product.daily_price}/day` : (product.hourly_price ? `${currencySymbol}${product.hourly_price}/hr` : "Ask for price");
+              if (product.hourly_price && Number(product.hourly_price) > 0) {
+                rentalRates.push(`${currencySymbol}${Number(product.hourly_price).toLocaleString(locale)}/hr`);
+              }
+              if (product.daily_price && Number(product.daily_price) > 0) {
+                rentalRates.push(`${currencySymbol}${Number(product.daily_price).toLocaleString(locale)}/day`);
+              }
+              if (product.weekly_price && Number(product.weekly_price) > 0) {
+                rentalRates.push(`${currencySymbol}${Number(product.weekly_price).toLocaleString(locale)}/wk`);
+              }
+              if (product.monthly_price && Number(product.monthly_price) > 0) {
+                rentalRates.push(`${currencySymbol}${Number(product.monthly_price).toLocaleString(locale)}/mo`);
+              }
+              priceText = rentalRates.length > 0 ? rentalRates.join(" • ") : "Ask for price";
             } else if (product.item_type !== "showcase" && product.price) {
-              priceText = `${currencySymbol}${product.price}`;
+              priceText = `${currencySymbol}${product.price.toLocaleString(locale)}`;
             }
 
             const discountPercent = product.original_price && product.price && product.original_price > product.price
@@ -197,19 +212,20 @@ export default function ProductsSection({
                       )}
                       <div className="flex items-baseline gap-1.5 flex-wrap">
                         {product.item_type === "rental" ? (
-                          <>
-                            {product.daily_price ? (
+                          rentalRates.length > 0 ? (
+                            <div className="flex flex-wrap items-baseline gap-1.5">
                               <span className="text-xl font-extrabold text-zinc-900 dark:text-white">
-                                {currencySymbol}{product.daily_price}/day
+                                {rentalRates[0]}
                               </span>
-                            ) : product.hourly_price ? (
-                              <span className="text-xl font-extrabold text-zinc-900 dark:text-white">
-                                {currencySymbol}{product.hourly_price}/hr
-                              </span>
-                            ) : (
-                              <span className="text-sm font-bold text-zinc-400">Ask for pricing</span>
-                            )}
-                          </>
+                              {rentalRates.slice(1).map((r, i) => (
+                                <span key={i} className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 rounded-md">
+                                  {r}
+                                </span>
+                              ))}
+                            </div>
+                          ) : (
+                            <span className="text-sm font-bold text-zinc-400">Ask for pricing</span>
+                          )
                         ) : product.item_type !== "showcase" ? (
                           <>
                             <span className="text-xl font-extrabold text-zinc-900 dark:text-white">
