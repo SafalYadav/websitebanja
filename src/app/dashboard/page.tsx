@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { motion, useReducedMotion } from "framer-motion";
 import { signOut } from "@/lib/auth";
-import { editorRoute, homeRoute, loginRoute } from "@/lib/editorRoutes";
+import { authCallbackRoute, editorRoute, homeRoute, loginRoute } from "@/lib/editorRoutes";
 import {
   createProject,
   getProjects,
@@ -71,6 +71,12 @@ export default function Dashboard() {
 
   useEffect(() => {
     async function initialize() {
+      // Fallback: If code is present in query parameters, forward to dedicated auth callback
+      if (typeof window !== "undefined" && window.location.search.includes("code=")) {
+        router.replace(`${authCallbackRoute()}${window.location.search}`);
+        return;
+      }
+
       const {
         data: { session },
       } = await supabase.auth.getSession();

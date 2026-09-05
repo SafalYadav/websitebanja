@@ -33,6 +33,10 @@ export function resetPasswordRoute() {
   return "/reset-password";
 }
 
+export function authCallbackRoute() {
+  return "/auth/callback";
+}
+
 export function homeRoute() {
   return "/";
 }

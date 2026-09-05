@@ -19,7 +19,7 @@ export async function signInWithGoogle() {
   return await supabase.auth.signInWithOAuth({
     provider: "google",
     options: {
-      redirectTo: `${origin}/dashboard`,
+      redirectTo: `${origin}/auth/callback`,
     },
   });
 }
