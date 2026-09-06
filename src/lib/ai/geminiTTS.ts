@@ -108,9 +108,9 @@ export async function generateGeminiSpeech(
     return cached;
   }
 
-  // Model prioritization: gemini-2.5-flash-preview-tts is faster and not blocked by the 10-req/day limit
-  const primaryModel = process.env.GEMINI_TTS_MODEL || options?.model || 'gemini-2.5-flash-preview-tts';
-  const fallbackModel = primaryModel === 'gemini-2.5-flash-preview-tts' ? 'gemini-3.1-flash-tts-preview' : 'gemini-2.5-flash-preview-tts';
+  // Model prioritization: gemini-3.1-flash-tts-preview is tested and active
+  const primaryModel = process.env.GEMINI_TTS_MODEL || options?.model || 'gemini-3.1-flash-tts-preview';
+  const fallbackModel = primaryModel === 'gemini-3.1-flash-tts-preview' ? 'gemini-2.5-flash-preview-tts' : 'gemini-3.1-flash-tts-preview';
 
   const ai = new GoogleGenAI({ apiKey });
   const t0 = Date.now();

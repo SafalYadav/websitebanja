@@ -205,12 +205,17 @@ export function useVoiceAgent() {
       const tTtsStart = performance.now();
       console.log(`[VoiceDebug] voice request started: "${trimmedText}"`);
 
+      const abortController = new AbortController();
+      const abortTimeout = setTimeout(() => abortController.abort(), 18000);
+
       try {
         const res = await fetch("/api/agent/voice", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ text: trimmedText }),
+          signal: abortController.signal,
         });
+        clearTimeout(abortTimeout);
 
         if (playId !== activePlayIdRef.current) return;
 

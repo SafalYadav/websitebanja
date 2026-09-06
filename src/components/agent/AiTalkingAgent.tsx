@@ -162,6 +162,7 @@ export default function AiTalkingAgent({
   }, [messages, scrollToBottom]);
 
   const hasSpokenInitialRef = useRef(false);
+  const hasCompletedGreetingRef = useRef(false);
 
   // Continuous Conversational Voice Turn Progression - Auto-unmutes mic at user's turn
   const triggerNextVoiceTurn = useCallback(() => {
@@ -194,12 +195,12 @@ export default function AiTalkingAgent({
       }
     }
 
-    if (!hasSpokenInitialRef.current) {
-      hasSpokenInitialRef.current = true;
+    if (!hasCompletedGreetingRef.current && !isSpeaking) {
       speak(
         INITIAL_GREETING.speechText || INITIAL_GREETING.content,
         undefined,
         () => {
+          hasCompletedGreetingRef.current = true;
           // Playback of initial greeting completed: automatically open mic and listen to user!
           if (isContinuousModeRef.current) {
             console.log("[VoiceTurn] Initial greeting completed. Auto-opening mic for user response!");
@@ -210,6 +211,9 @@ export default function AiTalkingAgent({
               }
             }, 350);
           }
+        },
+        () => {
+          hasCompletedGreetingRef.current = true;
         }
       );
     } else if (!isSpeaking) {
@@ -234,12 +238,13 @@ export default function AiTalkingAgent({
   // Read initial greeting aloud once component mounts (if not muted and browser permits)
   useEffect(() => {
     const timer = setTimeout(() => {
-      if (!hasSpokenInitialRef.current) {
+      if (!hasSpokenInitialRef.current && !hasCompletedGreetingRef.current) {
         hasSpokenInitialRef.current = true;
         speak(
           INITIAL_GREETING.speechText || INITIAL_GREETING.content,
           undefined,
           () => {
+            hasCompletedGreetingRef.current = true;
             if (isContinuousModeRef.current) {
               setVoiceState("ready");
               setTimeout(() => {
@@ -248,6 +253,9 @@ export default function AiTalkingAgent({
                 }
               }, 350);
             }
+          },
+          () => {
+            hasCompletedGreetingRef.current = true;
           }
         );
       }

@@ -6,6 +6,7 @@ import { streamOpenAiSpeech, isOpenAiTtsAvailable } from '@/lib/ai/openAiTTS';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+export const maxDuration = 30;
 
 export async function POST(req: NextRequest) {
   try {
@@ -53,6 +54,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const isServerless = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
+
     const stream = new ReadableStream({
       async start(controller) {
         let isClosed = false;
@@ -87,7 +90,7 @@ export async function POST(req: NextRequest) {
         };
 
         // Helper: Stream OpenAI linear 24kHz PCM
-        const runOpenAiFallback = async () => {
+        const runOpenAiPlayback = async () => {
           if (!isOpenAiTtsAvailable()) {
             throw new Error('OpenAI voice synthesis is not configured.');
           }
@@ -103,7 +106,7 @@ export async function POST(req: NextRequest) {
         };
 
         // Helper: Stream Gemini Batch TTS (stripped 44-byte WAV header = raw 24kHz PCM)
-        const runGeminiBatchFallback = async () => {
+        const runGeminiBatchPlayback = async () => {
           const { audioBuffer } = await generateGeminiSpeech(trimmedText, {
             voice: typeof voice === 'string' ? voice : undefined,
           });
@@ -117,40 +120,73 @@ export async function POST(req: NextRequest) {
         };
 
         try {
-          if (hasGemini) {
-            try {
-              // Priority 1: Gemini Live verbatim 24kHz PCM streaming
-              await streamGeminiLiveVoice(
-                trimmedText,
-                (chunk) => {
-                  safeEnqueue(chunk);
-                },
-                { voice: typeof voice === 'string' ? voice : undefined }
-              );
-              safeClose();
-              return;
-            } catch (liveErr) {
-              console.warn('[API /api/agent/voice] Gemini Live failed, attempting Gemini batch fallback:', liveErr);
-              if (isClosed) return;
+          if (isServerless) {
+            // On Vercel / Serverless:
+            // Outbound WebSockets hang or pause in Lambda environments.
+            // Use rock-solid HTTP streaming. OpenAI TTS starts streaming chunks in ~2.5s with zero timeout risk.
+            if (hasOpenAi) {
               try {
-                // Priority 2: Gemini Batch TTS
-                await runGeminiBatchFallback();
+                await runOpenAiPlayback();
                 safeClose();
                 return;
-              } catch (batchErr) {
-                console.warn('[API /api/agent/voice] Gemini batch failed, attempting OpenAI fallback:', batchErr);
+              } catch (openAiErr) {
+                console.warn('[API /api/agent/voice] Serverless OpenAI stream failed, attempting Gemini batch:', openAiErr);
                 if (isClosed) return;
-                // Priority 3: OpenAI TTS
-                await runOpenAiFallback();
+                if (hasGemini) {
+                  await runGeminiBatchPlayback();
+                  safeClose();
+                  return;
+                }
+                throw openAiErr;
+              }
+            } else if (hasGemini) {
+              await runGeminiBatchPlayback();
+              safeClose();
+              return;
+            }
+          } else {
+            // On Localhost:
+            // Prefer ultra-low-latency (~670ms) Gemini Live verbatim streaming over WebSocket
+            if (hasGemini) {
+              try {
+                const livePromise = streamGeminiLiveVoice(
+                  trimmedText,
+                  (chunk) => {
+                    safeEnqueue(chunk);
+                  },
+                  { voice: typeof voice === 'string' ? voice : undefined }
+                );
+
+                await Promise.race([
+                  livePromise,
+                  new Promise((_, reject) =>
+                    setTimeout(() => reject(new Error('Gemini Live WebSocket stream timeout')), 4000)
+                  ),
+                ]);
+                safeClose();
+                return;
+              } catch (liveErr) {
+                console.warn('[API /api/agent/voice] Local Gemini Live failed, attempting fallback:', liveErr);
+                if (isClosed) return;
+                if (hasOpenAi) {
+                  try {
+                    await runOpenAiPlayback();
+                    safeClose();
+                    return;
+                  } catch (openAiErr) {
+                    console.warn('[API /api/agent/voice] Local OpenAI fallback failed:', openAiErr);
+                  }
+                }
+                if (isClosed) return;
+                await runGeminiBatchPlayback();
                 safeClose();
                 return;
               }
+            } else if (hasOpenAi) {
+              await runOpenAiPlayback();
+              safeClose();
+              return;
             }
-          } else {
-            // Direct OpenAI TTS when Gemini credentials are not present (e.g. Vercel deployment)
-            await runOpenAiFallback();
-            safeClose();
-            return;
           }
         } catch (fatalErr) {
           console.error('[API /api/agent/voice] All voice synthesis providers failed:', fatalErr);
