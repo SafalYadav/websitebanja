@@ -32,8 +32,16 @@ export async function prewarmVoiceCache(): Promise<void> {
   }
 }
 
+export function isGeminiLiveAvailable(): boolean {
+  return Boolean(
+    (process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY.trim().length > 0) ||
+    (process.env.GOOGLE_API_KEY && process.env.GOOGLE_API_KEY.trim().length > 0) ||
+    (process.env.GOOGLE_GENAI_API_KEY && process.env.GOOGLE_GENAI_API_KEY.trim().length > 0)
+  );
+}
+
 // Auto-trigger background pre-warm on module load during runtime (skip during build phase)
-if (process.env.GEMINI_API_KEY && process.env.NEXT_PHASE !== 'phase-production-build') {
+if (isGeminiLiveAvailable() && process.env.NEXT_PHASE !== 'phase-production-build') {
   setTimeout(() => {
     void prewarmVoiceCache();
   }, 500);
@@ -55,9 +63,12 @@ export async function streamGeminiLiveVoice(
   onChunk: (chunk: Buffer) => void,
   options?: { voice?: string; model?: string }
 ): Promise<StreamLiveVoiceResult> {
-  const apiKey = process.env.GEMINI_API_KEY;
+  const apiKey =
+    process.env.GEMINI_API_KEY ||
+    process.env.GOOGLE_API_KEY ||
+    process.env.GOOGLE_GENAI_API_KEY;
   if (!apiKey) {
-    throw new Error('GEMINI_API_KEY is not configured on the server');
+    throw new Error('Gemini API key is not configured on the server');
   }
 
   const cleanText = text.trim();

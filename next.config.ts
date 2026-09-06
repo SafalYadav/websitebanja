@@ -5,8 +5,9 @@ const cspHeader = `
   script-src 'self' 'unsafe-eval' 'unsafe-inline';
   style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
   font-src 'self' https://fonts.gstatic.com;
-  connect-src 'self' https://*.supabase.co https://api.openai.com https://accounts.google.com;
+  connect-src 'self' https://*.supabase.co https://api.openai.com https://accounts.google.com https://generativelanguage.googleapis.com wss://generativelanguage.googleapis.com;
   img-src 'self' blob: data: https:;
+  media-src 'self' blob: data:;
   frame-src 'self' https://accounts.google.com;
 `.replace(/\s{2,}/g, ' ').trim();
 

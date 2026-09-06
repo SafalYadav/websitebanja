@@ -67,7 +67,11 @@ export function pcmToWav(
  * Checks if Gemini TTS can be invoked (requires GEMINI_API_KEY).
  */
 export function isGeminiTtsAvailable(): boolean {
-  return Boolean(process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY.trim().length > 0);
+  return Boolean(
+    (process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY.trim().length > 0) ||
+    (process.env.GOOGLE_API_KEY && process.env.GOOGLE_API_KEY.trim().length > 0) ||
+    (process.env.GOOGLE_GENAI_API_KEY && process.env.GOOGLE_GENAI_API_KEY.trim().length > 0)
+  );
 }
 
 /**
@@ -78,9 +82,12 @@ export async function generateGeminiSpeech(
   text: string,
   options?: GeminiTtsOptions
 ): Promise<GeminiTtsResult> {
-  const apiKey = process.env.GEMINI_API_KEY;
+  const apiKey =
+    process.env.GEMINI_API_KEY ||
+    process.env.GOOGLE_API_KEY ||
+    process.env.GOOGLE_GENAI_API_KEY;
   if (!apiKey) {
-    throw new Error('GEMINI_API_KEY environment variable is not configured');
+    throw new Error('GEMINI_API_KEY or GOOGLE_API_KEY environment variable is not configured');
   }
 
   const cleanText = text.trim();
