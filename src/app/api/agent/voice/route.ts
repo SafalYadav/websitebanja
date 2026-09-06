@@ -1,7 +1,7 @@
 // src/app/api/agent/voice/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { streamGeminiLiveVoice, isGeminiLiveAvailable } from '@/lib/ai/geminiLiveVoice';
-import { generateGeminiSpeech, isGeminiTtsAvailable } from '@/lib/ai/geminiTTS';
+import { generateGeminiSpeech, isGeminiTtsAvailable, streamGeminiTtsAudio } from '@/lib/ai/geminiTTS';
 import { streamOpenAiSpeech, isOpenAiTtsAvailable } from '@/lib/ai/openAiTTS';
 
 export const runtime = 'nodejs';
@@ -120,73 +120,41 @@ export async function POST(req: NextRequest) {
         };
 
         try {
-          if (isServerless) {
-            // On Vercel / Serverless:
-            // Outbound WebSockets hang in Lambda environments, so use HTTP REST.
-            // When Gemini is configured, use Gemini Neural Voice (Aoede) so voice matches localhost identically.
-            if (hasGemini) {
+          if (hasGemini) {
+            try {
+              // Universal Primary: Google Gemini 3.1 Flash TTS (voice: Aoede)
+              // Uses HTTPS REST streaming, producing 100% identical voice and audio on both Localhost and Vercel
+              await streamGeminiTtsAudio(
+                trimmedText,
+                (chunk) => {
+                  safeEnqueue(chunk);
+                },
+                { voice: typeof voice === 'string' ? voice : undefined }
+              );
+              safeClose();
+              return;
+            } catch (geminiStreamErr) {
+              console.warn('[API /api/agent/voice] Gemini TTS stream failed, attempting fallback:', geminiStreamErr);
+              if (isClosed) return;
               try {
                 await runGeminiBatchPlayback();
                 safeClose();
                 return;
-              } catch (geminiErr) {
-                console.warn('[API /api/agent/voice] Serverless Gemini TTS failed, attempting OpenAI fallback:', geminiErr);
-                if (isClosed) return;
-                if (hasOpenAi) {
-                  await runOpenAiPlayback();
-                  safeClose();
-                  return;
-                }
-                throw geminiErr;
+              } catch (batchErr) {
+                console.warn('[API /api/agent/voice] Gemini batch failed, attempting OpenAI fallback:', batchErr);
               }
-            } else if (hasOpenAi) {
-              await runOpenAiPlayback();
-              safeClose();
-              return;
-            }
-          } else {
-            // On Localhost:
-            // Prefer ultra-low-latency (~670ms) Gemini Live verbatim streaming over WebSocket
-            if (hasGemini) {
-              try {
-                const livePromise = streamGeminiLiveVoice(
-                  trimmedText,
-                  (chunk) => {
-                    safeEnqueue(chunk);
-                  },
-                  { voice: typeof voice === 'string' ? voice : undefined }
-                );
-
-                await Promise.race([
-                  livePromise,
-                  new Promise((_, reject) =>
-                    setTimeout(() => reject(new Error('Gemini Live WebSocket stream timeout')), 4000)
-                  ),
-                ]);
-                safeClose();
-                return;
-              } catch (liveErr) {
-                console.warn('[API /api/agent/voice] Local Gemini Live failed, attempting fallback:', liveErr);
-                if (isClosed) return;
-                if (hasOpenAi) {
-                  try {
-                    await runOpenAiPlayback();
-                    safeClose();
-                    return;
-                  } catch (openAiErr) {
-                    console.warn('[API /api/agent/voice] Local OpenAI fallback failed:', openAiErr);
-                  }
-                }
-                if (isClosed) return;
-                await runGeminiBatchPlayback();
+              if (isClosed) return;
+              if (hasOpenAi) {
+                await runOpenAiPlayback();
                 safeClose();
                 return;
               }
-            } else if (hasOpenAi) {
-              await runOpenAiPlayback();
-              safeClose();
-              return;
+              throw geminiStreamErr;
             }
+          } else if (hasOpenAi) {
+            await runOpenAiPlayback();
+            safeClose();
+            return;
           }
         } catch (fatalErr) {
           console.error('[API /api/agent/voice] All voice synthesis providers failed:', fatalErr);

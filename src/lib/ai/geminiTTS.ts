@@ -177,3 +177,68 @@ export async function generateGeminiSpeech(
     throw new Error(`Gemini Neural TTS generation failed: ${message}`);
   }
 }
+
+/**
+ * Streams raw 24kHz 16-bit linear PCM audio chunks using Google Gemini 3.1 Flash TTS.
+ * This runs identically on localhost and Vercel serverless over standard HTTPS REST.
+ */
+export async function streamGeminiTtsAudio(
+  text: string,
+  onChunk: (chunk: Buffer) => void,
+  options?: { voice?: string; model?: string }
+): Promise<{ totalBytes: number; firstChunkTime: number }> {
+  const apiKey =
+    process.env.GEMINI_API_KEY ||
+    process.env.GOOGLE_API_KEY ||
+    process.env.GOOGLE_GENAI_API_KEY;
+  if (!apiKey) {
+    throw new Error('Gemini API key is not configured on the server');
+  }
+
+  const cleanText = text.trim();
+  if (!cleanText) {
+    throw new Error('Speech text cannot be empty');
+  }
+
+  const voiceName = process.env.GEMINI_TTS_VOICE || options?.voice || 'Aoede';
+  const targetModel = options?.model || process.env.GEMINI_TTS_MODEL || 'gemini-3.1-flash-tts-preview';
+
+  const ai = new GoogleGenAI({ apiKey });
+  const t0 = performance.now();
+  let firstChunkTime = 0;
+  let totalBytes = 0;
+
+  const responseStream = await ai.models.generateContentStream({
+    model: targetModel,
+    contents: [{ parts: [{ text: cleanText }] }],
+    config: {
+      responseModalities: ['AUDIO'],
+      speechConfig: {
+        voiceConfig: {
+          prebuiltVoiceConfig: { voiceName },
+        },
+      },
+    },
+  });
+
+  for await (const chunk of responseStream) {
+    const data = chunk.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+    if (data) {
+      const buf = Buffer.from(data, 'base64');
+      if (buf.length > 0) {
+        if (!firstChunkTime) {
+          firstChunkTime = performance.now() - t0;
+        }
+        totalBytes += buf.length;
+        onChunk(buf);
+      }
+    }
+  }
+
+  if (totalBytes === 0) {
+    throw new Error('Gemini TTS stream yielded 0 audio bytes');
+  }
+
+  return { totalBytes, firstChunkTime };
+}
+
