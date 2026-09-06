@@ -221,10 +221,10 @@ export default function AiTalkingAgent({
     }
   }, [speak, triggerNextVoiceTurn, unlockAudio, setVoiceState, isSpeaking]);
 
-  // User gesture unlock for Safari / WebKit Web Audio
+  // User gesture unlock for Safari / WebKit Web Audio (no blocking mic prompts)
   useEffect(() => {
     const handleFirstGesture = () => {
-      void startHandsFreeConversation();
+      unlockAudio();
     };
 
     window.addEventListener("pointerdown", handleFirstGesture, { once: true });
@@ -233,7 +233,7 @@ export default function AiTalkingAgent({
       window.removeEventListener("pointerdown", handleFirstGesture);
       window.removeEventListener("keydown", handleFirstGesture);
     };
-  }, [startHandsFreeConversation]);
+  }, [unlockAudio]);
 
   // Read initial greeting aloud once component mounts (if not muted and browser permits)
   useEffect(() => {

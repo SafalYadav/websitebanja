@@ -122,6 +122,16 @@ export class LiveAudioStreamer {
 
       if (incomingBytes.length === 0) return;
 
+      // Slice large incoming buffers (> 16KB) to keep main UI thread completely responsive
+      const MAX_SLICE = 16384;
+      if (incomingBytes.length > MAX_SLICE) {
+        for (let offset = 0; offset < incomingBytes.length; offset += MAX_SLICE) {
+          const slice = incomingBytes.subarray(offset, Math.min(offset + MAX_SLICE, incomingBytes.length));
+          await this.pushChunk(slice);
+        }
+        return;
+      }
+
       // 2. Combine with residue from previous chunk if an Int16 sample was split
       let alignedBytes: Uint8Array;
       if (this.residueBuffer && this.residueBuffer.length > 0) {

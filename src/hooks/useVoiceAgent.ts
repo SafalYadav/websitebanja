@@ -68,23 +68,6 @@ export function useVoiceAgent() {
   const onPlaybackStartCallbackRef = useRef<(() => void) | null>(null);
   const preloadedGreetingBufferRef = useRef<ArrayBuffer | null>(null);
 
-  // Pre-fetch initial greeting PCM on client for immediate (0ms) playback
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      fetch("/audio/initial_greeting_aoede.pcm")
-        .then((res) => {
-          if (res.ok) return res.arrayBuffer();
-          return null;
-        })
-        .then((buf) => {
-          if (buf && buf.byteLength > 1000) {
-            preloadedGreetingBufferRef.current = buf;
-            console.log("[VoiceAgent] Client initial greeting PCM preloaded (0ms ready)");
-          }
-        })
-        .catch(() => {});
-    }
-  }, []);
 
   /**
    * Automatically mutes and stops the microphone:

@@ -1,7 +1,7 @@
 // src/app/api/agent/voice/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { generateGeminiSpeech, isGeminiTtsAvailable, streamGeminiTtsAudio } from '@/lib/ai/geminiTTS';
-import { streamGeminiLiveVoice, isGeminiLiveAvailable, pcmCache } from '@/lib/ai/geminiLiveVoice';
+import { isGeminiLiveAvailable, pcmCache } from '@/lib/ai/geminiLiveVoice';
 import { PRECACHED_PHRASES, getCachedGreetingPcm } from '@/lib/ai/cachedAudio';
 
 export const runtime = 'nodejs';
@@ -76,16 +76,6 @@ export async function POST(req: NextRequest) {
           }
         };
 
-        const safeError = (err: any) => {
-          if (isClosed) return;
-          isClosed = true;
-          try {
-            controller.error(err);
-          } catch {
-            // ignore
-          }
-        };
-
         // Step 1: Instant 0ms Pre-cached buffer check
         const cleanLower = trimmedText.toLowerCase();
         const isGreeting = cleanLower.includes("i'm mitra") && cleanLower.includes("website architect");
@@ -94,13 +84,15 @@ export async function POST(req: NextRequest) {
         if (getCached) {
           try {
             const cachedBuf = getCached();
-            const CHUNK_SIZE = 8192;
-            for (let i = 0; i < cachedBuf.length; i += CHUNK_SIZE) {
-              if (isClosed) break;
-              safeEnqueue(cachedBuf.subarray(i, Math.min(i + CHUNK_SIZE, cachedBuf.length)));
+            if (cachedBuf && cachedBuf.length > 0) {
+              const CHUNK_SIZE = 8192;
+              for (let i = 0; i < cachedBuf.length; i += CHUNK_SIZE) {
+                if (isClosed) break;
+                safeEnqueue(cachedBuf.subarray(i, Math.min(i + CHUNK_SIZE, cachedBuf.length)));
+              }
+              safeClose();
+              return;
             }
-            safeClose();
-            return;
           } catch (cachedErr) {
             console.warn('[API /api/agent/voice] Pre-cached phrase read warning:', cachedErr);
           }
@@ -120,8 +112,24 @@ export async function POST(req: NextRequest) {
           return;
         }
 
-        // Helper: Gemini Batch TTS fallback (stripped 44-byte WAV header = raw 24kHz PCM)
-        const runGeminiBatchPlayback = async () => {
+        // Step 3: Progressive Gemini Flash TTS streaming (voice: Aoede)
+        try {
+          await streamGeminiTtsAudio(
+            trimmedText,
+            (chunk) => {
+              safeEnqueue(chunk);
+            },
+            { voice: typeof voice === 'string' ? voice : undefined }
+          );
+          safeClose();
+          return;
+        } catch (streamErr) {
+          console.warn('[API /api/agent/voice] Gemini TTS stream failed, attempting batch fallback:', streamErr);
+          if (isClosed) return;
+        }
+
+        // Step 4: Batch Gemini TTS fallback
+        try {
           const { audioBuffer } = await generateGeminiSpeech(trimmedText, {
             voice: typeof voice === 'string' ? voice : undefined,
           });
@@ -132,72 +140,12 @@ export async function POST(req: NextRequest) {
             const slice = rawPcm.subarray(i, Math.min(i + CHUNK_SIZE, rawPcm.length));
             safeEnqueue(slice);
           }
-        };
-
-        try {
-          // Step 3: Fast Gemini Live WebSocket synthesis (exact localhost engine, voice: Aoede)
-          try {
-            let hasReceivedFirstChunk = false;
-            let onFirstChunk: () => void = () => {};
-            const firstChunkPromise = new Promise<void>((resolve) => {
-              onFirstChunk = resolve;
-            });
-
-            const livePromise = streamGeminiLiveVoice(
-              trimmedText,
-              (chunk) => {
-                if (!hasReceivedFirstChunk) {
-                  hasReceivedFirstChunk = true;
-                  onFirstChunk();
-                }
-                safeEnqueue(chunk);
-              },
-              { voice: typeof voice === 'string' ? voice : undefined }
-            );
-
-            // Wait for either the first audio chunk or a 4.5s timeout
-            await Promise.race([
-              firstChunkPromise,
-              livePromise,
-              new Promise((_, reject) =>
-                setTimeout(() => {
-                  if (!hasReceivedFirstChunk) {
-                    reject(new Error('Gemini Live WebSocket first chunk timeout'));
-                  }
-                }, 4500)
-              ),
-            ]);
-
-            // Audio has started streaming! Now await full stream completion
-            await livePromise;
-            safeClose();
-            return;
-          } catch (liveErr) {
-            console.warn('[API /api/agent/voice] Gemini Live stream failed/timed out, attempting Gemini TTS stream:', liveErr);
-            if (isClosed) return;
-          }
-
-          // Step 4: Reliable HTTPS REST streaming with Google Gemini Flash TTS (voice: Aoede)
-          try {
-            await streamGeminiTtsAudio(
-              trimmedText,
-              (chunk) => {
-                safeEnqueue(chunk);
-              },
-              { voice: typeof voice === 'string' ? voice : undefined }
-            );
-            safeClose();
-            return;
-          } catch (geminiStreamErr) {
-            console.warn('[API /api/agent/voice] Gemini TTS stream failed, attempting Gemini batch fallback:', geminiStreamErr);
-            if (isClosed) return;
-            await runGeminiBatchPlayback();
-            safeClose();
-            return;
-          }
-        } catch (fatalErr) {
-          console.error('[API /api/agent/voice] All Gemini voice synthesis engines failed:', fatalErr);
-          safeError(fatalErr);
+          safeClose();
+          return;
+        } catch (batchErr) {
+          console.warn('[API /api/agent/voice] Gemini batch fallback failed (e.g. quota limit):', batchErr);
+          // Safely end stream so client does not hang or receive 500 HTML
+          safeClose();
         }
       },
     });
@@ -206,7 +154,6 @@ export async function POST(req: NextRequest) {
       status: 200,
       headers: {
         'Content-Type': 'audio/pcm;rate=24000',
-        'Transfer-Encoding': 'chunked',
         'Cache-Control': 'no-store, no-cache, must-revalidate',
       },
     });

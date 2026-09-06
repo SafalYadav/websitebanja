@@ -13,15 +13,6 @@ const MAX_CACHE_ENTRIES = 100;
 export const CANONICAL_INITIAL_GREETING =
   "Hey there! I'm Mitra, your AI Website Architect. What kind of business or website are you building today? Tell me your vision, or tap the mic and let's chat!";
 
-// Pre-populate in-memory cache with pre-synthesized 24kHz linear PCM buffers
-try {
-  for (const [phrase, getBuf] of Object.entries(PRECACHED_PHRASES)) {
-    const buf = getBuf();
-    pcmCache.set(`Aoede:${phrase}`, buf);
-  }
-} catch (e) {
-  console.warn('[GeminiLiveVoice] Failed to pre-populate static pcmCache:', e);
-}
 
 let isPrewarming = false;
 export async function prewarmVoiceCache(): Promise<void> {
@@ -51,12 +42,6 @@ export function isGeminiLiveAvailable(): boolean {
   );
 }
 
-// Auto-trigger background pre-warm on module load during runtime (skip during build phase)
-if (isGeminiLiveAvailable() && process.env.NEXT_PHASE !== 'phase-production-build') {
-  setTimeout(() => {
-    void prewarmVoiceCache();
-  }, 500);
-}
 
 export interface StreamLiveVoiceResult {
   chunkCount: number;
