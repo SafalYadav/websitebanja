@@ -1,6 +1,5 @@
 // src/app/api/agent/live-token/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { GoogleGenAI, Modality } from '@google/genai';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -19,7 +18,6 @@ export async function POST(req: NextRequest) {
     }
 
     const apiKey = rawKey.trim().replace(/^["']|["']$/g, '').replace(/^Bearer\s+/i, '');
-    const ai = new GoogleGenAI({ apiKey, vertexai: false });
     const targetModel = process.env.GEMINI_LIVE_MODEL || 'gemini-3.1-flash-live-preview';
     const voiceName = process.env.GEMINI_TTS_VOICE || 'Aoede';
 
@@ -28,34 +26,38 @@ export async function POST(req: NextRequest) {
     const expireTime = new Date(now + 30 * 60 * 1000).toISOString();
     const newSessionExpireTime = new Date(now + 2 * 60 * 1000).toISOString();
 
-    const token = await ai.authTokens.create({
-      config: {
+    const formattedModel = targetModel.startsWith('models/') ? targetModel : `models/${targetModel}`;
+
+    const url = `https://generativelanguage.googleapis.com/v1beta/auth_tokens?key=${encodeURIComponent(apiKey)}`;
+    const tokenRes = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-goog-api-key': apiKey,
+      },
+      body: JSON.stringify({
         uses: 1,
         expireTime,
         newSessionExpireTime,
-        liveConnectConstraints: {
-          model: targetModel,
-          config: {
-            responseModalities: [Modality.AUDIO],
-            speechConfig: {
-              voiceConfig: {
-                prebuiltVoiceConfig: {
-                  voiceName,
-                },
-              },
-            },
-          },
+        bidiGenerateContentSetup: {
+          model: formattedModel,
         },
-      },
+      }),
     });
 
-    if (!token?.name) {
-      throw new Error('Failed to obtain token name from Gemini AuthToken service');
+    if (!tokenRes.ok) {
+      const errText = await tokenRes.text();
+      throw new Error(`Gemini AuthToken service HTTP ${tokenRes.status}: ${errText}`);
+    }
+
+    const tokenData = await tokenRes.json();
+    if (!tokenData?.name) {
+      throw new Error(`Failed to obtain token name: ${JSON.stringify(tokenData)}`);
     }
 
     return NextResponse.json({
       success: true,
-      token: token.name,
+      token: tokenData.name,
       model: targetModel,
       voice: voiceName,
       sampleRate: 24000,
