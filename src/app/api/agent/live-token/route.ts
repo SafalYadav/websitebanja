@@ -45,6 +45,17 @@ export async function POST(req: NextRequest) {
       }),
     });
 
+    const keyInfo = {
+      source: process.env.GEMINI_API_KEY
+        ? 'GEMINI_API_KEY'
+        : process.env.GOOGLE_API_KEY
+        ? 'GOOGLE_API_KEY'
+        : 'GOOGLE_GENAI_API_KEY',
+      length: apiKey.length,
+      prefix: apiKey.slice(0, 4),
+      suffix: apiKey.slice(-4),
+    };
+
     if (!tokenRes.ok) {
       const errText = await tokenRes.text();
       throw new Error(`Gemini AuthToken service HTTP ${tokenRes.status}: ${errText}`);
@@ -64,10 +75,26 @@ export async function POST(req: NextRequest) {
       expireTime,
     });
   } catch (err) {
+    const rawKey =
+      process.env.GEMINI_API_KEY ||
+      process.env.GOOGLE_API_KEY ||
+      process.env.GOOGLE_GENAI_API_KEY ||
+      '';
+    const clean = rawKey.trim().replace(/^["']|["']$/g, '').replace(/^Bearer\s+/i, '');
+    const keyInfo = {
+      source: process.env.GEMINI_API_KEY
+        ? 'GEMINI_API_KEY'
+        : process.env.GOOGLE_API_KEY
+        ? 'GOOGLE_API_KEY'
+        : 'GOOGLE_GENAI_API_KEY',
+      length: clean.length,
+      prefix: clean.slice(0, 4),
+      suffix: clean.slice(-4),
+    };
     const errorMsg = err instanceof Error ? err.message : 'Unknown error generating Live API token';
     console.error('[API /api/agent/live-token Error]:', errorMsg);
     return NextResponse.json(
-      { success: false, error: errorMsg },
+      { success: false, error: errorMsg, keyInfo },
       { status: 500 }
     );
   }
