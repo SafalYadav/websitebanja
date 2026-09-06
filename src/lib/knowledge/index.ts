@@ -34,6 +34,9 @@ export const setProjectKnowledge = async (
   userId: string = 'system',
   category: string = 'agent_decisions'
 ) => {
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY && !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+    return;
+  }
   const input = {
     projectId,
     userId,
@@ -41,7 +44,11 @@ export const setProjectKnowledge = async (
     key,
     content: value,
   } as any;
-  await knowledgeRetrievalService.setProjectKnowledgeEntry(input);
+  try {
+    await knowledgeRetrievalService.setProjectKnowledgeEntry(input);
+  } catch (err) {
+    console.debug('[Knowledge] Project knowledge persistence skipped:', err instanceof Error ? err.message : err);
+  }
 };
 
 export const setProjectKnowledgeEntry = knowledgeRetrievalService.setProjectKnowledgeEntry.bind(
