@@ -2,7 +2,7 @@ import type { WebsiteData } from "@/types/website";
 
 export type CustomDomainStatus = "none" | "pending_verification" | "verified" | "failed";
 export type BackendRequirement = "static" | "managed_booking" | "managed_orders" | "custom_api";
-export type OnboardingMode = "prompt" | "details";
+export type OnboardingMode = "prompt" | "details" | "agent";
 
 export interface Project {
   id: string;

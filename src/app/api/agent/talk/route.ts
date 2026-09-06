@@ -1,0 +1,337 @@
+import { NextResponse } from "next/server";
+import { checkMemoryRateLimit } from "@/lib/rateLimit";
+import { extractBusinessDetailsFast } from "@/lib/promptExtractor";
+import type { ExtractedUserNeeds, AgentTalkResponse } from "@/types/aiAgent";
+import { AgentProviderFactory } from "@/lib/ai/agentProviderFactory";
+import { normalizeAgentResponse } from "@/lib/ai/agentNormalizer";
+import { setProjectKnowledge } from "@/lib/knowledge";
+
+interface RequestMessage {
+  role: "user" | "assistant" | "system";
+  content: string;
+}
+
+interface TalkRequestBody {
+  messages: RequestMessage[];
+  currentNeeds?: ExtractedUserNeeds;
+  projectId?: string;
+  language?: string;
+}
+
+function calculateReadiness(needs: ExtractedUserNeeds): number {
+  let score = 20;
+  if (needs.category && needs.category !== "Other") score += 20;
+  if (needs.businessName && !needs.businessName.toLowerCase().includes("my business")) score += 20;
+  if (needs.description && needs.description.length > 15) score += 15;
+  if (needs.services && needs.services.length > 0) score += 15;
+  if (needs.style || needs.primaryColor) score += 10;
+  return Math.min(score, 100);
+}
+
+function buildFallbackResponse(
+  userText: string,
+  history: RequestMessage[],
+  priorNeeds: ExtractedUserNeeds
+): AgentTalkResponse["data"] {
+  const allUserText = history
+    .filter((m) => m.role === "user")
+    .map((m) => m.content)
+    .concat(userText)
+    .join(". ");
+
+  const fastExtracted = extractBusinessDetailsFast(
+    allUserText,
+    priorNeeds.category,
+    priorNeeds.features
+  );
+
+  const mergedNeeds: ExtractedUserNeeds = {
+    businessName: priorNeeds.businessName || (fastExtracted.businessName !== "My Business" ? fastExtracted.businessName : undefined),
+    category: priorNeeds.category || fastExtracted.category,
+    description: priorNeeds.description || fastExtracted.description,
+    targetAudience: priorNeeds.targetAudience || fastExtracted.targetAudience || undefined,
+    services: (priorNeeds.services && priorNeeds.services.length > 0) ? priorNeeds.services : fastExtracted.services,
+    features: (priorNeeds.features && priorNeeds.features.length > 0) ? priorNeeds.features : ["whatsapp", "contact_form", "testimonials", "google_maps"],
+    style: priorNeeds.style || fastExtracted.style,
+    primaryColor: priorNeeds.primaryColor || fastExtracted.primaryColor,
+    secondaryColor: priorNeeds.secondaryColor || fastExtracted.secondaryColor,
+    phone: priorNeeds.phone || fastExtracted.phone || undefined,
+    email: priorNeeds.email || fastExtracted.email || undefined,
+    whatsappNumber: priorNeeds.whatsappNumber || fastExtracted.whatsappNumber || undefined,
+    location: priorNeeds.location || fastExtracted.location || undefined,
+  };
+
+  const score = calculateReadiness(mergedNeeds);
+  const wantsToBuild = /generate|build|create my website|let's go|done|ready|yes.*generate|build now/i.test(userText);
+
+  // If user says to build, NEVER ask again! Immediately launch!
+  if (wantsToBuild) {
+    const reply = `Awesome! Let's bring ${mergedNeeds.businessName || "your business"} to life right now. Launching your website generator...`;
+    return {
+      reply,
+      speechText: reply,
+      suggestedReplies: [],
+      extractedNeeds: mergedNeeds,
+      readinessScore: 100,
+      isReadyToBuild: true,
+      triggerImmediateBuild: true,
+    };
+  }
+
+  // If we already have enough information, invite them to build
+  if (score >= 65) {
+    const reply = `Everything looks fantastic for ${mergedNeeds.businessName || "your business"}! Ready for me to build your website?`;
+    return {
+      reply,
+      speechText: reply,
+      suggestedReplies: ["Yes, generate my website now!", "Let's tweak the colors first", "Add another service offering"],
+      extractedNeeds: mergedNeeds,
+      readinessScore: Math.max(score, 85),
+      isReadyToBuild: true,
+      triggerImmediateBuild: false,
+    };
+  }
+
+  if (!mergedNeeds.category || mergedNeeds.category === "Other") {
+    const reply = `Hey there! I'm Mitra. What kind of business or project are you dreaming up? Tell me all about it!`;
+    return {
+      reply,
+      speechText: reply,
+      suggestedReplies: [
+        "Specialty Coffee Cafe & Roastery",
+        "Modern Fitness & CrossFit Gym",
+        "Digital Marketing & Creative Agency",
+        "Hair & Beauty Salon",
+        "Doctor / Healthcare Clinic"
+      ],
+      extractedNeeds: mergedNeeds,
+      readinessScore: 25,
+      isReadyToBuild: false,
+    };
+  }
+
+  if (!mergedNeeds.businessName) {
+    const reply = `Ooh, a ${mergedNeeds.category}! Love that. What's the name of your ${mergedNeeds.category.toLowerCase()}, and who are your ideal customers?`;
+    return {
+      reply,
+      speechText: reply,
+      suggestedReplies: [
+        "It's called Prime Cafe for coffee lovers",
+        "We cater to local neighborhood families",
+        "High-growth startups and tech professionals"
+      ],
+      extractedNeeds: mergedNeeds,
+      readinessScore: 45,
+      isReadyToBuild: false,
+    };
+  }
+
+  if (!mergedNeeds.services || mergedNeeds.services.length === 0) {
+    const reply = `Love the name ${mergedNeeds.businessName}! What are your top 2 or 3 signature specialties or services we should showcase on the homepage?`;
+    return {
+      reply,
+      speechText: reply,
+      suggestedReplies: [
+        "Artisanal Coffee, Fresh Pastries & Breakfast",
+        "Personal Training, Group Classes & Nutrition",
+        "Brand Strategy, Web Design & Social Media"
+      ],
+      extractedNeeds: mergedNeeds,
+      readinessScore: 60,
+      isReadyToBuild: false,
+    };
+  }
+
+  const reply = `Sounds great! For ${mergedNeeds.businessName}, what kind of brand vibe feels right? Warm and cozy, clean minimal, or bold and vibrant?`;
+  return {
+    reply,
+    speechText: reply,
+    suggestedReplies: [
+      "Warm, cozy & earthy tones",
+      "Modern minimalist with violet & blue",
+      "Luxury bold with obsidian & gold",
+      "Everything looks great, build the website now!"
+    ],
+    extractedNeeds: mergedNeeds,
+    readinessScore: 75,
+    isReadyToBuild: true,
+    triggerImmediateBuild: false,
+  };
+}
+
+export async function POST(req: Request) {
+  try {
+    const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "127.0.0.1";
+    const { success: allowed } = checkMemoryRateLimit(`agent_talk_${ip}`, 60, 60 * 1000);
+    if (!allowed) {
+      return NextResponse.json(
+        { success: false, message: "Too many messages. Please wait a moment." },
+        { status: 429 }
+      );
+    }
+
+    const body = (await req.json()) as TalkRequestBody;
+    const messages = Array.isArray(body?.messages) ? body.messages : [];
+    const currentNeeds: ExtractedUserNeeds = body?.currentNeeds || {};
+    const requestedLanguage = body?.language || "en-IN";
+
+    if (messages.length === 0) {
+      return NextResponse.json(
+        { success: false, message: "No conversation history provided." },
+        { status: 400 }
+      );
+    }
+
+    const lastUserMessage = [...messages].reverse().find((m) => m.role === "user")?.content || "";
+    const wantsToBuild = /generate|build|create my website|let's go|done|ready|yes.*generate|build now/i.test(lastUserMessage);
+
+    // If user explicitly asks to generate/build, immediately fulfill without asking again!
+    if (wantsToBuild) {
+      const bName = currentNeeds.businessName || "your website";
+      const reply = `Awesome! Let's bring ${bName} to life right now. Launching your website generator...`;
+      return NextResponse.json({
+        success: true,
+        data: {
+          reply,
+          speechText: reply,
+          suggestedReplies: [],
+          extractedNeeds: currentNeeds,
+          readinessScore: 100,
+          isReadyToBuild: true,
+          triggerImmediateBuild: true,
+        },
+      });
+    }
+
+    // Use AgentProviderFactory (OpenAI primary -> Gemini fallback)
+    try {
+      const primaryProvider = AgentProviderFactory.createPrimary();
+      const fallbackProvider = AgentProviderFactory.createFallback();
+      let provider = primaryProvider;
+
+      const systemPrompt = `You are Mitra, a warm, energetic, friendly AI Website Architect & Design Partner at WebsiteBanja.
+You speak like an enthusiastic, supportive creative designer chatting naturally with a friend.
+
+CRITICAL RULES:
+1. ALWAYS return clean, valid JSON matching the schema below. NEVER wrap in markdown code blocks or fences.
+2. "reply": Clean conversational spoken text for the user. 1-2 warm, friendly, concise sentences (around 20-30 words). Ask ONE relevant next question. NEVER use markdown formatting (no bold, asterisks, bullet points, numbered lists), NEVER use emojis, and NEVER put code fences or JSON in reply.
+3. "speechText": MUST be EXACTLY the same string as "reply". Every word displayed in the chat is spoken aloud.
+4. "suggestedReplies": 3 to 4 quick-tap suggested options for the user.
+5. "extractedNeeds": Extract canonical facts from conversation:
+   {
+     "businessName": string,
+     "category": string,
+     "description": string,
+     "targetAudience": string,
+     "services": string[],
+     "features": string[],
+     "style": string,
+     "primaryColor": string,
+     "secondaryColor": string,
+     "phone": string,
+     "email": string,
+     "whatsappNumber": string,
+     "location": string
+   }
+6. Never auto-generate. Only set "triggerImmediateBuild": true if the user explicitly instructs to build/generate the website now.
+7. AUTOMATIC MULTILINGUAL DETECTION & MIRRORING:
+   - You are natively fluent in ALL Indian languages: Hindi, Hinglish, Gujarati, Marathi, Bengali, Tamil, Telugu, Kannada, Malayalam, Punjabi, and English.
+   - AUTOMATICALLY DETECT the language and script that the user is communicating in from their latest message.
+   - You MUST seamlessly switch and reply in the EXACT SAME LANGUAGE and style as the user:
+     * If the user speaks/writes in Gujarati (e.g., "Mane Cafe mate website banavvi che" or "મને કાફે માટે વેબસાઇટ બનાવવી છે"), reply naturally and warmly in Gujarati!
+     * If the user speaks/writes in Hindi or Hinglish (e.g. "Mujhe ek cafe ke liye website banani hai"), reply fluently in Hindi / Hinglish!
+     * If the user speaks/writes in Marathi, Bengali, Tamil, Telugu, Kannada, Malayalam, Punjabi, or English, immediately reply in that language!
+     * If the user switches language at any point in the conversation, AUTOMATICALLY SWITCH your language to match them immediately!
+   - Include "detectedLanguage": { "code": string, "name": string, "nativeName": string } in your JSON.
+   - Ensure "reply", "speechText", and "suggestedReplies" are all in the user's active detected language.
+   - Always keep "reply" and "speechText" 100% word-for-word identical.
+
+JSON Schema:
+{
+  "reply": string,
+  "speechText": string,
+  "suggestedReplies": string[],
+  "extractedNeeds": object,
+  "readinessScore": number,
+  "isReadyToBuild": boolean,
+  "triggerImmediateBuild": boolean,
+  "nextMissingAspect"?: string,
+  "detectedLanguage"?: {
+    "code": string,
+    "name": string,
+    "nativeName": string
+  }
+}`;
+
+      const conversationForModel = [
+        { role: "system" as const, content: systemPrompt },
+        {
+          role: "system" as const,
+          content: `AUTOMATIC LANGUAGE DETECTION DIRECTIVE:
+Detect the language and script of the user's latest message automatically. Always reply in the exact same language and communication style (Gujarati, Hindi, Hinglish, Marathi, Bengali, Tamil, Telugu, Kannada, Malayalam, Punjabi, or English). If the user switches language, switch your response language immediately. Ensure reply and speechText are identical.`,
+        },
+        {
+          role: "system" as const,
+          content: `Prior accumulated extracted needs: ${JSON.stringify(currentNeeds)}`,
+        },
+        ...messages.slice(-10).map((m) => ({
+          role: (m.role === "user" ? "user" : "assistant") as "user" | "assistant",
+          content: m.content,
+        })),
+      ];
+
+      let rawResponseText = "";
+      try {
+        const res = await provider.generate(conversationForModel, { jsonMode: true });
+        rawResponseText = res.text ?? "";
+      } catch (primaryErr) {
+        console.warn("[Agent Talk] Primary provider failed, attempting fallback provider:", primaryErr);
+        provider = fallbackProvider;
+        const res = await provider.generate(conversationForModel, { jsonMode: true });
+        rawResponseText = res.text ?? "";
+      }
+
+      if (rawResponseText) {
+        const normalized = normalizeAgentResponse(rawResponseText, currentNeeds, lastUserMessage);
+
+        if (body.projectId) {
+          try {
+            await setProjectKnowledge(
+              body.projectId,
+              "extracted_needs",
+              normalized.extractedNeeds,
+              "system",
+              "business_info"
+            );
+          } catch (pkErr) {
+            console.warn("[Agent Talk] Project Knowledge write error:", pkErr);
+          }
+        }
+
+        return NextResponse.json({
+          success: true,
+          data: normalized,
+        });
+      }
+    } catch (agentErr) {
+      console.warn("[API /api/agent/talk] Provider call fallback to deterministic engine:", agentErr);
+    }
+
+
+    // Fallback response engine
+    const fallbackData = buildFallbackResponse(lastUserMessage, messages, currentNeeds);
+    return NextResponse.json({
+      success: true,
+      data: fallbackData,
+    });
+  } catch (err) {
+    console.error("Agent Talk Route Error:", err);
+    return NextResponse.json(
+      {
+        success: false,
+        message: err instanceof Error ? err.message : "Failed to talk to AI Agent.",
+      },
+      { status: 500 }
+    );
+  }
+}

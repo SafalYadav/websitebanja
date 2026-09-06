@@ -19,6 +19,7 @@ import { supabase } from "@/lib/supabase";
 import { toast } from "@/store/toastStore";
 import { cn } from "@/lib/utils";
 import { extractBusinessDetailsFast } from "@/lib/promptExtractor";
+import AiTalkingAgent from "@/components/agent/AiTalkingAgent";
 import {
   Sparkles,
   Layers,
@@ -37,6 +38,7 @@ import {
   Link as LinkIcon,
   Check,
   Loader2,
+  Bot,
 } from "lucide-react";
 
 const CATEGORY_CHIPS = [
@@ -245,78 +247,119 @@ export default function OnboardingStartPage() {
   return (
     <BuilderLayout
       title="How do you want to build your website?"
-      description="Start with an idea or give us your business details. WebsiteBanja AI will turn it into a complete website."
+      description="Talk with our AI Architect, start with a prompt, or enter your business details. WebsiteBanja AI will turn it into a complete website."
     >
       {/* Choice Mode Toggle Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-8">
-        {/* Card 1: Start with a Prompt */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+        {/* Card 1: Talk with AI Agent (Recommended) */}
+        <button
+          type="button"
+          onClick={() => setOnboardingMode("agent")}
+          className={cn(
+            "relative text-left p-5 sm:p-6 rounded-3xl border-2 transition-all duration-200 cursor-pointer overflow-hidden flex flex-col justify-between",
+            onboardingMode === "agent"
+              ? "border-violet-600 bg-violet-50/60 dark:bg-violet-950/30 ring-4 ring-violet-500/10 shadow-lg shadow-violet-500/10"
+              : "border-zinc-200 bg-white hover:border-zinc-300 dark:border-white/10 dark:bg-zinc-900/60 hover:shadow-md"
+          )}
+        >
+          <div className="absolute top-3.5 right-3.5 flex items-center gap-1.5">
+            <span className="rounded-full bg-violet-100 text-violet-700 dark:bg-violet-950/70 dark:text-violet-300 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wide">
+              Recommended
+            </span>
+            {onboardingMode === "agent" && (
+              <div className="h-5 w-5 rounded-full bg-violet-600 text-white flex items-center justify-center shadow-xs">
+                <Check className="h-3 w-3" />
+              </div>
+            )}
+          </div>
+
+          <div>
+            <div className="h-10 w-10 rounded-2xl bg-gradient-to-tr from-blue-600 via-violet-600 to-indigo-600 text-white flex items-center justify-center shadow-md mb-3.5">
+              <Bot className="h-5 w-5" />
+            </div>
+            <h3 className="text-base font-bold text-zinc-900 dark:text-white">
+              Talk with AI Agent
+            </h3>
+            <p className="text-xs text-zinc-600 dark:text-zinc-400 mt-1.5 leading-relaxed">
+              Have a live voice & chat consultation with Mitra to uncover your exact business needs and architect your site.
+            </p>
+          </div>
+
+          <div className="mt-5 pt-3 border-t border-zinc-200/80 dark:border-white/10">
+            <span className="text-xs font-bold text-violet-600 dark:text-violet-400 flex items-center gap-1.5">
+              Consult with AI <ArrowRight className="h-3.5 w-3.5" />
+            </span>
+          </div>
+        </button>
+
+        {/* Card 2: Start with a Prompt */}
         <button
           type="button"
           onClick={() => setOnboardingMode("prompt")}
           className={cn(
-            "relative text-left p-6 rounded-3xl border-2 transition-all duration-200 cursor-pointer overflow-hidden flex flex-col justify-between",
+            "relative text-left p-5 sm:p-6 rounded-3xl border-2 transition-all duration-200 cursor-pointer overflow-hidden flex flex-col justify-between",
             onboardingMode === "prompt"
               ? "border-violet-600 bg-violet-50/60 dark:bg-violet-950/30 ring-4 ring-violet-500/10 shadow-lg shadow-violet-500/10"
               : "border-zinc-200 bg-white hover:border-zinc-300 dark:border-white/10 dark:bg-zinc-900/60 hover:shadow-md"
           )}
         >
           {onboardingMode === "prompt" && (
-            <div className="absolute top-4 right-4 h-6 w-6 rounded-full bg-violet-600 text-white flex items-center justify-center shadow-sm">
-              <Check className="h-3.5 w-3.5" />
+            <div className="absolute top-3.5 right-3.5 h-5 w-5 rounded-full bg-violet-600 text-white flex items-center justify-center shadow-xs">
+              <Check className="h-3 w-3" />
             </div>
           )}
 
           <div>
-            <div className="h-11 w-11 rounded-2xl bg-gradient-to-tr from-blue-600 via-violet-600 to-indigo-600 text-white flex items-center justify-center shadow-md mb-4">
-              <Sparkles className="h-5 w-5" />
+            <div className="h-10 w-10 rounded-2xl bg-zinc-100 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200 flex items-center justify-center mb-3.5">
+              <Sparkles className="h-5 w-5 text-violet-600 dark:text-violet-400" />
             </div>
-            <h3 className="text-lg font-bold text-zinc-900 dark:text-white">
+            <h3 className="text-base font-bold text-zinc-900 dark:text-white">
               Start with a Prompt
             </h3>
-            <p className="text-xs sm:text-sm text-zinc-600 dark:text-zinc-400 mt-1.5 leading-relaxed">
+            <p className="text-xs text-zinc-600 dark:text-zinc-400 mt-1.5 leading-relaxed">
               Describe your website in your own words and let AI handle the architecture, design, and copywriting.
             </p>
           </div>
 
-          <div className="mt-6 pt-4 border-t border-zinc-200/80 dark:border-white/10">
-            <span className="text-xs font-bold text-violet-600 dark:text-violet-400 flex items-center gap-1.5">
-              Start with AI Prompt <ArrowRight className="h-3.5 w-3.5" />
+          <div className="mt-5 pt-3 border-t border-zinc-200/80 dark:border-white/10">
+            <span className="text-xs font-bold text-zinc-700 dark:text-zinc-300 flex items-center gap-1.5">
+              Start with Prompt <ArrowRight className="h-3.5 w-3.5" />
             </span>
           </div>
         </button>
 
-        {/* Card 2: Use Business Details */}
+        {/* Card 3: Use Business Details */}
         <button
           type="button"
           onClick={() => setOnboardingMode("details")}
           className={cn(
-            "relative text-left p-6 rounded-3xl border-2 transition-all duration-200 cursor-pointer overflow-hidden flex flex-col justify-between",
+            "relative text-left p-5 sm:p-6 rounded-3xl border-2 transition-all duration-200 cursor-pointer overflow-hidden flex flex-col justify-between",
             onboardingMode === "details"
               ? "border-violet-600 bg-violet-50/60 dark:bg-violet-950/30 ring-4 ring-violet-500/10 shadow-lg shadow-violet-500/10"
               : "border-zinc-200 bg-white hover:border-zinc-300 dark:border-white/10 dark:bg-zinc-900/60 hover:shadow-md"
           )}
         >
           {onboardingMode === "details" && (
-            <div className="absolute top-4 right-4 h-6 w-6 rounded-full bg-violet-600 text-white flex items-center justify-center shadow-sm">
-              <Check className="h-3.5 w-3.5" />
+            <div className="absolute top-3.5 right-3.5 h-5 w-5 rounded-full bg-violet-600 text-white flex items-center justify-center shadow-xs">
+              <Check className="h-3 w-3" />
             </div>
           )}
 
           <div>
-            <div className="h-11 w-11 rounded-2xl bg-zinc-100 text-zinc-800 dark:bg-zinc-800 dark:text-zinc-200 flex items-center justify-center mb-4">
+            <div className="h-10 w-10 rounded-2xl bg-zinc-100 text-zinc-800 dark:bg-zinc-800 dark:text-zinc-200 flex items-center justify-center mb-3.5">
               <Layers className="h-5 w-5" />
             </div>
-            <h3 className="text-lg font-bold text-zinc-900 dark:text-white">
+            <h3 className="text-base font-bold text-zinc-900 dark:text-white">
               Use Business Details
             </h3>
-            <p className="text-xs sm:text-sm text-zinc-600 dark:text-zinc-400 mt-1.5 leading-relaxed">
+            <p className="text-xs text-zinc-600 dark:text-zinc-400 mt-1.5 leading-relaxed">
               Answer a few simple questions and build your website step by step with our structured wizard.
             </p>
           </div>
 
-          <div className="mt-6 pt-4 border-t border-zinc-200/80 dark:border-white/10">
+          <div className="mt-5 pt-3 border-t border-zinc-200/80 dark:border-white/10">
             <span className="text-xs font-bold text-zinc-700 dark:text-zinc-300 flex items-center gap-1.5">
-              Enter Business Details <ArrowRight className="h-3.5 w-3.5" />
+              Enter Details <ArrowRight className="h-3.5 w-3.5" />
             </span>
           </div>
         </button>
@@ -324,7 +367,25 @@ export default function OnboardingStartPage() {
 
       {/* Mode Sub-Form */}
       <AnimatePresence mode="wait">
-        {onboardingMode === "prompt" ? (
+        {onboardingMode === "agent" ? (
+          <motion.div
+            key="agent-mode"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            transition={{ duration: 0.2 }}
+          >
+            <AiTalkingAgent
+              projectId={activeProjectId}
+              initialNeeds={{
+                businessName: businessName || undefined,
+                category: category || undefined,
+                description: description || undefined,
+                targetAudience: targetAudience || undefined,
+              }}
+            />
+          </motion.div>
+        ) : onboardingMode === "prompt" ? (
           <motion.div
             key="prompt-mode"
             initial={{ opacity: 0, y: 10 }}

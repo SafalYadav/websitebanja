@@ -81,7 +81,7 @@ export const useBuilderStore = create<BuilderState>((set) => ({
   projectId: "",
 
   // Onboarding Mode & Prompt
-  onboardingMode: "prompt",
+  onboardingMode: "agent",
   userPrompt: "",
   selectedFeatures: ["whatsapp", "contact_form", "testimonials", "google_maps"],
 
@@ -145,7 +145,7 @@ export const useBuilderStore = create<BuilderState>((set) => ({
   clearProject: () =>
     set({
       projectId: "",
-      onboardingMode: "prompt",
+      onboardingMode: "agent",
       userPrompt: "",
       selectedFeatures: ["whatsapp", "contact_form", "testimonials", "google_maps"],
       businessName: "",

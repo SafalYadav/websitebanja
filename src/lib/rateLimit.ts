@@ -11,6 +11,44 @@ interface RateLimitRecord {
 const memoryStore = new Map<string, RateLimitRecord>();
 
 /**
+ * SECURITY: the store is keyed by attacker-influenced values (client IP, user id), so
+ * without a bound it is a slow memory-exhaustion sink -- entries were only ever
+ * overwritten, never removed, so a spray of distinct keys grew the map until the process
+ * died. Expired records are swept opportunistically, and the map is hard-capped.
+ */
+const MAX_MEMORY_KEYS = 20_000;
+const SWEEP_EVERY = 500;
+let writesSinceSweep = 0;
+
+function sweepExpired(now: number): void {
+  for (const [key, record] of memoryStore) {
+    if (now > record.resetAt) memoryStore.delete(key);
+  }
+}
+
+function evictOldest(): void {
+  // Map preserves insertion order, so the leading entries are the least recently created.
+  const target = Math.ceil(MAX_MEMORY_KEYS * 0.1);
+  let removed = 0;
+  for (const key of memoryStore.keys()) {
+    memoryStore.delete(key);
+    if (++removed >= target) break;
+  }
+}
+
+function recordNewKey(key: string, record: RateLimitRecord, now: number): void {
+  if (++writesSinceSweep >= SWEEP_EVERY) {
+    writesSinceSweep = 0;
+    sweepExpired(now);
+  }
+  if (memoryStore.size >= MAX_MEMORY_KEYS) {
+    sweepExpired(now);
+    if (memoryStore.size >= MAX_MEMORY_KEYS) evictOldest();
+  }
+  memoryStore.set(key, record);
+}
+
+/**
  * Checks in-memory rate limiting when Upstash Redis is not available.
  * Default: 3 requests per 7 days rolling window.
  */
@@ -23,7 +61,7 @@ export function checkMemoryRateLimit(
   const record = memoryStore.get(key);
 
   if (!record || now > record.resetAt) {
-    memoryStore.set(key, { count: 1, resetAt: now + windowMs });
+    recordNewKey(key, { count: 1, resetAt: now + windowMs }, now);
     return { success: true, remaining: limit - 1 };
   }
 

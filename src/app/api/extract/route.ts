@@ -1,28 +1,30 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
 import { openai } from "@/lib/openai";
 import { trackAnalyticsEvent } from "@/lib/analytics";
 import { extractBusinessDetailsFast } from "@/lib/promptExtractor";
+import { authenticateRequest } from "@/lib/supabaseServer";
+import { checkMemoryRateLimit } from "@/lib/rateLimit";
+
+/** Hard cap on prompt size: bounds both OpenAI token spend and regex work in the fast parser. */
+const MAX_PROMPT_CHARS = 2000;
 
 export async function POST(req: Request) {
   try {
-    const authHeader = req.headers.get("Authorization");
-    let userId: string | null = null;
+    // SECURITY: previously the Authorization header was parsed but a failure was
+    // explicitly "non-blocking", so anonymous callers reached a paid OpenAI model
+    // with no rate limit and no length cap. Both are now mandatory.
+    const user = await authenticateRequest(req);
+    if (!user) {
+      return NextResponse.json({ success: false, message: "Unauthorized." }, { status: 401 });
+    }
+    const userId = user.id;
 
-    if (authHeader?.startsWith("Bearer ")) {
-      const token = authHeader.replace("Bearer ", "");
-      if (token && token !== "undefined" && token !== "null") {
-        try {
-          const supabase = createClient(
-            process.env.NEXT_PUBLIC_SUPABASE_URL!,
-            process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-          );
-          const { data: { user } } = await supabase.auth.getUser(token);
-          if (user) userId = user.id;
-        } catch {
-          // Non-blocking auth check
-        }
-      }
+    const { success: withinLimit } = checkMemoryRateLimit(`extract_${userId}`, 30, 60 * 1000);
+    if (!withinLimit) {
+      return NextResponse.json(
+        { success: false, message: "Too many extraction requests. Please wait a moment." },
+        { status: 429 }
+      );
     }
 
     const body: unknown = await req.json();
@@ -40,8 +42,20 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, message: "Please provide a more descriptive prompt." }, { status: 400 });
     }
 
+    if (prompt.length > MAX_PROMPT_CHARS) {
+      return NextResponse.json(
+        { success: false, message: `Prompt is too long (max ${MAX_PROMPT_CHARS} characters).` },
+        { status: 413 }
+      );
+    }
+
+    const safeCategory = typeof selectedCategory === "string" ? selectedCategory.slice(0, 100) : undefined;
+    const safeFeatures = Array.isArray(selectedFeatures)
+      ? selectedFeatures.filter((f): f is string => typeof f === "string").slice(0, 30).map((f) => f.slice(0, 100))
+      : undefined;
+
     // Default fast deterministic baseline
-    const fallbackData = extractBusinessDetailsFast(prompt, selectedCategory, selectedFeatures);
+    const fallbackData = extractBusinessDetailsFast(prompt, safeCategory, safeFeatures);
 
     let extractedData = fallbackData;
 
@@ -66,8 +80,8 @@ Extract structured business profile data from the user's prompt. Return a valid 
 }`;
 
         const userMessage = `User Prompt: "${prompt.trim()}"
-Selected Category Override: ${selectedCategory || "None"}
-Requested Features: ${Array.isArray(selectedFeatures) ? selectedFeatures.join(", ") : "None"}`;
+Selected Category Override: ${safeCategory || "None"}
+Requested Features: ${safeFeatures ? safeFeatures.join(", ") : "None"}`;
 
         const response = await openai.chat.completions.create({
           model: "gpt-4.1-mini",
@@ -85,7 +99,7 @@ Requested Features: ${Array.isArray(selectedFeatures) ? selectedFeatures.join(",
           businessName: typeof parsed.businessName === "string" && parsed.businessName.trim().length > 0
             ? parsed.businessName.trim()
             : fallbackData.businessName,
-          category: selectedCategory || (typeof parsed.category === "string" ? parsed.category : fallbackData.category),
+          category: safeCategory || (typeof parsed.category === "string" ? parsed.category : fallbackData.category),
           description: typeof parsed.description === "string" && parsed.description.trim().length > 10
             ? parsed.description.trim()
             : fallbackData.description,

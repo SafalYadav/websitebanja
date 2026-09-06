@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { setDeepValue as safeSetDeepValue } from "@/lib/deepSet";
 import type {
   WebsiteData,
   ElementSelection,
@@ -93,20 +94,7 @@ interface GeneratedWebsiteState {
 const DEFAULT_ORDER = ["hero", "about", "services", "features", "faq", "contact", "footer"];
 
 function setDeepValue(obj: Record<string, unknown>, path: string, value: unknown): Record<string, unknown> {
-  const root = JSON.parse(JSON.stringify(obj)) as Record<string, unknown>;
-  const keys = path.replace(/\[(\w+)\]/g, ".$1").split(".");
-  let current: Record<string, unknown> = root;
-
-  for (let i = 0; i < keys.length - 1; i++) {
-    const key = keys[i];
-    if (!current[key] || typeof current[key] !== "object") {
-      current[key] = isNaN(Number(keys[i + 1])) ? {} : [];
-    }
-    current = current[key] as Record<string, unknown>;
-  }
-
-  current[keys[keys.length - 1]] = value;
-  return root;
+  return safeSetDeepValue(obj, path, value);
 }
 
 function ensureDefaultPages(website: WebsiteData): WebsitePage[] {

@@ -10,7 +10,7 @@ export interface CategoryImageSet {
   features: string[];
 }
 
-const CATEGORY_MAP: Record<string, CategoryImageSet> = {
+export const CATEGORY_MAP: Record<string, CategoryImageSet> = {
   grocery: {
     hero: "https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=1200&q=80", // Fresh organic grocery produce
     about: "https://images.unsplash.com/photo-1578916171728-46686eac8d58?auto=format&fit=crop&w=1000&q=80", // Supermarket aisles & shelves

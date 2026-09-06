@@ -13,6 +13,12 @@ export interface ExtractedBusinessDetails {
   whatsappNumber: string;
 }
 
+/**
+ * Upper bound on the input this parser will scan, to keep its regex work linear-ish.
+ * Anything a real user types about their business is far shorter than this.
+ */
+const MAX_PARSE_CHARS = 4000;
+
 const CATEGORY_KEYWORDS: Record<string, string[]> = {
   Gym: ["gym", "fitness", "workout", "crossfit", "trainer", "bodybuilding", "yoga", "pilates", "training"],
   Restaurant: ["restaurant", "food", "dining", "cuisine", "bistro", "eatery", "bar & grill"],
@@ -63,7 +69,11 @@ export function extractBusinessDetailsFast(
   selectedCategory?: string,
   selectedFeatures?: string[]
 ): ExtractedBusinessDetails {
-  const p = prompt.trim();
+  // SECURITY: several patterns below have adjacent unbounded character classes, which
+  // makes them super-linear on long non-matching input (e.g. 100k 'a's with no '@').
+  // Truncating here bounds the work regardless of how this function is called, and
+  // callers already cap prompts far below this length.
+  const p = prompt.slice(0, MAX_PARSE_CHARS).trim();
   const lower = p.toLowerCase();
 
   // 1. Detect location
@@ -95,7 +105,13 @@ export function extractBusinessDetailsFast(
   const phone = phoneMatch ? phoneMatch[0].trim() : "";
 
   // 4. Extract Email
-  const emailMatch = p.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+  // Bounded quantifiers + an '@' presence check keep this linear. The original
+  // /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/ was quadratic on input with no
+  // '@' (two adjacent unbounded classes that both match the same characters), so a
+  // long run of letters forced the engine to retry every start offset.
+  const emailMatch = p.includes("@")
+    ? p.match(/[a-zA-Z0-9._%+-]{1,64}@[a-zA-Z0-9-]{1,63}(?:\.[a-zA-Z0-9-]{1,63}){0,4}\.[a-zA-Z]{2,24}/)
+    : null;
   const email = emailMatch ? emailMatch[0].trim() : "";
 
   // 5. Generate Business Name

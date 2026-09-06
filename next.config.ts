@@ -38,12 +38,13 @@ const nextConfig: NextConfig = {
           },
           {
             key: 'Permissions-Policy',
-            value: 'camera=(), microphone=(), geolocation=()',
+            value: 'camera=(), microphone=(self), geolocation=()',
           },
         ],
       },
     ];
   },
+  serverExternalPackages: ['@google/genai', 'ws', 'bufferutil', 'utf-8-validate'],
 };
 
 export default nextConfig;

@@ -2,18 +2,43 @@ import { NextRequest, NextResponse } from "next/server";
 import { openai } from "@/lib/openai";
 import { checkMemoryRateLimit } from "@/lib/rateLimit";
 import { verifyAdminAuth } from "@/lib/adminAuth";
+import { authenticateRequest } from "@/lib/supabaseServer";
 import type { StudioAiAction } from "@/lib/studioAiActions";
 
 export const dynamic = "force-dynamic";
 
+/** Hard caps so an attacker cannot dictate our OpenAI token spend. */
+const MAX_PROMPT_CHARS = 2000;
+const MAX_CONTEXT_CHARS = 12000;
+
+/** Serializes context for the prompt, truncating anything oversized. */
+function boundedJson(value: unknown, maxChars: number): string {
+  let serialized: string;
+  try {
+    serialized = JSON.stringify(value ?? null) ?? "null";
+  } catch {
+    return "null";
+  }
+  return serialized.length > maxChars ? `${serialized.slice(0, maxChars)}…"[truncated]"` : serialized;
+}
+
 export async function POST(req: NextRequest) {
   try {
-    // 1. Skip Rate Limiting completely for authorized Admin accounts
+    // SECURITY: this route spends money on a paid OpenAI model, so a valid session
+    // is mandatory. Previously verifyAdminAuth's result was only consulted to decide
+    // whether to SKIP rate limiting — an anonymous caller fell through to the model
+    // call, throttled only by a spoofable IP key.
+    const user = await authenticateRequest(req);
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+    }
+
+    // Admins skip rate limiting entirely; everyone else is limited per user id
+    // (never per IP, which the client can influence via x-forwarded-for).
     const authResult = await verifyAdminAuth(req);
 
     if (!authResult.isAdmin) {
-      const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "127.0.0.1";
-      const { success } = checkMemoryRateLimit(`ai_action_${authResult.userId || ip}`, 30, 60 * 1000);
+      const { success } = checkMemoryRateLimit(`ai_action_${user.id}`, 30, 60 * 1000);
       if (!success) {
         return NextResponse.json(
           { error: "Rate limit reached. Please wait a moment before sending more AI commands." },
@@ -27,6 +52,13 @@ export async function POST(req: NextRequest) {
 
     if (!prompt || typeof prompt !== "string" || prompt.trim().length === 0) {
       return NextResponse.json({ error: "Instruction prompt is required." }, { status: 400 });
+    }
+
+    if (prompt.length > MAX_PROMPT_CHARS) {
+      return NextResponse.json(
+        { error: `Instruction is too long (max ${MAX_PROMPT_CHARS} characters).` },
+        { status: 413 }
+      );
     }
 
     const systemPrompt = `You are WebsiteBanja Studio AI Copilot, a high-intelligence web builder assistant.
@@ -107,21 +139,22 @@ Return ONLY JSON:
   ]
 }`;
 
-    const userMessage = `Business Context: "${businessName || "Business"}" (${category || "General"})
-Current Selected Element: ${JSON.stringify(selectedElement || null)}
-Current Active Pages: ${JSON.stringify((currentWebsite?.pages || []).map((p: { id: string; title: string; slug: string }) => ({ id: p.id, title: p.title, slug: p.slug })))}
-Current Active Section Order: ${JSON.stringify(currentWebsite?.sectionOrder || [])}
-Current Products: ${JSON.stringify(
-      (currentWebsite?.products || []).map((p: { id: string; name: string; price: number }) => ({
+    const userMessage = `Business Context: "${String(businessName || "Business").slice(0, 200)}" (${String(category || "General").slice(0, 100)})
+Current Selected Element: ${boundedJson(selectedElement || null, 1000)}
+Current Active Pages: ${boundedJson((currentWebsite?.pages || []).slice(0, 50).map((p: { id: string; title: string; slug: string }) => ({ id: p.id, title: p.title, slug: p.slug })), 2000)}
+Current Active Section Order: ${boundedJson((currentWebsite?.sectionOrder || []).slice(0, 50), 1000)}
+Current Products: ${boundedJson(
+      (currentWebsite?.products || []).slice(0, 100).map((p: { id: string; name: string; price: number }) => ({
         id: p.id,
         name: p.name,
         price: p.price,
-      }))
+      })),
+      4000
     )}
-Current Website Outline: ${JSON.stringify({
+Current Website Outline: ${boundedJson({
       hero: currentWebsite?.hero,
       about: currentWebsite?.about,
-    })}
+    }, MAX_CONTEXT_CHARS)}
 
 User Command: "${prompt.trim()}"`;
 

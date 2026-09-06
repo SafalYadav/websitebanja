@@ -102,6 +102,15 @@ export default function Navbar() {
           >
             FAQ
           </button>
+
+          <button
+            type="button"
+            onClick={() => router.push("/agent")}
+            className="flex items-center gap-1.5 text-sm font-semibold text-violet-600 dark:text-violet-400 hover:opacity-80 transition"
+          >
+            <Sparkles className="h-3.5 w-3.5" />
+            <span>Talk to AI</span>
+          </button>
         </nav>
 
         {/* Right Action Bar */}
@@ -221,6 +230,18 @@ export default function Navbar() {
               className="text-left py-1 text-zinc-700 dark:text-zinc-300"
             >
               FAQ
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                router.push("/agent");
+                setIsOpen(false);
+              }}
+              className="text-left py-1 font-semibold text-violet-600 dark:text-violet-400 flex items-center gap-1.5"
+            >
+              <Sparkles className="h-4 w-4" />
+              <span>Talk to AI Architect</span>
             </button>
 
             <div className="pt-4 border-t border-zinc-200 dark:border-white/10 flex flex-col gap-2.5">
