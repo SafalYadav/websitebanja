@@ -4,13 +4,24 @@ process.env.WS_NO_BUFFER_UTIL = '1';
 process.env.WS_NO_UTF_8_VALIDATE = '1';
 
 import { GoogleGenAI, Modality } from '@google/genai';
+import { PRECACHED_PHRASES, getCachedGreetingPcm } from '@/lib/ai/cachedAudio';
 
-// In-memory cache for synthesized speech chunks to provide instant (0ms) response on common phrases
-const pcmCache = new Map<string, Buffer>();
-const MAX_CACHE_ENTRIES = 50;
+// In-memory LRU cache for synthesized speech chunks to provide instant (0ms) response
+export const pcmCache = new Map<string, Buffer>();
+const MAX_CACHE_ENTRIES = 100;
 
 export const CANONICAL_INITIAL_GREETING =
   "Hey there! I'm Mitra, your AI Website Architect. What kind of business or website are you building today? Tell me your vision, or tap the mic and let's chat!";
+
+// Pre-populate in-memory cache with pre-synthesized 24kHz linear PCM buffers
+try {
+  for (const [phrase, getBuf] of Object.entries(PRECACHED_PHRASES)) {
+    const buf = getBuf();
+    pcmCache.set(`Aoede:${phrase}`, buf);
+  }
+} catch (e) {
+  console.warn('[GeminiLiveVoice] Failed to pre-populate static pcmCache:', e);
+}
 
 let isPrewarming = false;
 export async function prewarmVoiceCache(): Promise<void> {
@@ -20,11 +31,11 @@ export async function prewarmVoiceCache(): Promise<void> {
   if (pcmCache.has(cacheKey)) return;
   isPrewarming = true;
   try {
-    const chunks: Buffer[] = [];
-    await streamGeminiLiveVoice(CANONICAL_INITIAL_GREETING, (chunk) => {
-      chunks.push(chunk);
-    });
-    console.log('[GeminiLiveVoice] Pre-warmed initial greeting PCM cache successfully.');
+    const greetingBuf = getCachedGreetingPcm();
+    if (greetingBuf && greetingBuf.length > 0) {
+      pcmCache.set(cacheKey, greetingBuf);
+      console.log('[GeminiLiveVoice] Loaded initial greeting PCM into cache (0ms instant ready).');
+    }
   } catch (err) {
     console.warn('[GeminiLiveVoice] Background cache pre-warm skipped:', err);
   } finally {
@@ -77,11 +88,14 @@ export async function streamGeminiLiveVoice(
   }
 
   const voiceName = process.env.GEMINI_TTS_VOICE || options?.voice || 'Aoede';
-  const cacheKey = `${voiceName}:${cleanText.toLowerCase()}`;
+  const cleanLower = cleanText.toLowerCase();
+  const cacheKey = `${voiceName}:${cleanLower}`;
 
-  // Check cache for instant (0ms) playback of repeated phrases
-  if (pcmCache.has(cacheKey)) {
-    const cachedBuffer = pcmCache.get(cacheKey)!;
+  // Check cache for instant (0ms) playback of repeated phrases or initial greeting
+  const isGreeting = cleanLower.includes("i'm mitra") && cleanLower.includes("website architect");
+  const cachedBuffer = pcmCache.get(cacheKey) || (isGreeting ? getCachedGreetingPcm() : null);
+
+  if (cachedBuffer) {
     // Chunk the cached buffer into 8KB slices to simulate smooth streaming
     const CHUNK_SIZE = 8192;
     for (let i = 0; i < cachedBuffer.length; i += CHUNK_SIZE) {

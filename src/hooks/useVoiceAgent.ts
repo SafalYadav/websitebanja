@@ -66,6 +66,25 @@ export function useVoiceAgent() {
   const activeReaderRef = useRef<ReadableStreamDefaultReader<Uint8Array> | null>(null);
   const onPlaybackFinishedCallbackRef = useRef<(() => void) | null>(null);
   const onPlaybackStartCallbackRef = useRef<(() => void) | null>(null);
+  const preloadedGreetingBufferRef = useRef<ArrayBuffer | null>(null);
+
+  // Pre-fetch initial greeting PCM on client for immediate (0ms) playback
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      fetch("/audio/initial_greeting_aoede.pcm")
+        .then((res) => {
+          if (res.ok) return res.arrayBuffer();
+          return null;
+        })
+        .then((buf) => {
+          if (buf && buf.byteLength > 1000) {
+            preloadedGreetingBufferRef.current = buf;
+            console.log("[VoiceAgent] Client initial greeting PCM preloaded (0ms ready)");
+          }
+        })
+        .catch(() => {});
+    }
+  }, []);
 
   /**
    * Automatically mutes and stops the microphone:
@@ -204,6 +223,25 @@ export function useVoiceAgent() {
 
       const tTtsStart = performance.now();
       console.log(`[VoiceDebug] voice request started: "${trimmedText}"`);
+
+      const cleanLower = trimmedText.toLowerCase();
+      const isGreeting = cleanLower.includes("i'm mitra") && cleanLower.includes("website architect");
+
+      // Instant 0ms client-side playback of preloaded greeting buffer
+      if (isGreeting && preloadedGreetingBufferRef.current && streamerRef.current) {
+        console.log("[VoiceAgent] Instant 0ms playback of preloaded greeting buffer!");
+        onPlaybackStartCallbackRef.current?.();
+        await streamerRef.current.pushChunk(preloadedGreetingBufferRef.current);
+        streamerRef.current.signalTurnComplete(() => {
+          if (playId === activePlayIdRef.current) {
+            setIsSpeaking(false);
+            setIsLoadingVoice(false);
+            setVoiceState("idle");
+            onPlaybackFinishedCallbackRef.current?.();
+          }
+        });
+        return;
+      }
 
       const abortController = new AbortController();
       const abortTimeout = setTimeout(() => abortController.abort(), 18000);

@@ -178,9 +178,12 @@ export async function generateGeminiSpeech(
   }
 }
 
+import { pcmCache } from '@/lib/ai/geminiLiveVoice';
+import { getCachedGreetingPcm } from '@/lib/ai/cachedAudio';
+
 /**
- * Streams raw 24kHz 16-bit linear PCM audio chunks using Google Gemini 3.1 Flash TTS.
- * This runs identically on localhost and Vercel serverless over standard HTTPS REST.
+ * Streams raw 24kHz 16-bit linear PCM audio chunks using Google Gemini Flash TTS.
+ * Checked against the in-memory PCM cache for 0ms instant playback.
  */
 export async function streamGeminiTtsAudio(
   text: string,
@@ -201,42 +204,82 @@ export async function streamGeminiTtsAudio(
   }
 
   const voiceName = process.env.GEMINI_TTS_VOICE || options?.voice || 'Aoede';
-  const targetModel = options?.model || process.env.GEMINI_TTS_MODEL || 'gemini-3.1-flash-tts-preview';
+  const cleanLower = cleanText.toLowerCase();
+  const cacheKey = `${voiceName}:${cleanLower}`;
+
+  // Instant 0ms Cache Check: Canonical greeting or repeated conversational phrases
+  const isGreeting = cleanLower.includes("i'm mitra") && cleanLower.includes("website architect");
+  const cachedBuffer = pcmCache.get(cacheKey) || (isGreeting ? getCachedGreetingPcm() : null);
+
+  if (cachedBuffer && cachedBuffer.length > 0) {
+    const CHUNK_SIZE = 8192;
+    for (let i = 0; i < cachedBuffer.length; i += CHUNK_SIZE) {
+      onChunk(cachedBuffer.subarray(i, Math.min(i + CHUNK_SIZE, cachedBuffer.length)));
+    }
+    return {
+      totalBytes: cachedBuffer.length,
+      firstChunkTime: 0,
+    };
+  }
+
+  const primaryModel = options?.model || process.env.GEMINI_TTS_MODEL || 'gemini-3.1-flash-tts-preview';
+  const fallbackModel = primaryModel === 'gemini-3.1-flash-tts-preview' ? 'gemini-2.5-flash-preview-tts' : 'gemini-3.1-flash-tts-preview';
 
   const ai = new GoogleGenAI({ apiKey });
   const t0 = performance.now();
   let firstChunkTime = 0;
   let totalBytes = 0;
+  const collectedChunks: Buffer[] = [];
 
-  const responseStream = await ai.models.generateContentStream({
-    model: targetModel,
-    contents: [{ parts: [{ text: cleanText }] }],
-    config: {
-      responseModalities: ['AUDIO'],
-      speechConfig: {
-        voiceConfig: {
-          prebuiltVoiceConfig: { voiceName },
+  const executeStream = async (targetModel: string) => {
+    const responseStream = await ai.models.generateContentStream({
+      model: targetModel,
+      contents: [{ parts: [{ text: cleanText }] }],
+      config: {
+        responseModalities: ['AUDIO'],
+        speechConfig: {
+          voiceConfig: {
+            prebuiltVoiceConfig: { voiceName },
+          },
         },
       },
-    },
-  });
+    });
 
-  for await (const chunk of responseStream) {
-    const data = chunk.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-    if (data) {
-      const buf = Buffer.from(data, 'base64');
-      if (buf.length > 0) {
-        if (!firstChunkTime) {
-          firstChunkTime = performance.now() - t0;
+    for await (const chunk of responseStream) {
+      const data = chunk.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+      if (data) {
+        const buf = Buffer.from(data, 'base64');
+        if (buf.length > 0) {
+          if (!firstChunkTime) {
+            firstChunkTime = performance.now() - t0;
+          }
+          totalBytes += buf.length;
+          collectedChunks.push(buf);
+          onChunk(buf);
         }
-        totalBytes += buf.length;
-        onChunk(buf);
       }
     }
+  };
+
+  try {
+    await executeStream(primaryModel);
+  } catch (primaryErr) {
+    console.warn(`[GeminiTTS Stream] Primary model ${primaryModel} failed, trying fallback ${fallbackModel}:`, primaryErr);
+    await executeStream(fallbackModel);
   }
 
   if (totalBytes === 0) {
     throw new Error('Gemini TTS stream yielded 0 audio bytes');
+  }
+
+  // Cache full PCM buffer for subsequent 0ms response
+  if (collectedChunks.length > 0) {
+    const fullBuf = Buffer.concat(collectedChunks);
+    if (pcmCache.size >= 100) {
+      const firstKey = pcmCache.keys().next().value;
+      if (firstKey) pcmCache.delete(firstKey);
+    }
+    pcmCache.set(cacheKey, fullBuf);
   }
 
   return { totalBytes, firstChunkTime };

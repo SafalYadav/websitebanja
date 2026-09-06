@@ -1,6 +1,8 @@
 // src/app/api/agent/voice/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { generateGeminiSpeech, isGeminiTtsAvailable, streamGeminiTtsAudio } from '@/lib/ai/geminiTTS';
+import { streamGeminiLiveVoice, isGeminiLiveAvailable, pcmCache } from '@/lib/ai/geminiLiveVoice';
+import { PRECACHED_PHRASES, getCachedGreetingPcm } from '@/lib/ai/cachedAudio';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -8,7 +10,7 @@ export const maxDuration = 30;
 
 export async function POST(req: NextRequest) {
   try {
-    const hasGemini = isGeminiTtsAvailable();
+    const hasGemini = isGeminiLiveAvailable() || isGeminiTtsAvailable();
 
     if (!hasGemini) {
       return NextResponse.json(
@@ -84,7 +86,41 @@ export async function POST(req: NextRequest) {
           }
         };
 
-        // Fallback: Gemini Batch TTS (stripped 44-byte WAV header = raw 24kHz PCM)
+        // Step 1: Instant 0ms Pre-cached buffer check
+        const cleanLower = trimmedText.toLowerCase();
+        const isGreeting = cleanLower.includes("i'm mitra") && cleanLower.includes("website architect");
+        const getCached = PRECACHED_PHRASES[cleanLower] || (isGreeting ? getCachedGreetingPcm : null);
+
+        if (getCached) {
+          try {
+            const cachedBuf = getCached();
+            const CHUNK_SIZE = 8192;
+            for (let i = 0; i < cachedBuf.length; i += CHUNK_SIZE) {
+              if (isClosed) break;
+              safeEnqueue(cachedBuf.subarray(i, Math.min(i + CHUNK_SIZE, cachedBuf.length)));
+            }
+            safeClose();
+            return;
+          } catch (cachedErr) {
+            console.warn('[API /api/agent/voice] Pre-cached phrase read warning:', cachedErr);
+          }
+        }
+
+        // Step 2: Instant 0ms in-memory LRU pcmCache check
+        const voiceName = typeof voice === 'string' ? voice : 'Aoede';
+        const cacheKey = `${voiceName}:${cleanLower}`;
+        if (pcmCache.has(cacheKey)) {
+          const cachedBuf = pcmCache.get(cacheKey)!;
+          const CHUNK_SIZE = 8192;
+          for (let i = 0; i < cachedBuf.length; i += CHUNK_SIZE) {
+            if (isClosed) break;
+            safeEnqueue(cachedBuf.subarray(i, Math.min(i + CHUNK_SIZE, cachedBuf.length)));
+          }
+          safeClose();
+          return;
+        }
+
+        // Helper: Gemini Batch TTS fallback (stripped 44-byte WAV header = raw 24kHz PCM)
         const runGeminiBatchPlayback = async () => {
           const { audioBuffer } = await generateGeminiSpeech(trimmedText, {
             voice: typeof voice === 'string' ? voice : undefined,
@@ -99,9 +135,50 @@ export async function POST(req: NextRequest) {
         };
 
         try {
+          // Step 3: Fast Gemini Live WebSocket synthesis (exact localhost engine, voice: Aoede)
           try {
-            // Exclusively Google Gemini 3.1 Flash TTS (voice: Aoede)
-            // Delivers progressive 24kHz linear PCM streaming chunks identically on Localhost and Vercel
+            let hasReceivedFirstChunk = false;
+            let onFirstChunk: () => void = () => {};
+            const firstChunkPromise = new Promise<void>((resolve) => {
+              onFirstChunk = resolve;
+            });
+
+            const livePromise = streamGeminiLiveVoice(
+              trimmedText,
+              (chunk) => {
+                if (!hasReceivedFirstChunk) {
+                  hasReceivedFirstChunk = true;
+                  onFirstChunk();
+                }
+                safeEnqueue(chunk);
+              },
+              { voice: typeof voice === 'string' ? voice : undefined }
+            );
+
+            // Wait for either the first audio chunk or a 4.5s timeout
+            await Promise.race([
+              firstChunkPromise,
+              livePromise,
+              new Promise((_, reject) =>
+                setTimeout(() => {
+                  if (!hasReceivedFirstChunk) {
+                    reject(new Error('Gemini Live WebSocket first chunk timeout'));
+                  }
+                }, 4500)
+              ),
+            ]);
+
+            // Audio has started streaming! Now await full stream completion
+            await livePromise;
+            safeClose();
+            return;
+          } catch (liveErr) {
+            console.warn('[API /api/agent/voice] Gemini Live stream failed/timed out, attempting Gemini TTS stream:', liveErr);
+            if (isClosed) return;
+          }
+
+          // Step 4: Reliable HTTPS REST streaming with Google Gemini Flash TTS (voice: Aoede)
+          try {
             await streamGeminiTtsAudio(
               trimmedText,
               (chunk) => {
@@ -119,7 +196,7 @@ export async function POST(req: NextRequest) {
             return;
           }
         } catch (fatalErr) {
-          console.error('[API /api/agent/voice] Gemini voice synthesis failed:', fatalErr);
+          console.error('[API /api/agent/voice] All Gemini voice synthesis engines failed:', fatalErr);
           safeError(fatalErr);
         }
       },
