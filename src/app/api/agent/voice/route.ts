@@ -1,8 +1,6 @@
 // src/app/api/agent/voice/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { streamGeminiLiveVoice, isGeminiLiveAvailable } from '@/lib/ai/geminiLiveVoice';
 import { generateGeminiSpeech, isGeminiTtsAvailable, streamGeminiTtsAudio } from '@/lib/ai/geminiTTS';
-import { streamOpenAiSpeech, isOpenAiTtsAvailable } from '@/lib/ai/openAiTTS';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -10,12 +8,11 @@ export const maxDuration = 30;
 
 export async function POST(req: NextRequest) {
   try {
-    const hasGemini = isGeminiLiveAvailable() || isGeminiTtsAvailable();
-    const hasOpenAi = isOpenAiTtsAvailable();
+    const hasGemini = isGeminiTtsAvailable();
 
-    if (!hasGemini && !hasOpenAi) {
+    if (!hasGemini) {
       return NextResponse.json(
-        { error: 'Voice synthesis is not configured on this server. Please configure GEMINI_API_KEY or OPENAI_API_KEY.' },
+        { error: 'Gemini Neural Voice is not configured on this server. Please configure GEMINI_API_KEY.' },
         { status: 503 }
       );
     }
@@ -54,8 +51,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const isServerless = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
-
     const stream = new ReadableStream({
       async start(controller) {
         let isClosed = false;
@@ -89,23 +84,7 @@ export async function POST(req: NextRequest) {
           }
         };
 
-        // Helper: Stream OpenAI linear 24kHz PCM
-        const runOpenAiPlayback = async () => {
-          if (!isOpenAiTtsAvailable()) {
-            throw new Error('OpenAI voice synthesis is not configured.');
-          }
-          const validOpenAiVoices = ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'] as const;
-          const openAiVoice = validOpenAiVoices.includes(voice as any) ? (voice as any) : 'nova';
-          await streamOpenAiSpeech(
-            trimmedText,
-            (chunk) => {
-              safeEnqueue(chunk);
-            },
-            { voice: openAiVoice }
-          );
-        };
-
-        // Helper: Stream Gemini Batch TTS (stripped 44-byte WAV header = raw 24kHz PCM)
+        // Fallback: Gemini Batch TTS (stripped 44-byte WAV header = raw 24kHz PCM)
         const runGeminiBatchPlayback = async () => {
           const { audioBuffer } = await generateGeminiSpeech(trimmedText, {
             voice: typeof voice === 'string' ? voice : undefined,
@@ -120,44 +99,27 @@ export async function POST(req: NextRequest) {
         };
 
         try {
-          if (hasGemini) {
-            try {
-              // Universal Primary: Google Gemini 3.1 Flash TTS (voice: Aoede)
-              // Uses HTTPS REST streaming, producing 100% identical voice and audio on both Localhost and Vercel
-              await streamGeminiTtsAudio(
-                trimmedText,
-                (chunk) => {
-                  safeEnqueue(chunk);
-                },
-                { voice: typeof voice === 'string' ? voice : undefined }
-              );
-              safeClose();
-              return;
-            } catch (geminiStreamErr) {
-              console.warn('[API /api/agent/voice] Gemini TTS stream failed, attempting fallback:', geminiStreamErr);
-              if (isClosed) return;
-              try {
-                await runGeminiBatchPlayback();
-                safeClose();
-                return;
-              } catch (batchErr) {
-                console.warn('[API /api/agent/voice] Gemini batch failed, attempting OpenAI fallback:', batchErr);
-              }
-              if (isClosed) return;
-              if (hasOpenAi) {
-                await runOpenAiPlayback();
-                safeClose();
-                return;
-              }
-              throw geminiStreamErr;
-            }
-          } else if (hasOpenAi) {
-            await runOpenAiPlayback();
+          try {
+            // Exclusively Google Gemini 3.1 Flash TTS (voice: Aoede)
+            // Delivers progressive 24kHz linear PCM streaming chunks identically on Localhost and Vercel
+            await streamGeminiTtsAudio(
+              trimmedText,
+              (chunk) => {
+                safeEnqueue(chunk);
+              },
+              { voice: typeof voice === 'string' ? voice : undefined }
+            );
+            safeClose();
+            return;
+          } catch (geminiStreamErr) {
+            console.warn('[API /api/agent/voice] Gemini TTS stream failed, attempting Gemini batch fallback:', geminiStreamErr);
+            if (isClosed) return;
+            await runGeminiBatchPlayback();
             safeClose();
             return;
           }
         } catch (fatalErr) {
-          console.error('[API /api/agent/voice] All voice synthesis providers failed:', fatalErr);
+          console.error('[API /api/agent/voice] Gemini voice synthesis failed:', fatalErr);
           safeError(fatalErr);
         }
       },
