@@ -122,25 +122,25 @@ export async function POST(req: NextRequest) {
         try {
           if (isServerless) {
             // On Vercel / Serverless:
-            // Outbound WebSockets hang or pause in Lambda environments.
-            // Use rock-solid HTTP streaming. OpenAI TTS starts streaming chunks in ~2.5s with zero timeout risk.
-            if (hasOpenAi) {
+            // Outbound WebSockets hang in Lambda environments, so use HTTP REST.
+            // When Gemini is configured, use Gemini Neural Voice (Aoede) so voice matches localhost identically.
+            if (hasGemini) {
               try {
-                await runOpenAiPlayback();
+                await runGeminiBatchPlayback();
                 safeClose();
                 return;
-              } catch (openAiErr) {
-                console.warn('[API /api/agent/voice] Serverless OpenAI stream failed, attempting Gemini batch:', openAiErr);
+              } catch (geminiErr) {
+                console.warn('[API /api/agent/voice] Serverless Gemini TTS failed, attempting OpenAI fallback:', geminiErr);
                 if (isClosed) return;
-                if (hasGemini) {
-                  await runGeminiBatchPlayback();
+                if (hasOpenAi) {
+                  await runOpenAiPlayback();
                   safeClose();
                   return;
                 }
-                throw openAiErr;
+                throw geminiErr;
               }
-            } else if (hasGemini) {
-              await runGeminiBatchPlayback();
+            } else if (hasOpenAi) {
+              await runOpenAiPlayback();
               safeClose();
               return;
             }
