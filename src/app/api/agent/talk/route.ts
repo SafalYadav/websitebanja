@@ -304,7 +304,7 @@ Detect the language and script of the user's latest message automatically. Alway
               "business_info"
             );
           } catch (pkErr) {
-            console.warn("[Agent Talk] Project Knowledge write error:", pkErr);
+            console.warn("[Agent Talk] Project Knowledge write skipped:", pkErr instanceof Error ? pkErr.message : pkErr);
           }
         }
 

@@ -43,7 +43,7 @@ import type {
   ProjectContextBundle,
   SetProjectKnowledgeInput,
 } from "./types";
-import { getServiceRoleClient } from "../supabaseServer";
+import { getServiceRoleClient, getAuthClient } from "../supabaseServer";
 
 export class KnowledgeRetrievalService implements IKnowledgeRetrievalService {
   /**
@@ -54,9 +54,13 @@ export class KnowledgeRetrievalService implements IKnowledgeRetrievalService {
     try {
       return getServiceRoleClient();
     } catch {
-      throw new Error(
-        "KnowledgeRetrievalService: A SupabaseClient must be provided or SUPABASE_SERVICE_ROLE_KEY configured."
-      );
+      try {
+        return getAuthClient();
+      } catch {
+        throw new Error(
+          "KnowledgeRetrievalService: A SupabaseClient must be provided or SUPABASE_SERVICE_ROLE_KEY configured."
+        );
+      }
     }
   }
 

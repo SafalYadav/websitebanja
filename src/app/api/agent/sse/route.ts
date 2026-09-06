@@ -197,7 +197,7 @@ export async function POST(req: Request) {
               'business_info'
             );
           } catch (pkErr) {
-            console.warn('[Agent SSE] Project Knowledge write error:', pkErr);
+            console.warn('[Agent SSE] Project Knowledge write skipped:', pkErr instanceof Error ? pkErr.message : pkErr);
           }
         }
 
