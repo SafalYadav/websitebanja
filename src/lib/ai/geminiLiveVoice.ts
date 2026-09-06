@@ -35,11 +35,12 @@ export async function prewarmVoiceCache(): Promise<void> {
 }
 
 export function isGeminiLiveAvailable(): boolean {
-  return Boolean(
-    (process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY.trim().length > 0) ||
-    (process.env.GOOGLE_API_KEY && process.env.GOOGLE_API_KEY.trim().length > 0) ||
-    (process.env.GOOGLE_GENAI_API_KEY && process.env.GOOGLE_GENAI_API_KEY.trim().length > 0)
-  );
+  const rawKey =
+    process.env.GEMINI_API_KEY ||
+    process.env.GOOGLE_API_KEY ||
+    process.env.GOOGLE_GENAI_API_KEY ||
+    '';
+  return rawKey.trim().replace(/^["']|["']$/g, '').replace(/^Bearer\s+/i, '').length > 0;
 }
 
 
@@ -59,13 +60,14 @@ export async function streamGeminiLiveVoice(
   onChunk: (chunk: Buffer) => void,
   options?: { voice?: string; model?: string }
 ): Promise<StreamLiveVoiceResult> {
-  const apiKey =
+  const rawKey =
     process.env.GEMINI_API_KEY ||
     process.env.GOOGLE_API_KEY ||
     process.env.GOOGLE_GENAI_API_KEY;
-  if (!apiKey) {
+  if (!rawKey) {
     throw new Error('Gemini API key is not configured on the server');
   }
+  const apiKey = rawKey.trim().replace(/^["']|["']$/g, '').replace(/^Bearer\s+/i, '');
 
   const cleanText = text.trim();
   if (!cleanText) {
@@ -93,7 +95,7 @@ export async function streamGeminiLiveVoice(
     };
   }
 
-  const ai = new GoogleGenAI({ apiKey });
+  const ai = new GoogleGenAI({ apiKey, vertexai: false });
   const targetModel = options?.model || process.env.GEMINI_LIVE_MODEL || 'gemini-3.1-flash-live-preview';
 
   const systemInstruction =

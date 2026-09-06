@@ -7,15 +7,19 @@ export const dynamic = 'force-dynamic';
 
 export async function POST(req: NextRequest) {
   try {
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
+    const rawKey =
+      process.env.GEMINI_API_KEY ||
+      process.env.GOOGLE_API_KEY ||
+      process.env.GOOGLE_GENAI_API_KEY;
+    if (!rawKey) {
       return NextResponse.json(
         { success: false, error: 'GEMINI_API_KEY is not configured on the server.' },
         { status: 503 }
       );
     }
 
-    const ai = new GoogleGenAI({ apiKey });
+    const apiKey = rawKey.trim().replace(/^["']|["']$/g, '').replace(/^Bearer\s+/i, '');
+    const ai = new GoogleGenAI({ apiKey, vertexai: false });
     const targetModel = process.env.GEMINI_LIVE_MODEL || 'gemini-3.1-flash-live-preview';
     const voiceName = process.env.GEMINI_TTS_VOICE || 'Aoede';
 
@@ -61,7 +65,7 @@ export async function POST(req: NextRequest) {
     const errorMsg = err instanceof Error ? err.message : 'Unknown error generating Live API token';
     console.error('[API /api/agent/live-token Error]:', errorMsg);
     return NextResponse.json(
-      { success: false, error: 'Failed to create ephemeral session token.' },
+      { success: false, error: errorMsg },
       { status: 500 }
     );
   }

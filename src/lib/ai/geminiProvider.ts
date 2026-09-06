@@ -14,11 +14,15 @@ export class GeminiProvider implements ModelProvider {
   private client: GoogleGenAI;
 
   constructor() {
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
+    const rawKey =
+      process.env.GEMINI_API_KEY ||
+      process.env.GOOGLE_API_KEY ||
+      process.env.GOOGLE_GENAI_API_KEY;
+    if (!rawKey) {
       throw new Error('GEMINI_API_KEY environment variable is required for GeminiProvider');
     }
-    this.client = new GoogleGenAI({ apiKey });
+    const apiKey = rawKey.trim().replace(/^["']|["']$/g, '').replace(/^Bearer\s+/i, '');
+    this.client = new GoogleGenAI({ apiKey, vertexai: false });
   }
 
   async generate(messages: Message[], options?: GenerateOptions): Promise<ModelResponse> {

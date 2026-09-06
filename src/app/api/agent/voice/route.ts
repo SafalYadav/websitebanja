@@ -77,8 +77,8 @@ export async function POST(req: NextRequest) {
         };
 
         // Step 1: Instant 0ms Pre-cached buffer check
-        const cleanLower = trimmedText.toLowerCase();
-        const isGreeting = cleanLower.includes("i'm mitra") && cleanLower.includes("website architect");
+        const cleanLower = trimmedText.toLowerCase().replace(/[\u2018\u2019`\\]/g, "'");
+        const isGreeting = (cleanLower.includes("mitra") && (cleanLower.includes("architect") || cleanLower.includes("building today")));
         const getCached = PRECACHED_PHRASES[cleanLower] || (isGreeting ? getCachedGreetingPcm : null);
 
         if (getCached) {
