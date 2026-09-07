@@ -63,6 +63,7 @@ export async function POST(req: NextRequest) {
       sampleRate: 24000,
       expireTime,
     });
+  } catch (err) {
     const errorMsg = err instanceof Error ? err.message : 'Unknown error generating Live API token';
     console.error('[API /api/agent/live-token Error]:', errorMsg);
     return NextResponse.json(
