@@ -298,9 +298,11 @@ export function useVoiceAgent() {
               }
             });
           } else {
+            console.warn("[VoiceAgent] No audio bytes received from voice endpoint.");
             setIsSpeaking(false);
             setIsLoadingVoice(false);
             setVoiceState("idle");
+            onPlaybackStart?.();
             onPlaybackEnd?.();
           }
           return;
