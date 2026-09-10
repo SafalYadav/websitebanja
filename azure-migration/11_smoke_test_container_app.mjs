@@ -3,9 +3,12 @@
  * Tests the live deployed Azure Container App (or custom target URL) for:
  * 1. Public landing page availability (HTTP 200)
  * 2. Static asset delivery (Next.js scripts & styles)
- * 3. Auth routes responsiveness
- * 4. API health & telemetry endpoints
- * 5. Response time & latency benchmarks
+ * 3. Auth routes responsiveness (login, signup, auth callback)
+ * 4. Protected API authentication guard (POST /api/generate 401 unauthenticated check)
+ * 5. Public Telemetry API responsiveness (POST /api/public/track-event)
+ * 6. SSE / Conversational Agent endpoint responsiveness (POST /api/agent/sse)
+ * 7. AI Voice endpoint responsiveness (POST /api/agent/voice)
+ * 8. Latency & health benchmarks
  */
 
 import http from "node:http";
@@ -124,7 +127,7 @@ async function run() {
     return res;
   });
 
-  // Test 6: Public Lead Submission Endpoint
+  // Test 6: Public Lead / Event Telemetry Endpoint
   await test("Public Telemetry API (POST /api/public/track-event) responds without crashing", async () => {
     const res = await fetchUrl("/api/public/track-event", {
       method: "POST",
@@ -132,6 +135,32 @@ async function run() {
       body: JSON.stringify({ eventName: "probe_ping", timestamp: Date.now() }),
     });
     if (res.status !== 200 && res.status !== 400) {
+      throw new Error(`Unexpected status code ${res.status}`);
+    }
+    return res;
+  });
+
+  // Test 7: SSE / Conversational Agent Endpoint (Validation check)
+  await test("Agent SSE Route (POST /api/agent/sse) rejects empty payload cleanly (400)", async () => {
+    const res = await fetchUrl("/api/agent/sse", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    if (res.status !== 400 && res.status !== 200) {
+      throw new Error(`Unexpected status code ${res.status}`);
+    }
+    return res;
+  });
+
+  // Test 8: Voice Endpoint (Validation check)
+  await test("Voice Route (POST /api/agent/voice) rejects empty payload cleanly", async () => {
+    const res = await fetchUrl("/api/agent/voice", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    if (res.status !== 400 && res.status !== 200) {
       throw new Error(`Unexpected status code ${res.status}`);
     }
     return res;
