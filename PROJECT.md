@@ -56,12 +56,14 @@ The Knowledge Base architecture cleanly decouples two distinct knowledge domains
 ## Milestones
 | # | Name | Scope | Dependencies | Status |
 |---|------|-------|-------------|--------|
-| M1 | Architecture & Audit Documentation (R1) | Features 1, 2, 3, 4: Write all 4 architecture docs in `docs/` | None | PLANNED |
-| M2 | Global Knowledge Base System (R2) | Features 5, 6, 7: Implement category-driven Global KB and staleness detection | M1 | PLANNED |
-| M3 | User/Project Knowledge Base & Schema (R3) | Features 8, 9, 10: Implement Supabase schema migration and RLS policies | M1 | PLANNED |
-| M4 | Knowledge Retrieval Layer Abstraction (R4) | Features 11, 12, 13: Build retrieval service and wire into generation pipelines | M2, M3 | PLANNED |
-| E2E | E2E Testing Track | Feature 14: Comprehensive test infra and test cases (Tiers 1-4) | M1 | PLANNED |
-| M5 | Final Milestone: 100% E2E Pass & Hardening (R5) | Feature 15: Pass all E2E tests, existing tests, Tier 5 adversarial tests, Forensic Audit | M4, E2E | PLANNED |
+| M1 | Architecture & Audit Documentation (R1) | Features 1, 2, 3, 4: Write all 4 architecture docs in `docs/` | None | VERIFIED |
+| M2 | Global Knowledge Base System (R2) | Features 5, 6, 7: Implement category-driven Global KB and staleness detection | M1 | VERIFIED |
+| M3 | User/Project Knowledge Base & Schema (R3) | Features 8, 9, 10: Implement Supabase schema migration and RLS policies | M1 | VERIFIED |
+| M4 | Knowledge Retrieval Layer Abstraction (R4) | Features 11, 12, 13: Build retrieval service and wire into generation pipelines | M2, M3 | VERIFIED |
+| E2E | E2E Testing Track | Feature 14: Comprehensive test infra and test cases (Tiers 1-4) | M1 | VERIFIED |
+| M5 | Final Milestone: 100% E2E Pass & Hardening (R5) | Feature 15: Pass all E2E tests, existing tests, Tier 5 adversarial tests, Forensic Audit | M4, E2E | VERIFIED |
+| P2 | Phase 2: Core AI + Studio + Website Generation | End-to-end multi-turn AI agent, studio copilot, category generation & workspace state | M5 | VERIFIED |
+| P3 | Phase 3: Production Backend, Persistence & Lifecycle | Column whitelist completion, backend requirement lifecycle, studio hydration, atomic publishing, project isolation | P2 | VERIFIED |
 
 ## Interface Contracts
 
@@ -148,8 +150,53 @@ export interface IKnowledgeRetrievalService {
   index.ts                           # Public facade exports
 
 /tests/
-  e2e/                               # E2E test suite (E2E Track)
-    knowledge_base.test.mjs          # Tier 1-4 tests (Global, Project, RLS, Non-regression)
-  project_isolation.test.mjs         # Existing test suite (Must pass 100%)
-  final_regression.mjs               # Existing regression suite
+  phase2_multiturn_agent.mjs         # Multi-turn sequential state modification test suite
+  phase2_generation_categories.mjs   # Multi-category website generation verification suite
+  knowledge_base.test.mjs            # Knowledge base architecture verification suite
+  staleness_drift_challenge.test.ts  # Adversarial schema drift & staleness challenge suite
+  studio_copilot.e2e.spec.ts         # Playwright Studio AI Copilot E2E test suite
+  voice.e2e.spec.ts                  # Playwright voice pipeline E2E test suite
+  voice_text_consistency.e2e.spec.ts # Playwright voice/text canonical parity test suite
+  phase3_lifecycle_persistence.test.ts # Phase 3 lifecycle, whitelist, hydration & isolation test suite
+  project_isolation.test.mjs         # Multi-tenant catalog & project isolation test suite
 ```
+
+## Phase 2: Core AI + Studio + Website Generation Verification Matrix
+| Test Suite | Focus / Coverage | Result |
+|------------|------------------|--------|
+| `tests/phase2_multiturn_agent.mjs` | 6 sequential user turns (category, name, color override, add feature, remove feature, modify/restore feature) with state merging & deterministic readiness | **6/6 PASSED (100%)** |
+| `tests/phase2_generation_categories.mjs` | Prompt extraction, canonical category mapping, backend requirement detection, image resolution, and prompt synthesis across 7 major categories | **7/7 PASSED (100%)** |
+| `tests/knowledge_base.test.mjs` | Global taxonomy, deep immutability, 4-way parity, SHA-256 canonical hashing, context bundle assembly, zero secrets | **13/13 PASSED (100%)** |
+| `tests/staleness_drift_challenge.test.ts` | Adversarial schema drift engine, code drift sensitivity, component/action/backend parity, cryptographic tampering detection | **19/19 PASSED (100%)** |
+| `tests/studio_copilot.e2e.spec.ts` | Playwright E2E: Studio loading, tab navigation, headline prompt update, button prompt update, canvas synchronization, undo/redo | **PASSED (1/1, 8.0s)** |
+| `tests/voice.e2e.spec.ts` | Playwright E2E: App load (200), agent init, greeting, AudioContext, audio decoding/playback pipeline, multi-turn interaction | **PASSED (1/1, 4.9s)** *(Physical speaker: UNVERIFIED)* |
+| `tests/voice_text_consistency.e2e.spec.ts` | Playwright E2E: 100% exact string match `Chat UI === Server Reply === TTS Input === Voice Replay` across multi-turn and distinctive tokens | **PASSED (1/1, 17.8s)** |
+
+## Phase 3: Production Backend, Persistence & Lifecycle Verification Matrix
+| Test Suite | Focus / Coverage | Result |
+|------------|------------------|--------|
+| `tests/phase3_lifecycle_persistence.test.ts` | VALID_PROJECT_COLUMNS whitelist, 7-category backend requirement lifecycle, atomic studio hydration via hydrateFromProject, multi-project switching, slug sanitization, publication snapshot immutability, autosave deduplication | **6/6 PASSED (100%)** |
+| `tests/project_isolation.test.mjs` | CTA execution engine, publishing snapshot immutability, 10-step catalog persistence regression (A->J), strict 3-project multi-tenant isolation | **4/4 PASSED (100%)** |
+## Phase 4: Production SEO, Entity Grounding & AI Discoverability
+- **Official Canonical Domain**: `https://websitebanja.com`
+- **Infrastructure**: Azure Container Apps (`websitebanja-app`, `centralindia`) with automated HTTPS/SSL, rolling zero-downtime revisions, and non-fatal IndexNow CI/CD ping.
+- **Apex Domain Enforcement**: Middleware enforces 308 permanent redirect from `www.websitebanja.com` to `https://websitebanja.com`.
+- **Crawler & Robots Directives**:
+  - `src/app/robots.ts`: Allows `/`, `/agent`, `/p/`, `/llms.txt`, `/sitemap.xml`, `/favicon.ico` for all crawlers including explicit AI bots (`GPTBot`, `ChatGPT-User`, `Google-Extended`, `PerplexityBot`, `ClaudeBot`, `anthropic-ai`, `Applebot`, `Googlebot`, `Bingbot`).
+  - Private routes (`/dashboard`, `/editor`, `/builder`, `/api`, etc.) protected with `X-Robots-Tag: noindex, nofollow, noarchive`.
+- **Structured Data (Schema.org)**:
+  - `WebSite`: `@id: https://websitebanja.com/#website`, `alternateName: ["WebsiteBanja", "Website Banja", "WebsiteBanja.com"]`.
+  - `Organization`: `@id: https://websitebanja.com/#organization`, `name: WebsiteBanja AI`, `logo: /logo.png`.
+  - `SoftwareApplication`: `@id: https://websitebanja.com/#software`, `applicationCategory: DesignApplication`, `applicationSubCategory: AI Website Builder`, `featureList`, free tier offer.
+  - `FAQPage`: Authentic Q&As on capabilities, customization, responsive design, and 1-click publishing.
+- **Entity Grounding & Crawlable Content**:
+  - `AboutEntity.tsx`: Semantic server-rendered component on homepage detailing brand, category, core capabilities, comparison to traditional template builders, and official canonical URL.
+  - `public/llms.txt`: Structured plain-text documentation for LLMs. Explicitly defines official identity and declares historical/temporary prototype domains (e.g., `websitebanja.lovable.app`) as deprecated and non-canonical.
+- **Branded Favicon**:
+  - Genuine multi-size ICO binary container (16x16, 32x32, 48x48) generated directly from `public/logo.png` (WebsiteBanja branding).
+  - Maintained identically in both `public/favicon.ico` and `src/app/favicon.ico` for seamless Next.js App Router metadata serving.
+- **External AI Discovery Note**:
+  - Search engine and AI crawler indexing cycles (Google, Bing, Perplexity, OpenAI, Anthropic) operate asynchronously.
+  - Technical and semantic grounding is fully deployed; independent AI discovery will reflect as external search engine crawlers re-index `websitebanja.com` and its sitemap.
+
+

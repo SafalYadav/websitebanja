@@ -19,9 +19,12 @@ export const metadata: Metadata = {
   description:
     "Build, customize, and publish stunning responsive websites in seconds with WebsiteBanja AI. Talk with Mitra, our voice-first AI Website Architect, or generate complete multi-section sites instantly.",
   keywords: [
+    "WebsiteBanja AI",
+    "WebsiteBanja",
+    "websitebanja.com",
     "AI website builder",
     "autonomous website generator",
-    "WebsiteBanja",
+    "AI-native website builder",
     "Mitra AI architect",
     "voice website builder",
     "instant website maker",

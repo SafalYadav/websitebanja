@@ -30,7 +30,7 @@ export default function Footer() {
             <Logo imageSize={42} textClassName="text-xl" subtitleClassName="text-[11px]" />
 
             <p className="max-w-sm text-sm text-zinc-600 dark:text-zinc-400 leading-relaxed">
-              The autonomous AI website builder for founders, creators, and modern businesses. Build, customize, and publish your next website in 60 seconds.
+              WebsiteBanja AI (<strong className="font-semibold text-zinc-800 dark:text-zinc-200">websitebanja.com</strong>) is the autonomous AI website builder for founders, creators, and modern businesses. Build, customize, and publish your next website in 60 seconds.
             </p>
 
             {/* Status indicator */}
@@ -66,6 +66,9 @@ export default function Footer() {
               Product
             </h3>
             <div className="space-y-3 text-sm text-zinc-600 dark:text-zinc-400 flex flex-col">
+              <Link href="/agent" className="text-left font-medium text-violet-600 dark:text-violet-400 hover:text-violet-700 dark:hover:text-violet-300 transition">
+                Mitra AI Architect
+              </Link>
               <button type="button" onClick={() => scrollTo("#how-it-works")} className="text-left hover:text-zinc-900 dark:hover:text-white transition">
                 How It Works
               </button>
@@ -81,6 +84,9 @@ export default function Footer() {
               <button type="button" onClick={() => scrollTo("#faq")} className="text-left hover:text-zinc-900 dark:hover:text-white transition">
                 FAQ
               </button>
+              <a href="https://websitebanja.com/llms.txt" target="_blank" rel="noopener noreferrer" className="text-left text-xs text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 transition">
+                AI Documentation (llms.txt)
+              </a>
             </div>
           </div>
 

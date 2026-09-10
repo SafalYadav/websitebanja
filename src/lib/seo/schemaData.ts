@@ -4,18 +4,11 @@ export const websiteJsonLd = {
   "@id": "https://websitebanja.com/#website",
   url: "https://websitebanja.com",
   name: "WebsiteBanja AI",
+  alternateName: ["WebsiteBanja", "Website Banja", "WebsiteBanja.com"],
   description:
     "Autonomous AI website builder that plans, writes, designs, and publishes modern responsive websites in seconds.",
   publisher: {
     "@id": "https://websitebanja.com/#organization",
-  },
-  potentialAction: {
-    "@type": "SearchAction",
-    target: {
-      "@type": "EntryPoint",
-      urlTemplate: "https://websitebanja.com/?q={search_term_string}",
-    },
-    "query-input": "required name=search_term_string",
   },
   inLanguage: "en-US",
 };
@@ -25,6 +18,7 @@ export const organizationJsonLd = {
   "@type": "Organization",
   "@id": "https://websitebanja.com/#organization",
   name: "WebsiteBanja AI",
+  legalName: "WebsiteBanja AI",
   url: "https://websitebanja.com",
   logo: {
     "@type": "ImageObject",
@@ -32,6 +26,15 @@ export const organizationJsonLd = {
     width: "512",
     height: "512",
   },
+  description:
+    "WebsiteBanja AI is an autonomous, AI-native website builder and conversational web design platform.",
+  knowsAbout: [
+    "AI Website Builder",
+    "Autonomous Web Design",
+    "Conversational AI Architect",
+    "Prompt to Website Generation",
+    "Responsive Web Development",
+  ],
   sameAs: [
     "https://twitter.com/websitebanja",
     "https://github.com/SafalYadav/websitebanja",
@@ -43,23 +46,27 @@ export const softwareApplicationJsonLd = {
   "@type": "SoftwareApplication",
   "@id": "https://websitebanja.com/#software",
   name: "WebsiteBanja AI",
+  alternateName: ["WebsiteBanja", "WebsiteBanja AI Website Builder"],
   applicationCategory: "DesignApplication",
-  operatingSystem: "Web Browser",
+  applicationSubCategory: "AI Website Builder",
+  operatingSystem: "Web Browser, All",
   url: "https://websitebanja.com",
   description:
-    "AI-powered website builder and autonomous web design architect. Create, edit, and publish modern responsive websites instantly.",
+    "Autonomous AI-powered website builder. Users describe the website they want in natural language or converse with Mitra (voice-first AI architect), and WebsiteBanja AI automatically writes copy, selects color palettes, generates responsive multi-section layouts, and provides a drag-and-drop visual studio editor with 1-click cloud publishing.",
   offers: {
     "@type": "Offer",
     price: "0",
-    priceCurrency: "INR",
+    priceCurrency: "USD",
     availability: "https://schema.org/InStock",
+    description: "Free tier with full access to planning, AI generation, visual studio editor, and public publishing.",
   },
   featureList: [
-    "Autonomous AI Website Generator",
-    "Mitra Voice & Text AI Website Architect",
-    "Live Visual Studio Editor with Drag-and-Drop",
-    "Mobile & Tablet Responsive Previews",
-    "1-Click Global Cloud Publishing",
+    "Natural language prompt-to-website autonomous generation",
+    "Mitra: Conversational voice and text AI Website Architect",
+    "Multi-industry copywriter and adaptive color palette engine",
+    "Live visual studio editor with drag-and-drop section management",
+    "Fluid multi-device responsive previews (Desktop, Tablet, Mobile)",
+    "1-Click instant cloud publishing with SSL and custom slug",
   ],
   author: {
     "@id": "https://websitebanja.com/#organization",

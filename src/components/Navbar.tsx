@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { dashboardRoute, homeRoute, loginRoute, signupRoute } from "@/lib/editorRoutes";
 import { Button } from "@/components/ui/button";
@@ -103,14 +104,13 @@ export default function Navbar() {
             FAQ
           </button>
 
-          <button
-            type="button"
-            onClick={() => router.push("/agent")}
+          <Link
+            href="/agent"
             className="flex items-center gap-1.5 text-sm font-semibold text-violet-600 dark:text-violet-400 hover:opacity-80 transition"
           >
             <Sparkles className="h-3.5 w-3.5" />
-            <span>Talk to AI</span>
-          </button>
+            <span>Mitra AI Architect</span>
+          </Link>
         </nav>
 
         {/* Right Action Bar */}
@@ -232,17 +232,14 @@ export default function Navbar() {
               FAQ
             </button>
 
-            <button
-              type="button"
-              onClick={() => {
-                router.push("/agent");
-                setIsOpen(false);
-              }}
+            <Link
+              href="/agent"
+              onClick={() => setIsOpen(false)}
               className="text-left py-1 font-semibold text-violet-600 dark:text-violet-400 flex items-center gap-1.5"
             >
               <Sparkles className="h-4 w-4" />
-              <span>Talk to AI Architect</span>
-            </button>
+              <span>Mitra AI Architect</span>
+            </Link>
 
             <div className="pt-4 border-t border-zinc-200 dark:border-white/10 flex flex-col gap-2.5">
               {loggedIn ? (

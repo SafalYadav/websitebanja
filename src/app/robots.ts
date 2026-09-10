@@ -7,7 +7,7 @@ export default function robots(): MetadataRoute.Robots {
     rules: [
       {
         userAgent: '*',
-        allow: ['/', '/agent', '/p/'],
+        allow: ['/', '/agent', '/p/', '/llms.txt', '/sitemap.xml', '/favicon.ico'],
         disallow: [
           '/api/',
           '/dashboard/',
@@ -23,8 +23,18 @@ export default function robots(): MetadataRoute.Robots {
         ],
       },
       {
-        userAgent: ['Googlebot', 'Bingbot'],
-        allow: ['/', '/agent', '/p/'],
+        userAgent: [
+          'Googlebot',
+          'Bingbot',
+          'GPTBot',
+          'ChatGPT-User',
+          'Google-Extended',
+          'PerplexityBot',
+          'ClaudeBot',
+          'anthropic-ai',
+          'Applebot',
+        ],
+        allow: ['/', '/agent', '/p/', '/llms.txt', '/sitemap.xml', '/favicon.ico'],
         disallow: [
           '/api/',
           '/dashboard/',

@@ -1,5 +1,6 @@
 import Navbar from "@/components/Navbar";
 import Hero from "@/components/Hero";
+import AboutEntity from "@/components/landing/AboutEntity";
 import BeforeAfterComparison from "@/components/landing/BeforeAfterComparison";
 import HowItWorks from "@/components/HowITWorks";
 import Features from "@/components/Features";
@@ -18,6 +19,7 @@ export default function Home() {
       <Navbar />
       <main className="flex-1">
         <Hero />
+        <AboutEntity />
         <BeforeAfterComparison />
         <HowItWorks />
         <Features />
