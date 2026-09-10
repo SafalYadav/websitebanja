@@ -32,6 +32,13 @@ export async function generateMetadata({
   return {
     title: pageTitle,
     description: pageDesc,
+    alternates: {
+      canonical: `https://websitebanja.com/p/${resolvedParams.slug}`,
+    },
+    robots: {
+      index: true,
+      follow: true,
+    },
     openGraph: {
       title: homePage?.seo?.ogTitle || pageTitle,
       description: homePage?.seo?.ogDescription || pageDesc,

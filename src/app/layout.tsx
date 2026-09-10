@@ -4,13 +4,78 @@ import SmoothScroll from "@/components/SmoothScroll";
 import { ThemeProvider } from "@/components/theme/ThemeProvider";
 import ToastContainer from "@/components/ui/ToastContainer";
 
+import JsonLd, {
+  websiteJsonLd,
+  organizationJsonLd,
+  softwareApplicationJsonLd,
+} from "@/components/seo/JsonLd";
+
 export const metadata: Metadata = {
-  title: "WebsiteBanja AI — AI Website Builder",
-  description: "Generate and customize modern websites in seconds with AI.",
+  metadataBase: new URL("https://websitebanja.com"),
+  title: {
+    default: "WebsiteBanja AI — Autonomous AI Website Builder & Architect",
+    template: "%s | WebsiteBanja AI",
+  },
+  description:
+    "Build, customize, and publish stunning responsive websites in seconds with WebsiteBanja AI. Talk with Mitra, our voice-first AI Website Architect, or generate complete multi-section sites instantly.",
+  keywords: [
+    "AI website builder",
+    "autonomous website generator",
+    "WebsiteBanja",
+    "Mitra AI architect",
+    "voice website builder",
+    "instant website maker",
+    "no-code AI builder",
+    "responsive web design AI",
+    "Next.js website generator",
+    "automated web design",
+  ],
+  authors: [{ name: "WebsiteBanja Team", url: "https://websitebanja.com" }],
+  creator: "WebsiteBanja AI",
+  publisher: "WebsiteBanja AI",
+  alternates: {
+    canonical: "https://websitebanja.com",
+  },
   icons: {
     icon: "/logo.png",
     shortcut: "/logo.png",
     apple: "/logo.png",
+  },
+  openGraph: {
+    type: "website",
+    locale: "en_US",
+    url: "https://websitebanja.com",
+    title: "WebsiteBanja AI — Autonomous AI Website Builder & Architect",
+    description:
+      "Generate, customize, and publish full multi-section responsive websites with autonomous AI. Features Mitra, the real-time conversational website architect.",
+    siteName: "WebsiteBanja AI",
+    images: [
+      {
+        url: "/logo.png",
+        width: 512,
+        height: 512,
+        alt: "WebsiteBanja AI Logo",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "WebsiteBanja AI — Autonomous AI Website Builder & Architect",
+    description:
+      "Generate and publish stunning responsive websites in seconds with autonomous AI and Mitra, your conversational Website Architect.",
+    images: ["/logo.png"],
+    creator: "@websitebanja",
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-video-preview": -1,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+    },
   },
 };
 
@@ -21,6 +86,11 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="antialiased" suppressHydrationWarning>
+      <head>
+        <JsonLd data={websiteJsonLd} />
+        <JsonLd data={organizationJsonLd} />
+        <JsonLd data={softwareApplicationJsonLd} />
+      </head>
       <body className="min-h-screen flex flex-col font-sans bg-slate-50 text-slate-900 dark:bg-[#09090B] dark:text-zinc-100 transition-colors duration-200 selection:bg-violet-500/30 selection:text-violet-900 dark:selection:text-white">
         <ThemeProvider>
           <SmoothScroll>

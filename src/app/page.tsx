@@ -9,9 +9,12 @@ import FAQ from "@/components/FAQ";
 import CtaSection from "@/components/landing/CtaSection";
 import Footer from "@/components/Footer";
 
+import JsonLd, { faqPageJsonLd } from "@/components/seo/JsonLd";
+
 export default function Home() {
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900 dark:bg-[#09090B] dark:text-zinc-100 transition-colors duration-200">
+      <JsonLd data={faqPageJsonLd} />
       <Navbar />
       <main className="flex-1">
         <Hero />
