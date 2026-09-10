@@ -19,10 +19,10 @@ WebsiteBanja AI has completed **Phase 4: Application Hosting Migration**, transi
 | Component | Target Specification |
 |---|---|
 | **Azure Subscription** | `5f99d086-da25-4807-b98b-76c7e114bf38` (*Azure for Students*) |
-| **Resource Group** | `websitebanja-rg` (Region: `indiasouthcentral`) |
-| **Container Registry** | `websitebanjacr.azurecr.io` (Azure Container Registry, Basic SKU) |
+| **Resource Group** | `websitebanja-rg` (Location: `indiasouthcentral`) |
+| **Container Registry** | `websitebanjacr.azurecr.io` (Region: `centralindia`, Basic SKU) |
 | **Image Tag** | `websitebanjacr.azurecr.io/websitebanja:latest` |
-| **Environment** | `websitebanja-env` (Azure Container Apps Managed Environment) |
+| **Environment** | `websitebanja-env` (Azure Container Apps Managed Environment, Region: `centralindia`) |
 | **Container App** | `websitebanja-app` |
 | **Compute & Memory** | 0.5 vCPU, 1.0 GiB RAM |
 | **Scaling** | minReplicas = 1, maxReplicas = 3 |
