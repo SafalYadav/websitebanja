@@ -127,6 +127,14 @@ jobs:
           echo "Executing automated smoke test against ${APP_URL}..."
           node azure-migration/11_smoke_test_container_app.mjs "${APP_URL}"
 
+      - name: Ping IndexNow (post-deploy, non-fatal)
+        if: success()
+        continue-on-error: true
+        run: |
+          echo "Submitting public URLs to IndexNow after successful deployment..."
+          node scripts/indexnow_ping.mjs || true
+          echo "[IndexNow] Ping step completed (non-fatal)"
+
       - name: Publish Success Deployment Summary
         if: success()
         run: |
