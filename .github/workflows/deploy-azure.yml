@@ -53,6 +53,9 @@ jobs:
     name: Deploy to Azure Container Apps & Verify
     needs: build-and-push
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
     steps:
       - name: Checkout Code (for smoke test script)
         uses: actions/checkout@v4
@@ -88,19 +91,19 @@ jobs:
       - name: Deploy Immutable Image to Container App
         id: deploy
         run: |
-          echo "Deploying immutable image ${{ env.ACR_SERVER }}/${{ env.IMAGE_NAME }}:${{ github.sha }} to Container App ${{ env.CONTAINER_APP_NAME }}..."
+          echo "Deploying immutable image $ACR_SERVER/$IMAGE_NAME:${{ github.sha }} to Container App $CONTAINER_APP_NAME..."
           az containerapp update \
-            --name "${{ env.CONTAINER_APP_NAME }}" \
-            --resource-group "${{ env.RESOURCE_GROUP }}" \
-            --image "${{ env.ACR_SERVER }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
+            --name "$CONTAINER_APP_NAME" \
+            --resource-group "$RESOURCE_GROUP" \
+            --image "$ACR_SERVER/$IMAGE_NAME:${{ github.sha }}"
 
       - name: Verify Provisioning State & Health
         id: verify
         run: |
           echo "Verifying Container App provisioning status..."
           PROVISIONING_STATE=$(az containerapp show \
-            --name "${{ env.CONTAINER_APP_NAME }}" \
-            --resource-group "${{ env.RESOURCE_GROUP }}" \
+            --name "$CONTAINER_APP_NAME" \
+            --resource-group "$RESOURCE_GROUP" \
             --query "properties.provisioningState" -o tsv)
 
           echo "Provisioning State: $PROVISIONING_STATE"
@@ -110,19 +113,19 @@ jobs:
           fi
 
           APP_FQDN=$(az containerapp show \
-            --name "${{ env.CONTAINER_APP_NAME }}" \
-            --resource-group "${{ env.RESOURCE_GROUP }}" \
+            --name "$CONTAINER_APP_NAME" \
+            --resource-group "$RESOURCE_GROUP" \
             --query "properties.configuration.ingress.fqdn" -o tsv)
 
           LATEST_REVISION=$(az containerapp show \
-            --name "${{ env.CONTAINER_APP_NAME }}" \
-            --resource-group "${{ env.RESOURCE_GROUP }}" \
+            --name "$CONTAINER_APP_NAME" \
+            --resource-group "$RESOURCE_GROUP" \
             --query "properties.latestRevisionName" -o tsv)
 
           APP_URL="https://${APP_FQDN}"
-          echo "APP_URL=${APP_URL}" >> $GITHUB_ENV
-          echo "APP_FQDN=${APP_FQDN}" >> $GITHUB_ENV
-          echo "LATEST_REVISION=${LATEST_REVISION}" >> $GITHUB_ENV
+          echo "APP_URL=${APP_URL}" >> "$GITHUB_ENV"
+          echo "APP_FQDN=${APP_FQDN}" >> "$GITHUB_ENV"
+          echo "LATEST_REVISION=${LATEST_REVISION}" >> "$GITHUB_ENV"
           echo "Live Application URL: ${APP_URL}"
           echo "Active Revision: ${LATEST_REVISION}"
 
@@ -131,22 +134,30 @@ jobs:
           echo "Executing automated smoke test against ${APP_URL}..."
           node azure-migration/11_smoke_test_container_app.mjs "${APP_URL}"
 
-      - name: Publish Deployment Summary
-        if: always()
+      - name: Publish Success Deployment Summary
+        if: success()
         run: |
-          echo "### 🚀 Azure Container Apps Deployment Summary" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
-          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
-          echo "| **Container App** | \`${{ env.CONTAINER_APP_NAME }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Resource Group** | \`${{ env.RESOURCE_GROUP }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Commit SHA** | \`${{ github.sha }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Image Tag** | \`${{ env.ACR_SERVER }}/${{ env.IMAGE_NAME }}:${{ github.sha }}\` |" >> $GITHUB_STEP_SUMMARY
-          if [ -n "$LATEST_REVISION" ]; then
-            echo "| **Revision** | \`${LATEST_REVISION}\` |" >> $GITHUB_STEP_SUMMARY
-          fi
-          if [ -n "$APP_URL" ]; then
-            echo "| **Live URL** | [${APP_URL}](${APP_URL}) |" >> $GITHUB_STEP_SUMMARY
-          fi
-          echo "| **Status** | ${{ job.status == 'success' && '✅ Healthy' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Trigger** | \`${{ github.actor }}\` via \`${{ github.event_name }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "### 🚀 Azure Container Apps Deployment Succeeded" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Property | Value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---|---|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| **Container App** | \`$CONTAINER_APP_NAME\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| **Resource Group** | \`$RESOURCE_GROUP\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| **Commit SHA** | \`${{ github.sha }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| **Image Tag** | \`$ACR_SERVER/$IMAGE_NAME:${{ github.sha }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| **Active Revision** | \`${LATEST_REVISION}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| **Live URL** | [${APP_URL}](${APP_URL}) |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| **Status** | ✅ Healthy & Verified |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| **Trigger** | \`${{ github.actor }}\` via \`${{ github.event_name }}\` |" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publish Failure Deployment Summary
+        if: failure()
+        run: |
+          echo "### ❌ Azure Container Apps Deployment Failed" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Property | Value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---|---|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| **Container App** | \`$CONTAINER_APP_NAME\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| **Resource Group** | \`$RESOURCE_GROUP\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| **Failed Commit SHA** | \`${{ github.sha }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| **Status** | ❌ Failed (Previous healthy revision preserved) |" >> "$GITHUB_STEP_SUMMARY"
