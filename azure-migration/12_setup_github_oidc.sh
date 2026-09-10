@@ -55,7 +55,9 @@ fi
 # 4. Configure Federated Identity Credential for GitHub Actions OIDC (branch: main)
 echo -e "\n[4/5] Configuring Federated Identity Credential for GitHub Actions OIDC..."
 FED_CRED_MAIN="websitebanja-gh-main"
+FED_CRED_MAIN_ID="websitebanja-gh-main-id"
 
+# Standard name format
 if az ad app federated-credential show --id "$OBJECT_ID" --federated-credential-id "$FED_CRED_MAIN" >/dev/null 2>&1; then
   echo "Federated credential '$FED_CRED_MAIN' exists."
 else
@@ -69,7 +71,25 @@ else
       \"description\": \"GitHub Actions OIDC for WebsiteBanja main branch\",
       \"audiences\": [\"api://AzureADTokenExchange\"]
     }" >/dev/null
-  echo "Federated identity credential for 'main' branch created."
+  echo "Federated identity credential for '$FED_CRED_MAIN' created."
+fi
+
+# Enhanced ID format (GitHub Actions immutable claim subject: repo:owner@id/repo@id:ref:refs/heads/main)
+SUBJECT_IMMUTABLE="repo:SafalYadav@250260430/websitebanja@1319331462:ref:refs/heads/main"
+if az ad app federated-credential show --id "$OBJECT_ID" --federated-credential-id "$FED_CRED_MAIN_ID" >/dev/null 2>&1; then
+  echo "Federated credential '$FED_CRED_MAIN_ID' exists."
+else
+  echo "Creating federated credential with immutable subject '$SUBJECT_IMMUTABLE'..."
+  az ad app federated-credential create \
+    --id "$OBJECT_ID" \
+    --parameters "{
+      \"name\": \"$FED_CRED_MAIN_ID\",
+      \"issuer\": \"https://token.actions.githubusercontent.com\",
+      \"subject\": \"$SUBJECT_IMMUTABLE\",
+      \"description\": \"GitHub Actions OIDC with immutable IDs for WebsiteBanja main branch\",
+      \"audiences\": [\"api://AzureADTokenExchange\"]
+    }" >/dev/null
+  echo "Federated identity credential for '$FED_CRED_MAIN_ID' created."
 fi
 
 # 5. Configure Least-Privilege Scoped RBAC Roles (NO Owner/Contributor at subscription level)
