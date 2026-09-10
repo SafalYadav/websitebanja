@@ -44,3 +44,7 @@ next-env.d.ts
 .agents/
 strix_runs/
 scratch/
+azure-migration/dumps/
+logs/
+test-results/
+

@@ -1,0 +1,9 @@
+node_modules
+.next
+.git
+.env*.local
+azure-migration/dumps
+strix_runs
+test-results
+coverage
+*.log
