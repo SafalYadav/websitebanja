@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { openai } from "@/lib/openai";
 import { checkMemoryRateLimit } from "@/lib/rateLimit";
 import { verifyAdminAuth } from "@/lib/adminAuth";
-import { authenticateRequest } from "@/lib/supabaseServer";
+import { authenticateRequest, getClientIp } from "@/lib/supabaseServer";
 import type { StudioAiAction } from "@/lib/studioAiActions";
 
 export const dynamic = "force-dynamic";
@@ -24,24 +24,28 @@ function boundedJson(value: unknown, maxChars: number): string {
 
 export async function POST(req: NextRequest) {
   try {
-    // SECURITY: this route spends money on a paid OpenAI model, so a valid session
-    // is mandatory. Previously verifyAdminAuth's result was only consulted to decide
-    // whether to SKIP rate limiting — an anonymous caller fell through to the model
-    // call, throttled only by a spoofable IP key.
     const user = await authenticateRequest(req);
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
-    }
+    let isAdmin = false;
 
-    // Admins skip rate limiting entirely; everyone else is limited per user id
-    // (never per IP, which the client can influence via x-forwarded-for).
-    const authResult = await verifyAdminAuth(req);
-
-    if (!authResult.isAdmin) {
-      const { success } = checkMemoryRateLimit(`ai_action_${user.id}`, 30, 60 * 1000);
+    if (user) {
+      const authResult = await verifyAdminAuth(req);
+      isAdmin = authResult.isAdmin;
+      if (!isAdmin) {
+        const { success } = checkMemoryRateLimit(`ai_action_${user.id}`, 30, 60 * 1000);
+        if (!success) {
+          return NextResponse.json(
+            { error: "Rate limit reached. Please wait a moment before sending more AI commands." },
+            { status: 429 }
+          );
+        }
+      }
+    } else {
+      // Allow guest / preview studio editor sessions with strict IP rate limiting (10 requests / minute)
+      const clientIp = getClientIp(req);
+      const { success } = checkMemoryRateLimit(`ai_action_ip_${clientIp}`, 10, 60 * 1000);
       if (!success) {
         return NextResponse.json(
-          { error: "Rate limit reached. Please wait a moment before sending more AI commands." },
+          { error: "Rate limit reached. Please wait a moment or sign in to continue using AI Copilot." },
           { status: 429 }
         );
       }
@@ -105,17 +109,28 @@ CRITICAL SEMANTIC INTENT RULES:
    - "Ek product add karo" / "Add 2 products" -> ACTION: "add_product" with accurate INR pricing, name, image, description.
    - "Change product price to 1999" -> ACTION: "update_product".
 
+8. BUTTON ACTION & LABEL COMBINATIONS:
+   - Example: "Change the hero button to Book on WhatsApp" or "Hero button ko WhatsApp banao"
+   - INTENT: Update button text AND set WhatsApp action!
+   - ACTION: "set_button_whatsapp" with path = "hero.button", label = "Book on WhatsApp", phone = contact phone or "+919876543210".
+   - If user asks to change button label only -> "update_button" with label.
+
+9. TEXT REFINEMENT & HEADLINES:
+   - Example: "Make the hero headline more premium & punchy"
+   - INTENT: Generate a high-converting, premium, punchy title tailored to the business.
+   - ACTION: "update_text" with path = "hero.title", text = "The new headline".
+
 ==================================================
 SUPPORTED ACTION TYPES:
 ==================================================
 - "update_text": { "path": "hero.title", "text": "New text" }
 - "replace_image": { "path": "hero.image", "imageUrl": "https://images.unsplash.com/..." }
 - "update_button": { "path": "hero.button", "label": "Explore Collection" }
-- "set_button_scroll_target": { "path": "hero.button", "target": "products" | "contact" | "services" | "about" | "faq" }
-- "set_button_page_target": { "path": "hero.button", "slug": "about" | "contact" | "menu" }
-- "set_button_whatsapp": { "path": "hero.button", "phone": "+919876543210" }
-- "set_button_external_url": { "path": "hero.button", "url": "https://example.com" }
-- "set_button_call": { "path": "hero.button", "phone": "+919876543210" }
+- "set_button_scroll_target": { "path": "hero.button", "target": "products" | "contact" | "services" | "about" | "faq", "label"?: string }
+- "set_button_page_target": { "path": "hero.button", "slug": "about" | "contact" | "menu", "label"?: string }
+- "set_button_whatsapp": { "path": "hero.button", "phone": "+919876543210", "label"?: string }
+- "set_button_external_url": { "path": "hero.button", "url": "https://example.com", "label"?: string }
+- "set_button_call": { "path": "hero.button", "phone": "+919876543210", "label"?: string }
 - "add_section": { "sectionType": "features" | "faq" | "products" | "services" | "about" | "contact" }
 - "delete_section": { "sectionKey": "faq" }
 - "reorder_sections": { "newOrder": ["hero", "products", "services", "about", "faq", "contact", "footer"] }
@@ -132,9 +147,9 @@ Return ONLY JSON:
   "summary": "Clear human-readable 1-sentence explanation of what changed",
   "actions": [
     {
-      "action": "set_button_scroll_target",
-      "payload": { "path": "hero.button", "target": "products" },
-      "summary": "Configured Hero CTA button to smoothly scroll to the Products/Catalog section"
+      "action": "set_button_whatsapp",
+      "payload": { "path": "hero.button", "label": "Book on WhatsApp", "phone": "+919876543210" },
+      "summary": "Updated Hero CTA button to Book on WhatsApp"
     }
   ]
 }`;
@@ -159,28 +174,69 @@ Current Website Outline: ${boundedJson({
 User Command: "${prompt.trim()}"`;
 
     let rawResponse = "{}";
-    try {
-      const completion = await openai.chat.completions.create({
-        model: "gpt-4o-mini",
-        response_format: { type: "json_object" },
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userMessage },
-        ],
-        temperature: 0.1,
-      });
-      rawResponse = completion.choices[0]?.message?.content || "{}";
-    } catch (openaiErr: unknown) {
-      console.error("[OpenAI Execution Error]", openaiErr);
-      const errMsg = openaiErr instanceof Error ? openaiErr.message : String(openaiErr);
-      // Map cryptic schema errors from OpenAI SDK
-      if (errMsg.includes("pattern")) {
-        throw new Error("Invalid URL or text format provided to AI Copilot.");
+    let providerError: Error | null = null;
+
+    if (process.env.OPENAI_API_KEY) {
+      try {
+        const completion = await openai.chat.completions.create({
+          model: "gpt-4o-mini",
+          response_format: { type: "json_object" },
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: userMessage },
+          ],
+          temperature: 0.1,
+        });
+        rawResponse = completion.choices[0]?.message?.content || "{}";
+      } catch (openaiErr: unknown) {
+        console.warn("[OpenAI Execution Warning, trying fallback]", openaiErr);
+        providerError = openaiErr instanceof Error ? openaiErr : new Error(String(openaiErr));
       }
-      throw openaiErr;
     }
 
-    const parsed = JSON.parse(rawResponse);
+    if (rawResponse === "{}" || !rawResponse.trim()) {
+      const geminiApiKey =
+        process.env.GEMINI_API_KEY ||
+        process.env.GOOGLE_API_KEY ||
+        process.env.GOOGLE_GENAI_API_KEY;
+
+      if (geminiApiKey) {
+        try {
+          const { GoogleGenAI } = await import("@google/genai");
+          const ai = new GoogleGenAI({ apiKey: geminiApiKey.trim(), vertexai: false });
+          const response = await ai.models.generateContent({
+            model: "gemini-2.5-flash",
+            contents: [
+              {
+                role: "user",
+                parts: [
+                  { text: `${systemPrompt}\n\nSTRICT JSON ONLY:\n\nContext:\n${userMessage}` },
+                ],
+              },
+            ],
+            config: {
+              responseMimeType: "application/json",
+              temperature: 0.1,
+            },
+          });
+          rawResponse = response.text || "{}";
+        } catch (geminiErr: unknown) {
+          console.error("[Gemini Fallback Error]", geminiErr);
+          if (providerError) throw providerError;
+          throw geminiErr;
+        }
+      } else if (providerError) {
+        throw providerError;
+      }
+    }
+
+    const cleanJson = rawResponse
+      .replace(/^```json\s*/i, "")
+      .replace(/^```\s*/i, "")
+      .replace(/```$/g, "")
+      .trim();
+
+    const parsed = JSON.parse(cleanJson || "{}");
 
     const actions: StudioAiAction[] = Array.isArray(parsed.actions) ? parsed.actions : [];
     const summary: string = parsed.summary || "Website modified successfully.";

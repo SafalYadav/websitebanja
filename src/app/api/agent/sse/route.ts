@@ -10,6 +10,8 @@ import type { ExtractedUserNeeds } from '@/types/aiAgent';
 
 import { normalizeAgentResponse } from '@/lib/ai/agentNormalizer';
 
+import { getClientIp, authenticateRequest, getUserScopedClient } from '@/lib/supabaseServer';
+
 // Custom error to indicate that the LLM provider returned an empty response.
 // Used to differentiate validation errors from provider failures.
 class ModelResponseError extends Error {
@@ -23,11 +25,19 @@ class ModelResponseError extends Error {
  * Request payload for the SSE endpoint.
  */
 const RequestSchema = z.object({
-  message: z.string().min(1, 'Message cannot be empty'),
-  projectId: z.string().optional(),
+  message: z.string().trim().min(1, 'Message cannot be empty').max(2000, 'Message cannot exceed 2000 characters'),
+  projectId: z.string().trim().max(100).optional(),
   // Optional existing extracted needs – persisted per project.
   currentNeeds: z.object({}).passthrough().optional(),
-  history: z.array(z.object({ role: z.enum(['user', 'assistant', 'system']), content: z.string() })).optional(),
+  history: z
+    .array(
+      z.object({
+        role: z.enum(['user', 'assistant', 'system']),
+        content: z.string().max(2000, 'History item cannot exceed 2000 characters'),
+      })
+    )
+    .max(12, 'History cannot exceed 12 items')
+    .optional(),
 });
 
 /**
@@ -39,7 +49,7 @@ You speak like an enthusiastic, supportive creative designer chatting naturally 
 CRITICAL RULES:
 1. ALWAYS return valid JSON matching the schema below. NEVER wrap in markdown code blocks or fences.
 2. "reply": Clean conversational text for the user. 2-3 friendly sentences. NEVER put JSON or code fences in reply. Ask ONE relevant next question.
-3. "speechText": 1 punchy, concise, friendly spoken sentence (under 15 words) for instant low-latency voice synthesis. NO markdown, NO bullet points, NO emoji names, NO JSON, NO lists.
+3. "speechText": MUST be identical to "reply". Every word displayed in the chat is spoken aloud.
 4. "suggestedReplies": 3 to 4 quick-tap suggested options for the user.
 5. "extractedNeeds": Extract canonical facts from conversation:
    {
@@ -97,19 +107,21 @@ function createSseStream(
  * provider, normalises the response and streams the result back to the client.
  */
 export async function POST(req: Request) {
-  // Rate‑limit per IP – keep existing behaviour from the talk route.
-  const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? '127.0.0.1';
+  // Rate‑limit per IP using spoof-resistant client IP extraction
+  const ip = getClientIp(req);
   const { success: allowed } = checkMemoryRateLimit(`agent_sse_${ip}`, 60, 60 * 1000);
   if (!allowed) {
     return NextResponse.json({ success: false, message: 'Too many messages. Please wait.' }, { status: 429 });
   }
+
+  const authenticatedUser = await authenticateRequest(req);
 
   // Parse and validate request body.
   let payload: { message: string; projectId?: string; currentNeeds?: ExtractedUserNeeds; history?: Array<{ role: 'user' | 'assistant' | 'system'; content: string }> };
   try {
     const raw = await req.json();
     payload = RequestSchema.parse(raw);
-  } catch (e) {
+  } catch {
     return NextResponse.json({ success: false, message: 'Invalid request payload.' }, { status: 400 });
   }
 
@@ -186,16 +198,28 @@ export async function POST(req: Request) {
           payload.message
         );
 
-        // If projectId is provided, persist canonical facts to Project Knowledge
-        if (payload.projectId) {
+        // If projectId is provided, persist canonical facts to Project Knowledge only if caller owns it
+        if (payload.projectId && authenticatedUser) {
           try {
-            await setProjectKnowledge(
-              payload.projectId,
-              'extracted_needs',
-              normalized.extractedNeeds,
-              'system',
-              'business_info'
-            );
+            const userSupabase = getUserScopedClient(authenticatedUser.token);
+            const { data: project } = await userSupabase
+              .from('projects')
+              .select('id, user_id')
+              .eq('id', payload.projectId)
+              .eq('user_id', authenticatedUser.id)
+              .maybeSingle();
+
+            if (project) {
+              await setProjectKnowledge(
+                payload.projectId,
+                'extracted_needs',
+                normalized.extractedNeeds,
+                authenticatedUser.id,
+                'business_info'
+              );
+            } else {
+              console.warn('[Agent SSE] Skipped project knowledge write: caller is not project owner');
+            }
           } catch (pkErr) {
             console.warn('[Agent SSE] Project Knowledge write skipped:', pkErr instanceof Error ? pkErr.message : pkErr);
           }

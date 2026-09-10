@@ -10,6 +10,26 @@ import type {
   StoragePublicUrlResult,
 } from "./types";
 
+export function sanitizeBlobPath(path: string): string {
+  if (!path || typeof path !== "string") {
+    throw new Error("Invalid blob path: path must be a non-empty string");
+  }
+  if (path.includes("\0")) {
+    throw new Error("Invalid blob path: null bytes are not allowed");
+  }
+  const segments = path.split(/[\/\\]+/);
+  for (const segment of segments) {
+    if (segment === ".." || segment === ".") {
+      throw new Error("Invalid blob path: path traversal is not allowed");
+    }
+  }
+  const normalized = segments.filter(Boolean).join("/");
+  if (!normalized) {
+    throw new Error("Invalid blob path: empty path after normalization");
+  }
+  return normalized;
+}
+
 export class AzureBlobStorageClient implements IStorageClient {
   private blobServiceClient: any = null;
   private containerClient: any = null;
@@ -96,8 +116,9 @@ export class AzureBlobStorageClient implements IStorageClient {
     options?: StorageUploadOptions
   ): Promise<StorageUploadResult> {
     try {
+      const safePath = sanitizeBlobPath(path);
       const container = await this.getContainer();
-      const blockBlobClient = container.getBlockBlobClient(path);
+      const blockBlobClient = container.getBlockBlobClient(safePath);
 
       let buffer: Buffer;
       if (typeof body === "string") {
@@ -116,7 +137,7 @@ export class AzureBlobStorageClient implements IStorageClient {
         },
       });
 
-      return { data: { path }, error: null };
+      return { data: { path: safePath }, error: null };
     } catch (err) {
       return {
         data: null,
@@ -127,12 +148,13 @@ export class AzureBlobStorageClient implements IStorageClient {
 
   async download(path: string): Promise<StorageDownloadResult> {
     try {
+      const safePath = sanitizeBlobPath(path);
       const container = await this.getContainer();
-      const blockBlobClient = container.getBlockBlobClient(path);
+      const blockBlobClient = container.getBlockBlobClient(safePath);
 
       const exists = await blockBlobClient.exists();
       if (!exists) {
-        return { data: null, error: new Error(`Blob not found: ${path}`) };
+        return { data: null, error: new Error(`Blob not found: ${safePath}`) };
       }
 
       const buffer = await blockBlobClient.downloadToBuffer();
@@ -163,9 +185,10 @@ export class AzureBlobStorageClient implements IStorageClient {
       const deletedPaths: string[] = [];
 
       for (const p of paths) {
-        const blockBlobClient = container.getBlockBlobClient(p);
+        const safePath = sanitizeBlobPath(p);
+        const blockBlobClient = container.getBlockBlobClient(safePath);
         await blockBlobClient.deleteIfExists();
-        deletedPaths.push(p);
+        deletedPaths.push(safePath);
       }
 
       return { data: { paths: deletedPaths }, error: null };
@@ -180,9 +203,10 @@ export class AzureBlobStorageClient implements IStorageClient {
   getPublicUrl(path: string): StoragePublicUrlResult {
     const config = getStorageConfig();
     const account = config.azureAccountName || "websitebanjastorage";
+    const safePath = sanitizeBlobPath(path);
     return {
       data: {
-        publicUrl: `https://${account}.blob.core.windows.net/${this.containerName}/${path}`,
+        publicUrl: `https://${account}.blob.core.windows.net/${this.containerName}/${safePath}`,
       },
     };
   }

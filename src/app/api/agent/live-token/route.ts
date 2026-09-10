@@ -1,18 +1,29 @@
 // src/app/api/agent/live-token/route.ts
 import { NextRequest, NextResponse } from 'next/server';
+import { checkMemoryRateLimit } from '@/lib/rateLimit';
+import { getClientIp } from '@/lib/supabaseServer';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: NextRequest) {
   try {
+    const ip = getClientIp(req);
+    const { success: withinRateLimit } = checkMemoryRateLimit(`live_token_${ip}`, 10, 60 * 1000);
+    if (!withinRateLimit) {
+      return NextResponse.json(
+        { success: false, error: 'Too many token requests. Please wait a moment.' },
+        { status: 429 }
+      );
+    }
+
     const rawKey =
       process.env.GEMINI_API_KEY ||
       process.env.GOOGLE_API_KEY ||
       process.env.GOOGLE_GENAI_API_KEY;
     if (!rawKey) {
       return NextResponse.json(
-        { success: false, error: 'GEMINI_API_KEY is not configured on the server.' },
+        { success: false, error: 'Gemini Live API is not configured on the server.' },
         { status: 503 }
       );
     }
@@ -47,12 +58,20 @@ export async function POST(req: NextRequest) {
 
     if (!tokenRes.ok) {
       const errText = await tokenRes.text();
-      throw new Error(`Gemini AuthToken service HTTP ${tokenRes.status}: ${errText}`);
+      console.error(`[API /api/agent/live-token] Gemini AuthToken service HTTP ${tokenRes.status}: ${errText}`);
+      return NextResponse.json(
+        { success: false, error: 'Failed to negotiate ephemeral session token.' },
+        { status: 502 }
+      );
     }
 
     const tokenData = await tokenRes.json();
     if (!tokenData?.name) {
-      throw new Error(`Failed to obtain token name: ${JSON.stringify(tokenData)}`);
+      console.error('[API /api/agent/live-token] Missing token name in response:', tokenData);
+      return NextResponse.json(
+        { success: false, error: 'Unexpected authentication response format.' },
+        { status: 502 }
+      );
     }
 
     return NextResponse.json({
@@ -67,12 +86,15 @@ export async function POST(req: NextRequest) {
     const errorMsg = err instanceof Error ? err.message : 'Unknown error generating Live API token';
     console.error('[API /api/agent/live-token Error]:', errorMsg);
     return NextResponse.json(
-      { success: false, error: errorMsg },
+      { success: false, error: 'Failed to generate session token.' },
       { status: 500 }
     );
   }
 }
 
-export async function GET(req: NextRequest) {
-  return POST(req);
+export async function GET() {
+  return NextResponse.json(
+    { success: false, error: 'Method Not Allowed. Use POST to obtain a Live API token.' },
+    { status: 405, headers: { Allow: 'POST' } }
+  );
 }

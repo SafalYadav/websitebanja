@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 import { checkMemoryRateLimit } from "@/lib/rateLimit";
-import { extractBusinessDetailsFast } from "@/lib/promptExtractor";
 import type { ExtractedUserNeeds, AgentTalkResponse } from "@/types/aiAgent";
 import { AgentProviderFactory } from "@/lib/ai/agentProviderFactory";
 import { normalizeAgentResponse } from "@/lib/ai/agentNormalizer";
 import { setProjectKnowledge } from "@/lib/knowledge";
+import { getClientIp, authenticateRequest, getUserScopedClient } from "@/lib/supabaseServer";
 
 interface RequestMessage {
   role: "user" | "assistant" | "system";
@@ -18,51 +18,15 @@ interface TalkRequestBody {
   language?: string;
 }
 
-function calculateReadiness(needs: ExtractedUserNeeds): number {
-  let score = 20;
-  if (needs.category && needs.category !== "Other") score += 20;
-  if (needs.businessName && !needs.businessName.toLowerCase().includes("my business")) score += 20;
-  if (needs.description && needs.description.length > 15) score += 15;
-  if (needs.services && needs.services.length > 0) score += 15;
-  if (needs.style || needs.primaryColor) score += 10;
-  return Math.min(score, 100);
-}
-
 function buildFallbackResponse(
   userText: string,
   history: RequestMessage[],
   priorNeeds: ExtractedUserNeeds
 ): AgentTalkResponse["data"] {
-  const allUserText = history
-    .filter((m) => m.role === "user")
-    .map((m) => m.content)
-    .concat(userText)
-    .join(". ");
-
-  const fastExtracted = extractBusinessDetailsFast(
-    allUserText,
-    priorNeeds.category,
-    priorNeeds.features
-  );
-
-  const mergedNeeds: ExtractedUserNeeds = {
-    businessName: priorNeeds.businessName || (fastExtracted.businessName !== "My Business" ? fastExtracted.businessName : undefined),
-    category: priorNeeds.category || fastExtracted.category,
-    description: priorNeeds.description || fastExtracted.description,
-    targetAudience: priorNeeds.targetAudience || fastExtracted.targetAudience || undefined,
-    services: (priorNeeds.services && priorNeeds.services.length > 0) ? priorNeeds.services : fastExtracted.services,
-    features: (priorNeeds.features && priorNeeds.features.length > 0) ? priorNeeds.features : ["whatsapp", "contact_form", "testimonials", "google_maps"],
-    style: priorNeeds.style || fastExtracted.style,
-    primaryColor: priorNeeds.primaryColor || fastExtracted.primaryColor,
-    secondaryColor: priorNeeds.secondaryColor || fastExtracted.secondaryColor,
-    phone: priorNeeds.phone || fastExtracted.phone || undefined,
-    email: priorNeeds.email || fastExtracted.email || undefined,
-    whatsappNumber: priorNeeds.whatsappNumber || fastExtracted.whatsappNumber || undefined,
-    location: priorNeeds.location || fastExtracted.location || undefined,
-  };
-
-  const score = calculateReadiness(mergedNeeds);
-  const wantsToBuild = /generate|build|create my website|let's go|done|ready|yes.*generate|build now/i.test(userText);
+  const normalized = normalizeAgentResponse("", priorNeeds, userText);
+  const mergedNeeds = normalized.extractedNeeds;
+  const score = normalized.readinessScore;
+  const wantsToBuild = /\b(?:build|generate|create)\s+(?:it|my\s+website|the\s+website|site)\s+now\b|\bstart\s+building\b|\byes[,\s]+(?:generate|build|create)\b|\bready to build\b|\bbuild now\b|\bgenerate now\b/i.test(userText);
 
   // If user says to build, NEVER ask again! Immediately launch!
   if (wantsToBuild) {
@@ -98,11 +62,10 @@ function buildFallbackResponse(
       reply,
       speechText: reply,
       suggestedReplies: [
-        "Specialty Coffee Cafe & Roastery",
-        "Modern Fitness & CrossFit Gym",
-        "Digital Marketing & Creative Agency",
-        "Hair & Beauty Salon",
-        "Doctor / Healthcare Clinic"
+        "Cozy Cafe or Restaurant",
+        "Modern Tech Startup",
+        "Boutique Clothing & E-Commerce",
+        "Personal Portfolio or Agency",
       ],
       extractedNeeds: mergedNeeds,
       readinessScore: 25,
@@ -161,7 +124,7 @@ function buildFallbackResponse(
 
 export async function POST(req: Request) {
   try {
-    const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "127.0.0.1";
+    const ip = getClientIp(req);
     const { success: allowed } = checkMemoryRateLimit(`agent_talk_${ip}`, 60, 60 * 1000);
     if (!allowed) {
       return NextResponse.json(
@@ -170,20 +133,34 @@ export async function POST(req: Request) {
       );
     }
 
-    const body = (await req.json()) as TalkRequestBody;
-    const messages = Array.isArray(body?.messages) ? body.messages : [];
-    const currentNeeds: ExtractedUserNeeds = body?.currentNeeds || {};
-    const requestedLanguage = body?.language || "en-IN";
+    const authenticatedUser = await authenticateRequest(req);
 
-    if (messages.length === 0) {
+    let rawBody: unknown;
+    try {
+      rawBody = await req.json();
+    } catch {
+      return NextResponse.json({ success: false, message: "Invalid JSON request." }, { status: 400 });
+    }
+
+    const body = (rawBody || {}) as TalkRequestBody;
+    const rawMessages = Array.isArray(body?.messages) ? body.messages : [];
+    const currentNeeds: ExtractedUserNeeds = body?.currentNeeds || {};
+
+    if (rawMessages.length === 0) {
       return NextResponse.json(
         { success: false, message: "No conversation history provided." },
         { status: 400 }
       );
     }
 
+    // Bounded messages: max 12 items, max 2000 chars each
+    const messages: RequestMessage[] = rawMessages.slice(-12).map((m) => ({
+      role: m.role === "assistant" || m.role === "system" ? m.role : "user",
+      content: String(m.content || "").slice(0, 2000),
+    }));
+
     const lastUserMessage = [...messages].reverse().find((m) => m.role === "user")?.content || "";
-    const wantsToBuild = /generate|build|create my website|let's go|done|ready|yes.*generate|build now/i.test(lastUserMessage);
+    const wantsToBuild = /\b(?:build|generate|create)\s+(?:it|my\s+website|the\s+website|site)\s+now\b|\bstart\s+building\b|\byes[,\s]+(?:generate|build|create)\b|\bready to build\b|\bbuild now\b|\bgenerate now\b/i.test(lastUserMessage);
 
     // If user explicitly asks to generate/build, immediately fulfill without asking again!
     if (wantsToBuild) {
@@ -245,6 +222,11 @@ CRITICAL RULES:
    - Include "detectedLanguage": { "code": string, "name": string, "nativeName": string } in your JSON.
    - Ensure "reply", "speechText", and "suggestedReplies" are all in the user's active detected language.
    - Always keep "reply" and "speechText" 100% word-for-word identical.
+8. ACCURATE MODIFICATIONS & REMOVALS:
+   - When the user modifies or updates a previous preference (e.g., 'Actually change the primary color to dark green', 'Change business name to Apex Care'), immediately update that field in "extractedNeeds".
+   - When the user asks to remove or exclude a feature or section (e.g., 'Remove the pricing section', 'Remove testimonials', 'without whatsapp'), remove it from "features" or "services".
+   - When the user asks to keep or restore a feature (e.g., 'Wait, keep pricing but make it minimal'), include that feature in "features".
+   - Never reset or forget previously confirmed business name, category, or location when the user requests a modification.
 
 JSON Schema:
 {
@@ -294,15 +276,27 @@ Detect the language and script of the user's latest message automatically. Alway
       if (rawResponseText) {
         const normalized = normalizeAgentResponse(rawResponseText, currentNeeds, lastUserMessage);
 
-        if (body.projectId) {
+        if (body.projectId && authenticatedUser) {
           try {
-            await setProjectKnowledge(
-              body.projectId,
-              "extracted_needs",
-              normalized.extractedNeeds,
-              "system",
-              "business_info"
-            );
+            const userSupabase = getUserScopedClient(authenticatedUser.token);
+            const { data: project } = await userSupabase
+              .from("projects")
+              .select("id, user_id")
+              .eq("id", body.projectId)
+              .eq("user_id", authenticatedUser.id)
+              .maybeSingle();
+
+            if (project) {
+              await setProjectKnowledge(
+                body.projectId,
+                "extracted_needs",
+                normalized.extractedNeeds,
+                authenticatedUser.id,
+                "business_info"
+              );
+            } else {
+              console.warn("[Agent Talk] Project knowledge write skipped: caller is not project owner");
+            }
           } catch (pkErr) {
             console.warn("[Agent Talk] Project Knowledge write skipped:", pkErr instanceof Error ? pkErr.message : pkErr);
           }
@@ -317,7 +311,6 @@ Detect the language and script of the user's latest message automatically. Alway
       console.warn("[API /api/agent/talk] Provider call fallback to deterministic engine:", agentErr);
     }
 
-
     // Fallback response engine
     const fallbackData = buildFallbackResponse(lastUserMessage, messages, currentNeeds);
     return NextResponse.json({
@@ -329,7 +322,7 @@ Detect the language and script of the user's latest message automatically. Alway
     return NextResponse.json(
       {
         success: false,
-        message: err instanceof Error ? err.message : "Failed to talk to AI Agent.",
+        message: "Failed to process conversation. Please try again.",
       },
       { status: 500 }
     );
