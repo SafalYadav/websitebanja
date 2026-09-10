@@ -37,8 +37,8 @@ export const metadata: Metadata = {
     canonical: "https://websitebanja.com",
   },
   icons: {
-    icon: "/logo.png",
-    shortcut: "/logo.png",
+    icon: [{ url: "/favicon.ico", type: "image/x-icon", sizes: "16x16 32x32 48x48" }],
+    shortcut: "/favicon.ico",
     apple: "/logo.png",
   },
   openGraph: {

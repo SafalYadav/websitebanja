@@ -1,7 +1,7 @@
 /**
  * generate_favicon.mjs
  *
- * Generates a valid multi-size ICO file from public/logo.png.
+ * Generates valid multi-size ICO files from the official WebsiteBanja logo.
  * Uses sharp to resize to PNG buffers, then manually constructs
  * the ICO binary container (ICO format spec: ICONDIR + ICONDIRENTRY[] + image data).
  *
@@ -25,7 +25,11 @@ const SIZES = [16, 32, 48];
 
 async function generateFavicon() {
   const src = path.resolve(__dirname, '..', 'public', 'logo.png');
-  const out = path.resolve(__dirname, '..', 'public', 'favicon.ico');
+  const outputPaths = [
+    path.resolve(__dirname, '..', 'public', 'favicon.ico'),
+    // In the App Router, this file convention takes precedence for /favicon.ico.
+    path.resolve(__dirname, '..', 'src', 'app', 'favicon.ico'),
+  ];
 
   // 1. Generate a PNG buffer for each size using sharp
   const pngBuffers = await Promise.all(
@@ -40,15 +44,16 @@ async function generateFavicon() {
   // 2. Build ICO binary container
   const icoBuffer = buildIco(SIZES, pngBuffers);
 
-  // 3. Write to disk
-  fs.writeFileSync(out, icoBuffer);
-  console.log(`favicon.ico written to ${out}`);
+  // 3. Keep the public asset and App Router metadata file identical. The latter
+  // is what Next.js serves at /favicon.ico when both locations are present.
+  for (const outputPath of outputPaths) {
+    fs.writeFileSync(outputPath, icoBuffer);
+    console.log(`favicon.ico written to ${outputPath}`);
+  }
   console.log(`  Sizes: ${SIZES.join(', ')} px`);
   console.log(`  Total file size: ${icoBuffer.length} bytes`);
 
   // 4. Verify ICO magic bytes
-  const magic = icoBuffer.readUInt16LE(0).toString(16).padStart(4, '0')
-    + ' ' + icoBuffer.readUInt16LE(2).toString(16).padStart(4, '0');
   const count = icoBuffer.readUInt16LE(4);
   console.log(`  ICO header: reserved=${icoBuffer.readUInt16LE(0)} type=${icoBuffer.readUInt16LE(2)} count=${count}`);
   console.log(`  Magic bytes (hex): ${icoBuffer.slice(0, 6).toString('hex')}`);
