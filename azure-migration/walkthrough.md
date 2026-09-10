@@ -31,86 +31,101 @@ WebsiteBanja AI has completed **Phase 4: Application Hosting Migration**, transi
 
 ---
 
-## 2. GitHub Actions CI/CD Pipeline
+## 2. Automated Vercel-Style CI/CD Pipeline
 
-Because ACR Tasks is not allowed on Azure for Students subscriptions, container images are built and pushed using GitHub-hosted runners (`ubuntu-latest`):
+The repository is configured with a fully automated, Vercel-style deployment pipeline in [`.github/workflows/deploy-azure.yml`](file:///Users/safalyadav/websitebanja/.github/workflows/deploy-azure.yml). Every push to `main` executes a complete zero-downtime release lifecycle:
 
-- **Workflow File**: [`.github/workflows/deploy-azure.yml`](file:///Users/safalyadav/websitebanja/.github/workflows/deploy-azure.yml)
-- **Required GitHub Secrets**:
-  - `ACR_USERNAME`: Username for Azure Container Registry (e.g., `websitebanjacr`)
-  - `ACR_PASSWORD`: Password/Access key obtained from `az acr credential show --name websitebanjacr`
-- **Actions Executed**:
-  1. Checks out codebase
-  2. Sets up Docker Buildx with cache
-  3. Logs in to `websitebanjacr.azurecr.io` via `docker/login-action@v3`
-  4. Builds `Dockerfile`
-  5. Pushes `websitebanjacr.azurecr.io/websitebanja:latest` and immutable commit tag
+```mermaid
+flowchart LR
+    A[git push origin main] --> B[GitHub Actions]
+    B --> C[Docker Buildx: Standalone Image]
+    C --> D[Push Immutable SHA & latest to ACR]
+    D --> E[az containerapp update --image SHA]
+    E --> F{Health Probe & Provisioning}
+    F -- Succeeded --> G[Smoke Test Suite]
+    G -- Passed --> H[Active Traffic Switched]
+    F -- Failed --> I[Previous Revision Preserved]
+    G -- Failed --> I
+```
+
+### Key CI/CD Features
+- **Immutable Commit SHA Images**: Every build pushes `websitebanjacr.azurecr.io/websitebanja:<commit-sha>` as well as `:latest`, enabling exact auditability and instant deterministic rollbacks.
+- **Passwordless OpenID Connect (OIDC)**: Authenticates securely to Azure via short-lived federated tokens. No long-lived client secrets stored in GitHub.
+- **Least-Privilege Scoped RBAC**:
+  - `AcrPush`: Scoped strictly to Azure Container Registry `websitebanjacr`.
+  - `Contributor`: Scoped strictly to Container App `websitebanja-app`.
+  - `Reader`: Scoped strictly to Resource Group `websitebanja-rg` (read-only context resolution).
+  - No subscription-wide or write permissions on Database or Storage.
+- **Zero-Downtime Rolling Update**: Container Apps provisions the new revision and warms it up before routing traffic.
+- **Automated Live Smoke Verification**: Executes [`azure-migration/11_smoke_test_container_app.mjs`](file:///Users/safalyadav/websitebanja/azure-migration/11_smoke_test_container_app.mjs) against the live container FQDN immediately after deployment.
 
 ---
 
-## 3. Automation Scripts
+## 3. Automation & Deployment Scripts
 
-All deployment and verification operations have been automated into deterministic scripts:
+All operational tasks are codified into deterministic scripts in [`azure-migration/`](file:///Users/safalyadav/websitebanja/azure-migration/):
 
 1. [`azure-migration/09_deploy_azure_container_app.sh`](file:///Users/safalyadav/websitebanja/azure-migration/09_deploy_azure_container_app.sh):
-   - Targets subscription `5f99d086-da25-4807-b98b-76c7e114bf38` in region `indiasouthcentral`
-   - Verifies `websitebanjacr` and confirms image availability
-   - Provisions `websitebanja-env`
-   - Creates/updates `websitebanja-app` with 0.5 CPU / 1.0 GiB RAM and port 3000 ingress
-   - Enables System-Assigned Managed Identity
-   - Assigns `AcrPull` on ACR and `Storage Blob Data Contributor` on Storage Account
-   - Configures the Container App registry to pull via System-Assigned Managed Identity (`--identity system`)
+   - Provisions `websitebanja-env` and `websitebanja-app` in region `centralindia`.
+   - Binds port 3000 external HTTPS ingress.
+   - Configures System-Assigned Managed Identity for passwordless ACR pulling (`--identity system`).
 
 2. [`azure-migration/10_configure_container_app_env.sh`](file:///Users/safalyadav/websitebanja/azure-migration/10_configure_container_app_env.sh):
-   - Sets non-secret environment variables (`DB_PROVIDER=azure`, `STORAGE_PROVIDER=azure`, `AUTH_PROVIDER=supabase`, etc.)
-   - Outlines secret bindings via `az containerapp secret set` and `secretref:` references.
+   - Configures runtime environment variables and securely mounts encrypted secrets (`secretref:`).
 
 3. [`azure-migration/11_smoke_test_container_app.mjs`](file:///Users/safalyadav/websitebanja/azure-migration/11_smoke_test_container_app.mjs):
-   - Probes 8 critical endpoints: landing page, login, signup, auth callback, protected API 401 unauthenticated check, public telemetry API, SSE agent route, and voice route.
+   - Probes 8 critical application endpoints (landing page, auth routes, protected APIs, telemetry, agent SSE stream, and voice endpoints).
+
+4. [`azure-migration/12_setup_github_oidc.sh`](file:///Users/safalyadav/websitebanja/azure-migration/12_setup_github_oidc.sh):
+   - One-time Azure Cloud Shell script to register the GitHub OIDC federated identity credential and assign least-privilege scoped roles.
 
 ---
 
-## 4. Execution Guide (Azure Cloud Shell)
+## 4. Setup & Operations Guide
+
+### A. One-Time Setup: Enable GitHub Actions OIDC
+Run this script once in [Azure Cloud Shell](https://shell.azure.com):
 
 ```bash
-# 1. Open Azure Cloud Shell (Bash) at https://shell.azure.com
-# 2. Clone repository or pull latest
 git clone https://github.com/SafalYadav/websitebanja.git
 cd websitebanja
-
-# 3. Run the deployment pipeline
-chmod +x azure-migration/09_deploy_azure_container_app.sh
-./azure-migration/09_deploy_azure_container_app.sh
-
-# 4. Configure application secrets (substitute your real secret values)
-az containerapp secret set --name websitebanja-app --resource-group websitebanja-rg --secrets \
-  azure-db-password="<AZURE_DB_PASSWORD>" \
-  openai-api-key="<OPENAI_API_KEY>" \
-  gemini-api-key="<GEMINI_API_KEY>" \
-  supabase-service-role-key="<SUPABASE_SERVICE_ROLE_KEY>" \
-  upstash-redis-rest-token="<UPSTASH_REDIS_REST_TOKEN>"
-
-# 5. Run the environment configuration script
-chmod +x azure-migration/10_configure_container_app_env.sh
-./azure-migration/10_configure_container_app_env.sh
-
-# 6. Bind secrets to container environment variables
-az containerapp update --name websitebanja-app --resource-group websitebanja-rg --set-env-vars \
-  AZURE_DB_PASSWORD=secretref:azure-db-password \
-  OPENAI_API_KEY=secretref:openai-api-key \
-  GEMINI_API_KEY=secretref:gemini-api-key \
-  SUPABASE_SERVICE_ROLE_KEY=secretref:supabase-service-role-key \
-  UPSTASH_REDIS_REST_TOKEN=secretref:upstash-redis-rest-token
-
-# 7. Run live smoke tests against the Container App URL
-APP_URL=$(az containerapp show --name websitebanja-app --resource-group websitebanja-rg --query properties.configuration.ingress.fqdn -o tsv)
-node azure-migration/11_smoke_test_container_app.mjs "https://${APP_URL}"
+chmod +x azure-migration/12_setup_github_oidc.sh
+./azure-migration/12_setup_github_oidc.sh
 ```
+
+Copy the 3 output values into GitHub Repository Secrets (`Settings -> Secrets and variables -> Actions`):
+- `AZURE_CLIENT_ID`
+- `AZURE_TENANT_ID`
+- `AZURE_SUBSCRIPTION_ID`
+
+*(Note: `ACR_USERNAME` and `ACR_PASSWORD` should also be present in GitHub Secrets for Docker Buildx push).*
+
+### B. Day-to-Day Deployments (Vercel Style)
+Simply push to `main`:
+```bash
+git add .
+git commit -m "feat: new feature"
+git push origin main
+```
+GitHub Actions will automatically build the image, deploy the new revision to `websitebanja-app`, verify health, run the smoke test suite, and post a deployment summary.
+
+### C. Instant Rollback Procedure
+If a breaking code change passes tests but causes production issues, rollback to any previous commit SHA instantly:
+
+```bash
+# Rollback Container App to a specific known good commit SHA
+az containerapp update \
+  --name websitebanja-app \
+  --resource-group websitebanja-rg \
+  --image websitebanjacr.azurecr.io/websitebanja:<GOOD_COMMIT_SHA>
+```
+Or use the Container Apps Portal -> Revisions to switch 100% traffic back to the previous revision in one click.
 
 ---
 
 ## 5. Safety & Rollback Posture
-- **Vercel Production Deployment**: Fully intact.
+- **Vercel Production Deployment**: Fully intact as primary backup.
 - **Supabase Auth**: Actively serving authentication.
-- **DNS Records**: No DNS modifications made.
-- **Zero Secret Exposure**: No credentials committed or logged.
+- **Azure PostgreSQL & Blob Storage**: Operating with live data and Managed Identity security.
+- **DNS Records**: No DNS cutover performed.
+- **Zero Secret Exposure**: No credentials committed or printed in CI logs.

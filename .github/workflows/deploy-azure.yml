@@ -1,4 +1,4 @@
-name: Build and Push to Azure Container Registry
+name: Continuous Deployment to Azure Container Apps
 
 on:
   push:
@@ -9,10 +9,15 @@ on:
       - 'docs/**'
   workflow_dispatch:
 
+permissions:
+  id-token: write
+  contents: read
+
 env:
   ACR_SERVER: websitebanjacr.azurecr.io
   IMAGE_NAME: websitebanja
-  CONTAINER_APP_IMAGE: websitebanja-app
+  CONTAINER_APP_NAME: websitebanja-app
+  RESOURCE_GROUP: websitebanja-rg
 
 jobs:
   build-and-push:
@@ -32,16 +37,116 @@ jobs:
           username: ${{ secrets.ACR_USERNAME }}
           password: ${{ secrets.ACR_PASSWORD }}
 
-      - name: Build and Push Docker Image
+      - name: Build and Push Docker Image (Immutable SHA + latest)
         uses: docker/build-push-action@v6
         with:
           context: .
           file: ./Dockerfile
           push: true
           tags: |
-            ${{ env.ACR_SERVER }}/${{ env.IMAGE_NAME }}:latest
             ${{ env.ACR_SERVER }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
-            ${{ env.ACR_SERVER }}/${{ env.CONTAINER_APP_IMAGE }}:latest
-            ${{ env.ACR_SERVER }}/${{ env.CONTAINER_APP_IMAGE }}:${{ github.sha }}
+            ${{ env.ACR_SERVER }}/${{ env.IMAGE_NAME }}:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  deploy-and-verify:
+    name: Deploy to Azure Container Apps & Verify
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code (for smoke test script)
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Validate Azure Authentication Secrets
+        run: |
+          if [ -z "${{ secrets.AZURE_CLIENT_ID }}" ] && [ -z "${{ secrets.AZURE_CREDENTIALS }}" ]; then
+            echo "::error::No Azure authentication secrets configured in GitHub repository."
+            echo "Please run './azure-migration/12_setup_github_oidc.sh' in Azure Cloud Shell"
+            echo "and set AZURE_CLIENT_ID, AZURE_TENANT_ID, and AZURE_SUBSCRIPTION_ID in GitHub Secrets."
+            exit 1
+          fi
+
+      - name: Azure Login via OIDC
+        if: ${{ secrets.AZURE_CLIENT_ID != '' }}
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Azure Login via Service Principal Fallback
+        if: ${{ secrets.AZURE_CLIENT_ID == '' && secrets.AZURE_CREDENTIALS != '' }}
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Deploy Immutable Image to Container App
+        id: deploy
+        run: |
+          echo "Deploying immutable image ${{ env.ACR_SERVER }}/${{ env.IMAGE_NAME }}:${{ github.sha }} to Container App ${{ env.CONTAINER_APP_NAME }}..."
+          az containerapp update \
+            --name "${{ env.CONTAINER_APP_NAME }}" \
+            --resource-group "${{ env.RESOURCE_GROUP }}" \
+            --image "${{ env.ACR_SERVER }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
+
+      - name: Verify Provisioning State & Health
+        id: verify
+        run: |
+          echo "Verifying Container App provisioning status..."
+          PROVISIONING_STATE=$(az containerapp show \
+            --name "${{ env.CONTAINER_APP_NAME }}" \
+            --resource-group "${{ env.RESOURCE_GROUP }}" \
+            --query "properties.provisioningState" -o tsv)
+
+          echo "Provisioning State: $PROVISIONING_STATE"
+          if [ "$PROVISIONING_STATE" != "Succeeded" ]; then
+            echo "::error::Container App provisioning did not succeed (state: $PROVISIONING_STATE)"
+            exit 1
+          fi
+
+          APP_FQDN=$(az containerapp show \
+            --name "${{ env.CONTAINER_APP_NAME }}" \
+            --resource-group "${{ env.RESOURCE_GROUP }}" \
+            --query "properties.configuration.ingress.fqdn" -o tsv)
+
+          LATEST_REVISION=$(az containerapp show \
+            --name "${{ env.CONTAINER_APP_NAME }}" \
+            --resource-group "${{ env.RESOURCE_GROUP }}" \
+            --query "properties.latestRevisionName" -o tsv)
+
+          APP_URL="https://${APP_FQDN}"
+          echo "APP_URL=${APP_URL}" >> $GITHUB_ENV
+          echo "APP_FQDN=${APP_FQDN}" >> $GITHUB_ENV
+          echo "LATEST_REVISION=${LATEST_REVISION}" >> $GITHUB_ENV
+          echo "Live Application URL: ${APP_URL}"
+          echo "Active Revision: ${LATEST_REVISION}"
+
+      - name: Run Smoke Verification Tests
+        run: |
+          echo "Executing automated smoke test against ${APP_URL}..."
+          node azure-migration/11_smoke_test_container_app.mjs "${APP_URL}"
+
+      - name: Publish Deployment Summary
+        if: always()
+        run: |
+          echo "### 🚀 Azure Container Apps Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
+          echo "| **Container App** | \`${{ env.CONTAINER_APP_NAME }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Resource Group** | \`${{ env.RESOURCE_GROUP }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Commit SHA** | \`${{ github.sha }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Image Tag** | \`${{ env.ACR_SERVER }}/${{ env.IMAGE_NAME }}:${{ github.sha }}\` |" >> $GITHUB_STEP_SUMMARY
+          if [ -n "$LATEST_REVISION" ]; then
+            echo "| **Revision** | \`${LATEST_REVISION}\` |" >> $GITHUB_STEP_SUMMARY
+          fi
+          if [ -n "$APP_URL" ]; then
+            echo "| **Live URL** | [${APP_URL}](${APP_URL}) |" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "| **Status** | ${{ job.status == 'success' && '✅ Healthy' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Trigger** | \`${{ github.actor }}\` via \`${{ github.event_name }}\` |" >> $GITHUB_STEP_SUMMARY
