@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import type { WebsiteRequirement } from "@/lib/ai/requirementModel";
 import { setProjectKnowledge } from "@/lib/knowledge";
-import { validateUserAuth, getUserScopedClient } from "@/lib/supabaseServer";
+import { authenticateRequest, getUserScopedClient } from "@/lib/supabaseServer";
 import { checkMemoryRateLimit } from "@/lib/rateLimit";
 
 // Comprehensive Zod validation schema matching WebsiteRequirement
@@ -109,13 +108,14 @@ const requirementSchema = z.object({
   projectId: z.string().optional(),
 });
 
+export type WebsiteRequirement = z.infer<typeof requirementSchema>;
+
 export async function POST(request: Request) {
   try {
-    const auth = await validateUserAuth(request);
-    if (!auth.user) {
-      return NextResponse.json({ success: false, message: auth.error || "Unauthorized" }, { status: auth.status });
+    const user = await authenticateRequest(request);
+    if (!user) {
+      return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
     }
-    const user = auth.user;
 
     const { success: withinLimit } = checkMemoryRateLimit(`req_route_${user.id}`, 30, 60 * 1000);
     if (!withinLimit) {

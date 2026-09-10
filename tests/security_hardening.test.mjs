@@ -310,7 +310,7 @@ test("Requirement route enforces auth, rate limiting, and project ownership", ()
     "utf-8"
   );
   assert.ok(
-    reqContent.includes("validateUserAuth(request)"),
+    reqContent.includes("authenticateRequest(request)"),
     "Requirement route must require user authentication"
   );
   assert.ok(
