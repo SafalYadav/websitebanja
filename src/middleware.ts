@@ -20,11 +20,12 @@ export function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
 
   // 1. Enforce canonical apex domain: redirect www.websitebanja.com -> websitebanja.com
-  // Preserves path and query parameters with permanent 308 redirect
+  // Preserves path and query parameters with permanent 308 redirect, eliminating internal container port
   if (host.startsWith('www.websitebanja.com')) {
-    const canonicalUrl = new URL(request.url);
-    canonicalUrl.protocol = 'https:';
-    canonicalUrl.host = 'websitebanja.com';
+    const canonicalUrl = new URL(
+      `${request.nextUrl.pathname}${request.nextUrl.search}`,
+      'https://websitebanja.com'
+    );
     return NextResponse.redirect(canonicalUrl, 308);
   }
 
