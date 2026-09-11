@@ -29,14 +29,25 @@ export function detectBackendRequirement(
 ): BackendRequirementAnalysis {
   const normCategory = (category || "").toLowerCase();
 
-  // 1. Booking / Appointment businesses (Clinics, Salons, Hotels, Real Estate)
+  // 1. Booking / Appointment businesses (Clinics, Salons, Hotels, Real Estate, Transport, Local Services)
   if (
     normCategory.includes("clinic") ||
     normCategory.includes("doctor") ||
+    normCategory.includes("dental") ||
     normCategory.includes("salon") ||
     normCategory.includes("spa") ||
     normCategory.includes("hotel") ||
-    normCategory.includes("resort")
+    normCategory.includes("resort") ||
+    normCategory.includes("rental") ||
+    normCategory.includes("transport") ||
+    normCategory.includes("plumber") ||
+    normCategory.includes("plumbing") ||
+    normCategory.includes("electrician") ||
+    normCategory.includes("handyman") ||
+    normCategory.includes("repair") ||
+    normCategory.includes("local service") ||
+    normCategory.includes("contractor") ||
+    normCategory.includes("cleaning")
   ) {
     return {
       requiresBackend: true,
@@ -66,7 +77,8 @@ export function detectBackendRequirement(
     normCategory.includes("grocery") ||
     normCategory.includes("supermarket") ||
     normCategory.includes("commerce") ||
-    normCategory.includes("shop")
+    normCategory.includes("shop") ||
+    normCategory.includes("retail")
   ) {
     return {
       requiresBackend: true,

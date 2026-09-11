@@ -10,12 +10,9 @@
  * - Full audit staleness and code reflection parity integration.
  */
 
-import type { SupabaseClient } from "@supabase/supabase-js";
 import {
-  GLOBAL_KNOWLEDGE_REGISTRY,
   getGlobalKnowledgeRegistry,
   getGlobalKnowledgeByCategory,
-  getGlobalKnowledgeById,
   getWebsiteTypeByKey,
   getComponentByKey,
   getIntegrationByKey,
@@ -43,26 +40,16 @@ import type {
   ProjectContextBundle,
   SetProjectKnowledgeInput,
 } from "./types";
-import { getServiceRoleClient, getAuthClient } from "../supabaseServer";
+import {
+  dbGetProjectKnowledge,
+  dbGetProjectKnowledgeByCategory,
+  dbSetProjectKnowledge,
+  dbGetAllProjectKnowledge,
+  dbGetProjectRecordById,
+  dbGetCatalogItemsCount,
+} from "../db/queries";
 
 export class KnowledgeRetrievalService implements IKnowledgeRetrievalService {
-  /**
-   * Helper to resolve a Supabase client if none is explicitly provided.
-   */
-  private resolveClient(client?: SupabaseClient): SupabaseClient {
-    if (client) return client;
-    try {
-      return getServiceRoleClient();
-    } catch {
-      try {
-        return getAuthClient();
-      } catch {
-        throw new Error(
-          "KnowledgeRetrievalService: A SupabaseClient must be provided or SUPABASE_SERVICE_ROLE_KEY configured."
-        );
-      }
-    }
-  }
 
   // ===========================================================================
   // 1. GLOBAL KNOWLEDGE BASE ACCESSORS (O(1), In-Memory, Immutable)
@@ -113,124 +100,96 @@ export class KnowledgeRetrievalService implements IKnowledgeRetrievalService {
     projectId: string,
     category: string,
     key: string,
-    client?: SupabaseClient
+    _client?: unknown
   ): Promise<ProjectKnowledgeEntry<T> | null> {
-    const sb = this.resolveClient(client);
+    try {
+      const data = (await dbGetProjectKnowledge(projectId, category, key)) as any;
+      if (!data) return null;
 
-    const { data, error } = await sb
-      .from("project_knowledge")
-      .select("*")
-      .eq("project_id", projectId)
-      .eq("category", category)
-      .eq("key", key)
-      .maybeSingle();
-
-    if (error) {
+      return {
+        id: data.id,
+        projectId: data.project_id,
+        userId: data.user_id,
+        category: data.category,
+        key: data.key,
+        content: data.content as T,
+        metadata: data.metadata || {},
+        version: data.version,
+        createdAt: data.created_at,
+        updatedAt: data.updated_at,
+      };
+    } catch (error) {
       console.error(
         `[KnowledgeRetrievalService] Failed to retrieve project knowledge (${projectId}, ${category}, ${key}):`,
-        error.message
+        error instanceof Error ? error.message : String(error)
       );
       throw error;
     }
-
-    if (!data) return null;
-
-    return {
-      id: data.id,
-      projectId: data.project_id,
-      userId: data.user_id,
-      category: data.category,
-      key: data.key,
-      content: data.content as T,
-      metadata: data.metadata || {},
-      version: data.version,
-      createdAt: data.created_at,
-      updatedAt: data.updated_at,
-    };
   }
 
   public async getProjectKnowledgeByCategory<T = Record<string, unknown>>(
     projectId: string,
     category: string,
-    client?: SupabaseClient
+    _client?: unknown
   ): Promise<ProjectKnowledgeEntry<T>[]> {
-    const sb = this.resolveClient(client);
+    try {
+      const rows = (await dbGetProjectKnowledgeByCategory(projectId, category)) as any[];
 
-    const { data, error } = await sb
-      .from("project_knowledge")
-      .select("*")
-      .eq("project_id", projectId)
-      .eq("category", category)
-      .order("created_at", { ascending: true });
-
-    if (error) {
+      return (rows || []).map((row) => ({
+        id: row.id,
+        projectId: row.project_id,
+        userId: row.user_id,
+        category: row.category,
+        key: row.key,
+        content: row.content as T,
+        metadata: row.metadata || {},
+        version: row.version,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+      }));
+    } catch (error) {
       console.error(
         `[KnowledgeRetrievalService] Failed to retrieve category knowledge (${projectId}, ${category}):`,
-        error.message
+        error instanceof Error ? error.message : String(error)
       );
       throw error;
     }
-
-    return (data || []).map((row) => ({
-      id: row.id,
-      projectId: row.project_id,
-      userId: row.user_id,
-      category: row.category,
-      key: row.key,
-      content: row.content as T,
-      metadata: row.metadata || {},
-      version: row.version,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
-    }));
   }
 
   public async setProjectKnowledgeEntry<T = Record<string, unknown>>(
     input: SetProjectKnowledgeInput<T>,
-    client?: SupabaseClient
+    _client?: unknown
   ): Promise<ProjectKnowledgeEntry<T>> {
-    const sb = this.resolveClient(client);
+    try {
+      const data = (await dbSetProjectKnowledge({
+        projectId: input.projectId,
+        userId: input.userId,
+        category: input.category,
+        key: input.key,
+        content: input.content,
+        metadata: input.metadata || {},
+        changeReason: input.changeReason || "content_update",
+      })) as any;
 
-    const payload = {
-      project_id: input.projectId,
-      user_id: input.userId,
-      category: input.category,
-      key: input.key,
-      content: input.content,
-      metadata: {
-        ...(input.metadata || {}),
-        change_reason: input.changeReason || "content_update",
-      },
-    };
-
-    const { data, error } = await sb
-      .from("project_knowledge")
-      .upsert(payload, {
-        onConflict: "project_id,category,key",
-      })
-      .select()
-      .single();
-
-    if (error) {
+      return {
+        id: data.id,
+        projectId: data.project_id,
+        userId: data.user_id,
+        category: data.category,
+        key: data.key,
+        content: data.content as T,
+        metadata: data.metadata || {},
+        version: data.version,
+        createdAt: data.created_at,
+        updatedAt: data.updated_at,
+      };
+    } catch (error) {
       console.error(
         `[KnowledgeRetrievalService] Failed to persist project knowledge entry:`,
-        error.message
+        error instanceof Error ? error.message : String(error)
       );
       throw error;
     }
-
-    return {
-      id: data.id,
-      projectId: data.project_id,
-      userId: data.user_id,
-      category: data.category,
-      key: data.key,
-      content: data.content as T,
-      metadata: data.metadata || {},
-      version: data.version,
-      createdAt: data.created_at,
-      updatedAt: data.updated_at,
-    };
   }
 
   // ===========================================================================
@@ -239,35 +198,27 @@ export class KnowledgeRetrievalService implements IKnowledgeRetrievalService {
 
   public async getProjectContext(
     projectId: string,
-    client?: SupabaseClient
+    _client?: unknown
   ): Promise<ProjectContextBundle | null> {
-    const sb = this.resolveClient(client);
-
-    // 1. Fetch all project_knowledge records for this project
-    const { data: knowledgeRows, error: kbError } = await sb
-      .from("project_knowledge")
-      .select("*")
-      .eq("project_id", projectId);
-
-    // If table doesn't exist yet in remote dev environment or query fails, warn & proceed to legacy query
-    if (kbError) {
+    // 1. Fetch all project_knowledge records for this project via Azure PostgreSQL
+    let knowledgeRows: any[] = [];
+    try {
+      knowledgeRows = (await dbGetAllProjectKnowledge(projectId)) as any[];
+    } catch (kbError) {
       console.warn(
         `[KnowledgeRetrievalService] project_knowledge query warning, falling back to projects table:`,
-        kbError.message
+        kbError instanceof Error ? kbError.message : String(kbError)
       );
     }
 
-    // 2. Fetch base projects record
-    const { data: project, error: projError } = await sb
-      .from("projects")
-      .select("*")
-      .eq("id", projectId)
-      .maybeSingle();
-
-    if (projError) {
+    // 2. Fetch base projects record via Azure PostgreSQL
+    let project: any = null;
+    try {
+      project = await dbGetProjectRecordById(projectId);
+    } catch (projError) {
       console.error(
         `[KnowledgeRetrievalService] Failed to query projects table (${projectId}):`,
-        projError.message
+        projError instanceof Error ? projError.message : String(projError)
       );
       throw projError;
     }
@@ -276,11 +227,8 @@ export class KnowledgeRetrievalService implements IKnowledgeRetrievalService {
       return null;
     }
 
-    // Also fetch catalog items count
-    const { count: catalogCount } = await sb
-      .from("catalog_items")
-      .select("*", { count: "exact", head: true })
-      .eq("project_id", projectId);
+    // Also fetch catalog items count via Azure PostgreSQL
+    const catalogCount = await dbGetCatalogItemsCount(projectId).catch(() => 0);
 
     const hasKbRows = knowledgeRows && knowledgeRows.length > 0;
     const kbMap = new Map<string, any>();

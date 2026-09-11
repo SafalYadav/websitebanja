@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { openai } from "@/lib/openai";
 import { trackAnalyticsEvent } from "@/lib/analytics";
 import { extractBusinessDetailsFast } from "@/lib/promptExtractor";
-import { authenticateRequest } from "@/lib/supabaseServer";
+import { validateUserAuth } from "@/lib/supabaseServer";
 import { checkMemoryRateLimit } from "@/lib/rateLimit";
 
 /** Hard cap on prompt size: bounds both OpenAI token spend and regex work in the fast parser. */
@@ -13,10 +13,11 @@ export async function POST(req: Request) {
     // SECURITY: previously the Authorization header was parsed but a failure was
     // explicitly "non-blocking", so anonymous callers reached a paid OpenAI model
     // with no rate limit and no length cap. Both are now mandatory.
-    const user = await authenticateRequest(req);
-    if (!user) {
-      return NextResponse.json({ success: false, message: "Unauthorized." }, { status: 401 });
+    const auth = await validateUserAuth(req);
+    if (!auth.user) {
+      return NextResponse.json({ success: false, message: auth.error || "Unauthorized." }, { status: auth.status });
     }
+    const user = auth.user;
     const userId = user.id;
 
     const { success: withinLimit } = checkMemoryRateLimit(`extract_${userId}`, 30, 60 * 1000);

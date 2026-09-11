@@ -1,8 +1,11 @@
 import { notFound } from "next/navigation";
 import WebsiteRenderer from "@/components/editor/WebsiteRenderer";
 import Logo from "@/components/brand/Logo";
-import { getProjectBySlug, getPublishedSnapshot } from "@/lib/projects";
-import { getCatalogItems } from "@/lib/catalog";
+import {
+  getPublicProjectBySlug as getProjectBySlug,
+  getPublicPublishedSnapshot as getPublishedSnapshot,
+  getPublicCatalogItems as getCatalogItems,
+} from "@/lib/server/publicSite";
 import type { Metadata } from "next";
 import type { WebsiteData } from "@/types/website";
 

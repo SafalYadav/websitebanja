@@ -71,12 +71,13 @@ async function run() {
   if (cErr3) throw new Error("Failed to delete catalog item: " + cErr3.message);
   console.log("✓ Catalog CRUD works without timeouts or recursion");
 
-  const { data: catalogItem, error: cErr4 } = await supabase.from("catalog_items").insert({
+  const { error: cErr4 } = await supabase.from("catalog_items").insert({
     project_id: projA.id,
     user_id: userId,
     name: "Live Item",
     price: 99
-  }).select("*").single();
+  });
+  if (cErr4) throw new Error("Failed to insert live item: " + cErr4.message);
 
   const snapshot1 = { snapshot: 1, cta: { type: "whatsapp", target: "123" } };
   const { error: pubErr } = await supabase.rpc("publish_project_atomic", {

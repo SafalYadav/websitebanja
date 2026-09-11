@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { setProjectKnowledge } from "@/lib/knowledge";
-import { authenticateRequest, getUserScopedClient } from "@/lib/supabaseServer";
+import { authenticateRequest } from "@/lib/supabaseServer";
+import { dbCheckProjectExists } from "@/lib/db/queries";
 import { checkMemoryRateLimit } from "@/lib/rateLimit";
 
 // Comprehensive Zod validation schema matching WebsiteRequirement
@@ -139,15 +140,9 @@ export async function POST(request: Request) {
 
     // Persist to project knowledge only if caller owns the project
     if (projectId) {
-      const userSupabase = getUserScopedClient(user.token);
-      const { data: project, error: projErr } = await userSupabase
-        .from("projects")
-        .select("id, user_id")
-        .eq("id", projectId)
-        .eq("user_id", user.id)
-        .maybeSingle();
+      const projectExists = await dbCheckProjectExists(projectId, user.id);
 
-      if (projErr || !project) {
+      if (!projectExists) {
         return NextResponse.json(
           { success: false, message: "Forbidden: You do not have permission to modify this project." },
           { status: 403 }

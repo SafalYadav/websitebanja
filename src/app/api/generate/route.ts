@@ -1,13 +1,31 @@
+// WHY maxDuration = 120: Full website code synthesis via GPT-5.6 Luna with hosted skills context,
+// specialized design intelligence, and post-generation AST/UI-UX validation can require 45-90s.
+// Setting 120s accommodates this without triggering upstream proxy timeouts (Azure Container Apps).
+export const maxDuration = 120;
+export const dynamic = "force-dynamic";
+
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
 import { Ratelimit } from "@upstash/ratelimit";
 import { Redis } from "@upstash/redis";
-import { openai } from "@/lib/openai";
+import { validateUserAuth } from "@/lib/supabaseServer";
+import { dbGetUserSubscription } from "@/lib/db/queries";
+import { openai, OPENAI_GENERATION_MODEL } from "@/lib/openai";
 import { buildWebsitePrompt } from "@/lib/prompts";
 import { shouldBypassRateLimit, checkMemoryRateLimit } from "@/lib/rateLimit";
 import { validateBusinessInputs } from "@/lib/validation";
 import { trackAnalyticsEvent } from "@/lib/analytics";
 import type { AiWorkspace } from "@/types/aiWorkspace";
+import {
+  validateGeneratedWebsiteUiUx,
+  validateGeneratedWebsiteDesign,
+  selectDesignSkills,
+} from "@/lib/skills/uiUxSkill";
+import {
+  isOpenAISkillsConfigured,
+  getHostedSkillContainerConfig,
+  extractTextFromResponse,
+  parseWebsiteJson,
+} from "@/lib/skills/openaiSkillsService";
 
 // Create rate limiters for Free Tier: 3 requests per 7 days
 let userRatelimitFree: Ratelimit | undefined;
@@ -57,28 +75,24 @@ if (
 }
 
 export async function POST(req: Request) {
+  const genStart = Date.now();
+  console.log("[GEN] request:start");
   let authenticatedUserId: string | undefined;
 
   try {
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
+    const authStart = Date.now();
+    console.log("[GEN] auth:start");
+    const auth = await validateUserAuth(req);
+    if (!auth.user) {
+      console.warn("[GEN] auth:failed duration=" + (Date.now() - authStart) + "ms status=" + auth.status);
+      return NextResponse.json({ success: false, message: auth.error || "Unauthorized" }, { status: auth.status });
     }
-    const token = authHeader.replace("Bearer ", "");
-    const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-    if (authError || !user) {
-      return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
-    }
-
+    const user = auth.user;
     authenticatedUserId = user.id;
+    console.log("[GEN] auth:success duration=" + (Date.now() - authStart) + "ms userId=" + user.id);
 
     // Check user subscription status
-    const { data: subData } = await supabase
-      .from("subscriptions")
-      .select("plan_id, status")
-      .eq("user_id", user.id)
-      .single();
+    const subData = await dbGetUserSubscription(user.id);
 
     const isPaidPro = subData?.status === "active_paid" && subData?.plan_id === "paid_pro";
 
@@ -172,53 +186,117 @@ export async function POST(req: Request) {
       );
     }
 
+    const selectorStart = Date.now();
+    console.log("[GEN] selector:start");
+    const skillSelection = selectDesignSkills({
+      ...websiteData,
+      prompt: (websiteData as any).prompt || websiteData.description,
+    });
+    console.log("[GEN] selector:success duration=" + (Date.now() - selectorStart) + "ms activeSkills=" + skillSelection.metadata.selectedIds.join(","));
+
     const prompt = buildWebsitePrompt(websiteData, workspace ?? ({} as AiWorkspace));
 
-    const response = await openai.chat.completions.create({
-      model: "gpt-4.1-mini",
-      response_format: {
-        type: "json_object",
-      },
-      messages: [
-        {
-          role: "system",
-          content:
-            "You are WebsiteBanja AI. Always return valid JSON only.",
-        },
-        {
-          role: "user",
-          content: prompt,
-        },
-      ],
-    });
+    const activeSkillsList = skillSelection.systemPromptAdditions.join(", ");
 
-    const result = JSON.parse(
-      response.choices[0].message.content ?? "{}"
-    ) as Record<string, unknown>;
+    let parsedResult: Record<string, unknown> | null = null;
+    let generationModelUsed = OPENAI_GENERATION_MODEL;
+    let isHostedExecution = false;
 
-    if (!result || typeof result !== "object") {
-      throw new Error("Invalid AI website generation structure: expected JSON object.");
+    // Primary: OpenAI Hosted Skills via Responses API with containerized shell tool
+    if (isOpenAISkillsConfigured()) {
+      try {
+        const skillsStart = Date.now();
+        console.log("[GEN] skills:start");
+        const containerConfig = getHostedSkillContainerConfig(skillSelection.metadata.selectedIds);
+        const instructions = `You are WebsiteBanja AI, an expert autonomous website designer, UI/UX architect, and conversion copywriter.
+You have access to authoritative WebsiteBanja Design Intelligence skills mounted in your container environment at /home/oai/skills/.
+Use the shell tool to inspect the mounted SKILL.md files (especially websitebanja-master-design-intelligence and the active skills: ${activeSkillsList}) to follow their design guidelines, motion choreography, typography standards, responsive reflow, and UX psychology.
+Absolute Priority Hierarchy:
+1. User's explicit business requirements (HIGHEST PRIORITY)
+2. Business objective & conversion goals
+3. Target audience & industry intelligence
+4. Brand/style guidelines
+5. Active design intelligence skills
+6. Defaults
+Always prioritize explicit user requirements over general skill rules. Return valid JSON only adhering strictly to the JSON schema.`;
+
+        const openaiStart = Date.now();
+        console.log("[GEN] openai:start model=" + OPENAI_GENERATION_MODEL);
+        const response = await openai.responses.create({
+          model: OPENAI_GENERATION_MODEL,
+          instructions,
+          input: prompt,
+          tools: [containerConfig],
+        });
+        console.log("[GEN] openai:success duration=" + (Date.now() - openaiStart) + "ms");
+        console.log("[GEN] skills:success duration=" + (Date.now() - skillsStart) + "ms");
+
+        const rawText = extractTextFromResponse(response);
+        parsedResult = parseWebsiteJson(rawText);
+        console.log("[GEN] json:parsed length=" + rawText.length);
+        isHostedExecution = true;
+      } catch (hostedErr) {
+        // Safe server-side diagnostic logging (never exposes API keys or sensitive details)
+        console.warn(
+          "[OpenAI Skills Runtime] Hosted skills Responses API execution failed; executing graceful local fallback:",
+          hostedErr instanceof Error ? hostedErr.message : "Unknown error"
+        );
+      }
     }
 
-    const DEFAULT_SECTION_ORDER = ["hero", "about", "services", "features", "faq", "contact", "footer"];
+    // Fallback: Local skill prompt injection via standard Chat Completions
+    if (!parsedResult) {
+      generationModelUsed = "gpt-4.1-mini";
+      const fallbackStart = Date.now();
+      console.log("[GEN] openai:start model=gpt-4.1-mini (fallback)");
+      const fallbackResponse = await openai.chat.completions.create({
+        model: "gpt-4.1-mini",
+        response_format: {
+          type: "json_object",
+        },
+        messages: [
+          {
+            role: "system",
+            content: `You are WebsiteBanja AI, an expert autonomous website designer, UI/UX architect, and conversion copywriter. You apply the authoritative principles from the UI/UX Design Skill (skills/ui-ux/skill.md), Framer Motion physics (skills/framer-motion/skill.md), and 21st.dev component architecture (skills/21st-dev/skill.md) [Active: ${activeSkillsList}] to generate world-class, accessible, conversion-focused websites adhering strictly to the user's explicit business requirements. Return valid JSON only.`,
+          },
+          {
+            role: "user",
+            content: prompt,
+          },
+        ],
+      });
+      console.log("[GEN] openai:success duration=" + (Date.now() - fallbackStart) + "ms");
 
-    if (!Array.isArray(result.sectionOrder) || result.sectionOrder.length === 0) {
-      const existingSections = DEFAULT_SECTION_ORDER.filter((key) => key in result && result[key] !== null);
-      result.sectionOrder = existingSections.length > 0 ? existingSections : DEFAULT_SECTION_ORDER;
+      parsedResult = parseWebsiteJson(fallbackResponse.choices[0].message.content ?? "{}");
+      console.log("[GEN] json:parsed fallback");
+    }
+
+    // Post-generation multi-skill design validation and sanitization
+    const validationStart = Date.now();
+    const designValidation = validateGeneratedWebsiteDesign(parsedResult, websiteData);
+    const { sanitized: result, warnings: uiUxWarnings } = validateGeneratedWebsiteUiUx(
+      designValidation.sanitized,
+      websiteData
+    );
+    console.log("[GEN] validation:success duration=" + (Date.now() - validationStart) + "ms warnings=" + uiUxWarnings.length);
+
+    if (uiUxWarnings.length > 0) {
+      console.debug("[Design Intelligence Validation]", uiUxWarnings);
     }
 
     await trackAnalyticsEvent({
       eventType: "ai_success",
       userId: user.id,
-      metadata: { category: websiteData.category },
+      metadata: { category: websiteData.category, model: generationModelUsed, isHosted: isHostedExecution },
     });
 
+    console.log("[GEN] total=" + (Date.now() - genStart) + "ms");
     return NextResponse.json({
       success: true,
       data: result,
     });
   } catch (err) {
-    console.error("API /api/generate error:", err);
+    console.error("[GEN] error duration=" + (Date.now() - genStart) + "ms error:", err);
 
     if (authenticatedUserId) {
       void trackAnalyticsEvent({

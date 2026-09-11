@@ -1,7 +1,7 @@
 import type { PlanDefinition, PlanId, SubscriptionStatus } from "@/types/plans";
 
 /**
- * Format Indian Rupees with proper currency symbol and commas (e.g. ₹2,000)
+ * Format Indian Rupees with proper currency symbol and commas (e.g. ₹500)
  */
 export function formatINR(amount: number): string {
   return new Intl.NumberFormat("en-IN", {
@@ -41,7 +41,7 @@ export const PLANS: Record<PlanId, PlanDefinition> = {
     name: "Paid Pro",
     badge: "Most Popular",
     description: "For serious businesses, agencies, and brands requiring custom domains & power.",
-    priceINR: 2000,
+    priceINR: 500,
     period: "per month",
     aiRequestsPerWindow: 50,
     windowDays: 7,

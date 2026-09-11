@@ -44,6 +44,28 @@ const SECTION_LABELS: Record<string, string> = {
   faq: "FAQ Accordion",
   contact: "Contact Details",
   footer: "Footer Section",
+  signature_dishes: "Chef's Signature Dishes",
+  atmosphere_story: "Atmosphere & Heritage",
+  menu: "Artisanal Menu",
+  gallery: "Visual Gallery",
+  trust_proof: "Clinical Trust & Standards",
+  doctor_clinic: "Doctors & Clinical Team",
+  treatment_process: "Treatment Experience",
+  workflow_steps: "Platform Workflow",
+  selected_works: "Selected Architecture",
+  project_details: "Project Blueprint",
+  curated_collection: "Curated Collection",
+  craft_heritage: "Atelier Craft & Heritage",
+  emergency_services: "24/7 Emergency Response",
+  trust_guarantees: "Guarantees & Licensure",
+  service_area: "Service Radius",
+  selected_cases: "Selected Case Studies",
+  creative_capabilities: "Creative Capabilities",
+  awards_metrics: "Awards & Recognition",
+  reviews: "Verified Client Reviews",
+  pricing: "Pricing & Plans",
+  reservation: "Table Reservation",
+  booking: "Appointment Booking",
 };
 
 import type { CatalogItem } from "@/lib/catalog";
@@ -104,15 +126,17 @@ export default function WebsiteRenderer({
   const activePageId = useGeneratedWebsiteStore((state) => state.activePageId);
   const setActivePage = useGeneratedWebsiteStore((state) => state.setActivePage);
   const catalogVersion = useGeneratedWebsiteStore((state) => state.catalogVersion);
-  const [fetchedCatalog, setFetchedCatalog] = React.useState<CatalogItem[]>([]);
+  const [fetchedCatalogData, setFetchedCatalogData] = React.useState<{ projectId: string; items: CatalogItem[] } | null>(null);
+  const fetchedCatalog = (fetchedCatalogData && fetchedCatalogData.projectId === projectId) ? fetchedCatalogData.items : [];
 
   React.useEffect(() => {
     let isCancelled = false;
     if (!isPublic && projectId && !catalogItems) {
-      setFetchedCatalog([]); // Prevent stale catalog from previous project
       import("@/lib/catalog").then((mod) => {
         mod.getCatalogItems(projectId).then(({ data }) => {
-          if (!isCancelled && data) setFetchedCatalog(data);
+          if (!isCancelled && data) {
+            setFetchedCatalogData({ projectId, items: data });
+          }
         });
       });
     }
@@ -209,6 +233,22 @@ export default function WebsiteRenderer({
         "--wb-gradient-hero": theme.gradientHeroOverlay,
       } as React.CSSProperties}
     >
+      {/* Dynamic Background Texture Surfaces */}
+      {website.designStrategy?.backgroundStrategy?.type === "tech_grid" && (
+        <div className="pointer-events-none fixed inset-0 z-0 bg-[linear-gradient(to_right,rgba(56,189,248,0.04)_1px,transparent_1px),linear-gradient(to_bottom,rgba(56,189,248,0.04)_1px,transparent_1px)] bg-[size:48px_48px] [mask-image:radial-gradient(ellipse_70%_60%_at_50%_30%,#000_60%,transparent_100%)]" />
+      )}
+      {website.designStrategy?.backgroundStrategy?.type === "dot_grid" && (
+        <div className="pointer-events-none fixed inset-0 z-0 bg-[radial-gradient(rgba(148,163,184,0.12)_1px,transparent_1px)] [background-size:24px_24px] [mask-image:radial-gradient(ellipse_70%_60%_at_50%_30%,#000_60%,transparent_100%)]" />
+      )}
+      {website.designStrategy?.backgroundStrategy?.type === "tonal_field" && (
+        <div
+          className="pointer-events-none fixed inset-0 z-0 opacity-25 blur-3xl"
+          style={{
+            background: `radial-gradient(circle at 50% 20%, ${theme.glowPrimary || "var(--wb-primary)"}, transparent 70%)`,
+          }}
+        />
+      )}
+
       {/* Global Navigation Bar */}
       <nav
         className="sticky top-0 z-30 w-full backdrop-blur-xl border-b transition-colors px-4 sm:px-8 py-3 flex items-center justify-between"
@@ -313,12 +353,23 @@ export default function WebsiteRenderer({
             content = <HeroSection sectionKey={key} {...heroData} image={heroData.image || website.hero.image} />;
             break;
           }
-          case "about": {
+          case "about":
+          case "atmosphere_story":
+          case "doctor_clinic":
+          case "project_details":
+          case "craft_heritage":
+          case "studio_philosophy":
+          case "manifesto": {
             const aboutData = (rawSectionData && typeof rawSectionData === "object" ? rawSectionData : website.about) as About & { image?: string };
             content = <AboutSection sectionKey={key} {...aboutData} image={aboutData.image || website.about.image} />;
             break;
           }
-          case "services": {
+          case "services":
+          case "signature_dishes":
+          case "menu":
+          case "emergency_services":
+          case "creative_capabilities":
+          case "capabilities": {
             let servicesData: Service[] = [];
             if (Array.isArray(rawSectionData)) {
               servicesData = rawSectionData;
@@ -331,7 +382,19 @@ export default function WebsiteRenderer({
             content = <ServicesSection sectionKey={key} services={servicesData} />;
             break;
           }
-          case "features": {
+          case "features":
+          case "trust_proof":
+          case "treatment_process":
+          case "workflow_steps":
+          case "trust_guarantees":
+          case "service_area":
+          case "awards_metrics":
+          case "selected_works":
+          case "selected_cases":
+          case "gallery":
+          case "lookbook":
+          case "reviews":
+          case "pricing": {
             let featuresData: Feature[] = [];
             if (Array.isArray(rawSectionData)) {
               featuresData = rawSectionData;
@@ -345,7 +408,8 @@ export default function WebsiteRenderer({
             break;
           }
           case "products":
-          case "catalog": {
+          case "catalog":
+          case "curated_collection": {
             const productsData = (rawSectionData || website.productsSection) as ProductsSectionData;
             content = (
               <ProductsSection
@@ -371,7 +435,9 @@ export default function WebsiteRenderer({
             content = <FAQSection sectionKey={key} faq={faqData} />;
             break;
           }
-          case "contact": {
+          case "contact":
+          case "reservation":
+          case "booking": {
             const contactData = (rawSectionData && typeof rawSectionData === "object" ? rawSectionData : website.contact) as Contact;
             content = <ContactSection sectionKey={key} contact={contactData} />;
             break;

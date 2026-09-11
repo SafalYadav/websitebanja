@@ -208,6 +208,34 @@ export const CATEGORY_MAP: Record<string, CategoryImageSet> = {
   },
 };
 
+export const TRANSPORT_IMAGE_SET: CategoryImageSet = {
+  hero: "https://images.unsplash.com/photo-1449965408869-eaa3f722e40d?auto=format&fit=crop&w=1200&q=80", // Premium car driving highway
+  about: "https://images.unsplash.com/photo-1549399542-7e3f8b79c341?auto=format&fit=crop&w=1000&q=80", // Luxury vehicle fleet
+  services: [
+    "https://images.unsplash.com/photo-1563720223185-11003d516935?auto=format&fit=crop&w=800&q=80", // Airport VIP transfer
+    "https://images.unsplash.com/photo-1502877338535-766e1452684a?auto=format&fit=crop&w=800&q=80", // Modern SUV & sedan rental
+    "https://images.unsplash.com/photo-1494976388531-d1058494cdd8?auto=format&fit=crop&w=800&q=80", // Chauffeur executive transport
+  ],
+  features: [
+    "https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&w=800&q=80", // Verified clean cars
+    "https://images.unsplash.com/photo-1511919884226-fd3cad34687c?auto=format&fit=crop&w=800&q=80", // 24/7 on-demand pickup
+  ],
+};
+
+export const LOCAL_SERVICE_IMAGE_SET: CategoryImageSet = {
+  hero: "https://images.unsplash.com/photo-1581578731548-c64695cc6952?auto=format&fit=crop&w=1200&q=80", // Professional cleaning & home maintenance
+  about: "https://images.unsplash.com/photo-1621905251189-08b45d6a269e?auto=format&fit=crop&w=1000&q=80", // Electrician & technical maintenance
+  services: [
+    "https://images.unsplash.com/photo-1504148455328-c376907d081c?auto=format&fit=crop&w=800&q=80", // Plumbing & fixture repair
+    "https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=800&q=80", // Specialized equipment installation
+    "https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&w=800&q=80", // Diagnostic & troubleshooting
+  ],
+  features: [
+    "https://images.unsplash.com/photo-1505798577917-a65157d3320a?auto=format&fit=crop&w=800&q=80", // Licensed technician guarantee
+    "https://images.unsplash.com/photo-1540555700478-4be289fbecef?auto=format&fit=crop&w=800&q=80", // Transparent pricing
+  ],
+};
+
 /**
  * Robust Category + Business Name/Context Resolver:
  * Inspects category string, business name, and optional description
@@ -405,6 +433,115 @@ export function getCategoryImages(
     return CATEGORY_MAP.portfolio;
   }
 
+  // 15. Check Transport / Car Rental / Cab / Fleet / Logistics
+  if (
+    combined.includes("transport") ||
+    combined.includes("car rental") ||
+    combined.includes("rental car") ||
+    combined.includes("taxi") ||
+    combined.includes("cab") ||
+    combined.includes("chauffeur") ||
+    combined.includes("fleet") ||
+    combined.includes("logistics")
+  ) {
+    return TRANSPORT_IMAGE_SET;
+  }
+
+  // 16. Check Local Service / Plumber / Electrician / Handyman / Repair
+  if (
+    combined.includes("plumber") ||
+    combined.includes("plumbing") ||
+    combined.includes("electrician") ||
+    combined.includes("handyman") ||
+    combined.includes("repair") ||
+    combined.includes("cleaning") ||
+    combined.includes("local service") ||
+    combined.includes("contractor")
+  ) {
+    return LOCAL_SERVICE_IMAGE_SET;
+  }
+
   // Default fallback to general professional business
   return CATEGORY_MAP.general;
+}
+
+import type { ImageIntentConfig } from "@/types/website";
+
+export function getImageIntentForSection(
+  category?: string | null,
+  sectionKey?: string | null,
+  businessName?: string | null
+): ImageIntentConfig {
+  const cat = (category || "").toLowerCase();
+
+  if (cat.includes("restaurant") || cat.includes("cafe") || cat.includes("coffee") || cat.includes("dining")) {
+    return {
+      subject: `Artisanal culinary preparation, warm dining atmosphere or beverage for ${businessName || "the restaurant"}`,
+      visualStyle: "cinematic warm lighting, organic textures, natural depth of field",
+      aspectRatio: sectionKey === "hero" ? "16:9" : "4:3",
+      composition: "center-weighted food photography with clean negative space",
+      crop: "close-up gourmet plating or wide ambient dining room",
+      purpose: "Establish sensory appetite and dining prestige",
+      fallbackType: "tonal_composition",
+    };
+  }
+
+  if (cat.includes("dental") || cat.includes("clinic") || cat.includes("doctor") || cat.includes("medical")) {
+    return {
+      subject: `Modern clinical interior, reassuring doctor or dental hygiene suite for ${businessName || "the clinic"}`,
+      visualStyle: "bright natural daylight, sterile calm, reassuring professional demeanor",
+      aspectRatio: "16:9",
+      composition: "clean, uncluttered clinical environment with welcoming human presence",
+      crop: "patient perspective consultation view",
+      purpose: "Alleviate clinical anxiety and reinforce hygiene and board-certified credibility",
+      fallbackType: "svg_geometric",
+    };
+  }
+
+  if (cat.includes("architect") || cat.includes("villa") || cat.includes("interior")) {
+    return {
+      subject: `Striking contemporary architectural facade or interior volume by ${businessName || "the studio"}`,
+      visualStyle: "golden-hour architectural documentation, sharp geometric lines, dramatic material texture",
+      aspectRatio: "16:9",
+      composition: "monumental landscape framing with strict horizontal and vertical alignment",
+      crop: "wide cinematic structural crop",
+      purpose: "Demonstrate spatial elegance and architectural pedigree",
+      fallbackType: "abstract_mesh",
+    };
+  }
+
+  if (cat.includes("saas") || cat.includes("software") || cat.includes("tech") || cat.includes("ai")) {
+    return {
+      subject: `High-velocity software dashboard, interactive data graphs, glowing telemetry for ${businessName || "the platform"}`,
+      visualStyle: "dark sleek UI, crisp neon accent glows, clean modular typography",
+      aspectRatio: "16:10",
+      composition: "multi-layered interface depth showcase with floating metric chips",
+      crop: "browser window or floating product canvas",
+      purpose: "Communicate velocity, automated intelligence, and developer-grade polish",
+      fallbackType: "abstract_mesh",
+    };
+  }
+
+  if (cat.includes("fashion") || cat.includes("luxury") || cat.includes("apparel") || cat.includes("jewelry")) {
+    return {
+      subject: `High-end editorial fashion photography or luxury product showcase for ${businessName || "the brand"}`,
+      visualStyle: "high-contrast studio lighting, neutral muted palette, tactile fabric textures",
+      aspectRatio: "4:5",
+      composition: "vertical editorial lookbook framing",
+      crop: "fashion portrait or jewelry macro crop",
+      purpose: "Project luxury exclusivity, craftsmanship, and couture prestige",
+      fallbackType: "tonal_composition",
+    };
+  }
+
+  // Default
+  return {
+    subject: `Professional quality service and customer excellence for ${businessName || "this business"}`,
+    visualStyle: "clean authentic commercial photography, natural daylight",
+    aspectRatio: "16:9",
+    composition: "balanced professional composition",
+    crop: "medium action framing",
+    purpose: "Provide visual reassurance and establish trust",
+    fallbackType: "svg_geometric",
+  };
 }

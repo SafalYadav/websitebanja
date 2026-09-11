@@ -12,10 +12,10 @@ export interface StorageConfig {
   useManagedIdentity: boolean;
 }
 
+// WHY Azure Blob Storage is canonical: All application assets (images, generated workspace markdown,
+// project snapshots) are stored exclusively in Azure Blob Storage. Supabase Storage has been completely removed.
 export function getStorageConfig(): StorageConfig {
-  const provider = (process.env.STORAGE_PROVIDER?.toLowerCase() === "azure"
-    ? "azure"
-    : "supabase") as StorageProvider;
+  const provider: StorageProvider = "azure";
 
   const azureConnectionString = process.env.AZURE_STORAGE_CONNECTION_STRING;
   const azureAccountName = process.env.AZURE_STORAGE_ACCOUNT_NAME || "websitebanjastorage";

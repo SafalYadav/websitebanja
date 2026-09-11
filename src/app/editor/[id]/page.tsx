@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter, useParams } from "next/navigation";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 
 import BuilderLayout from "@/components/builder/BuilderLayout";
 import ProgressBar from "@/components/builder/ProgressBar";
@@ -13,31 +13,14 @@ import TextAreaField from "@/components/builder/TextAreaField";
 
 import { editorRoute } from "@/lib/editorRoutes";
 import { useProjectAutosave } from "@/hooks/useProjectAutosave";
-import { updateProject } from "@/lib/projects";
 import { useBuilderStore } from "@/store/builderStore";
-import { supabase } from "@/lib/supabase";
 import { toast } from "@/store/toastStore";
 import { cn } from "@/lib/utils";
-import { extractBusinessDetailsFast } from "@/lib/promptExtractor";
 import AiTalkingAgent from "@/components/agent/AiTalkingAgent";
 import {
-  Sparkles,
   Layers,
   ArrowRight,
-  MessageCircle,
-  MapPin,
-  Phone,
-  Mail,
-  Calendar,
-  Star,
-  CreditCard,
-  ShoppingCart,
-  Share2,
-  BookOpen,
-  Clock,
-  Link as LinkIcon,
   Check,
-  Loader2,
   Bot,
 } from "lucide-react";
 
@@ -55,58 +38,30 @@ const CATEGORY_CHIPS = [
   "Other",
 ];
 
-const FEATURE_CHIPS = [
-  { id: "whatsapp", label: "WhatsApp Integration", icon: MessageCircle },
-  { id: "google_maps", label: "Google Maps", icon: MapPin },
-  { id: "call_button", label: "Call Button", icon: Phone },
-  { id: "contact_form", label: "Contact Form", icon: Mail },
-  { id: "appointments", label: "Appointment Booking", icon: Calendar },
-  { id: "testimonials", label: "Testimonials / Reviews", icon: Star },
-  { id: "payments", label: "Payments", icon: CreditCard },
-  { id: "ordering", label: "Online Ordering", icon: ShoppingCart },
-  { id: "social_media", label: "Social Media", icon: Share2 },
-  { id: "blog", label: "Blog", icon: BookOpen },
-  { id: "business_hours", label: "Business Hours", icon: Clock },
-  { id: "custom_links", label: "Custom Links", icon: LinkIcon },
-];
-
 export default function OnboardingStartPage() {
   const router = useRouter();
   const params = useParams<{ id: string }>();
+  const shouldReduceMotion = useReducedMotion();
 
   const {
     projectId,
     onboardingMode,
-    userPrompt,
-    selectedFeatures,
     businessName,
     category,
     description,
     targetAudience,
-    whatsappNumber,
     setOnboardingMode,
-    setUserPrompt,
-    toggleFeature,
     setBusinessName,
     setCategory,
     setDescription,
     setTargetAudience,
-    setStyle,
-    setPrimaryColor,
-    setSecondaryColor,
-    setPhone,
-    setEmail,
-    setWhatsappNumber,
-    setWhatsappEnabled,
   } = useBuilderStore();
 
   const activeProjectId = params?.id || projectId;
 
-  const [isExtracting, setIsExtracting] = useState(false);
   const [businessNameError, setBusinessNameError] = useState<string | null>(null);
   const [categoryError, setCategoryError] = useState<string | null>(null);
   const [descriptionError, setDescriptionError] = useState<string | null>(null);
-  const [promptError, setPromptError] = useState<string | null>(null);
 
   const { saveNow } = useProjectAutosave(activeProjectId, {
     name: businessName.trim() || undefined,
@@ -114,97 +69,7 @@ export default function OnboardingStartPage() {
     category,
     description,
     target_audience: targetAudience,
-    phone: whatsappNumber.trim() || undefined,
   });
-
-  // Prompt Mode Submission Handler
-  async function handlePromptSubmit() {
-    if (!userPrompt.trim() || userPrompt.trim().length < 8) {
-      setPromptError("Please describe your website in at least 8 characters.");
-      return;
-    }
-    setPromptError(null);
-    setIsExtracting(true);
-
-    try {
-      let extracted = extractBusinessDetailsFast(userPrompt.trim(), category || undefined, selectedFeatures);
-
-      try {
-        const session = (await supabase.auth.getSession()).data.session;
-        const res = await fetch("/api/extract", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: session?.access_token ? `Bearer ${session.access_token}` : "",
-          },
-          body: JSON.stringify({
-            prompt: userPrompt.trim(),
-            selectedCategory: category || undefined,
-            selectedFeatures,
-          }),
-        });
-
-        if (res.ok) {
-          const data = await res.json();
-          if (data.success && data.data) {
-            extracted = data.data;
-          }
-        }
-      } catch (fetchErr) {
-        console.warn("API extraction fallback to fast parser:", fetchErr);
-      }
-
-      // Populate extracted values with safe fallbacks
-      const finalBusinessName = extracted.businessName || "My Business";
-      const finalCategory = extracted.category || category || "Other";
-      const finalDescription = extracted.description || userPrompt.trim();
-      const finalTargetAudience = extracted.targetAudience || "";
-      const finalStyle = extracted.style || "Modern";
-      const finalPrimaryColor = extracted.primaryColor || "#7C3AED";
-      const finalSecondaryColor = extracted.secondaryColor || "#2563EB";
-      const finalPhone = (whatsappNumber.trim() || extracted.whatsappNumber || extracted.phone || "").trim();
-      const finalEmail = (extracted.email || "").trim();
-
-      // Update Zustand store immediately
-      setBusinessName(finalBusinessName);
-      setCategory(finalCategory);
-      setDescription(finalDescription);
-      setTargetAudience(finalTargetAudience);
-      setStyle(finalStyle);
-      setPrimaryColor(finalPrimaryColor);
-      setSecondaryColor(finalSecondaryColor);
-      setPhone(finalPhone);
-      setEmail(finalEmail);
-      if (finalPhone) {
-        setWhatsappNumber(finalPhone);
-        setWhatsappEnabled(true);
-      }
-
-      if (activeProjectId) {
-        await updateProject(activeProjectId, {
-          name: finalBusinessName,
-          business_name: finalBusinessName,
-          category: finalCategory,
-          description: finalDescription,
-          target_audience: finalTargetAudience,
-          style: finalStyle,
-          primary_color: finalPrimaryColor,
-          secondary_color: finalSecondaryColor,
-          phone: finalPhone,
-          email: finalEmail,
-        });
-      }
-
-      router.push(editorRoute(activeProjectId, "loading"));
-    } catch (err) {
-      setIsExtracting(false);
-      const isDev = process.env.NODE_ENV === "development";
-      toast.error(
-        "Generation Error",
-        isDev && err instanceof Error ? err.message : "Failed to prepare website generation. Please try again."
-      );
-    }
-  }
 
   // Business Details Wizard Handler
   async function handleDetailsNext() {
@@ -247,119 +112,136 @@ export default function OnboardingStartPage() {
   return (
     <BuilderLayout
       title="How do you want to build your website?"
-      description="Talk with our AI Architect, start with a prompt, or enter your business details. WebsiteBanja AI will turn it into a complete website."
+      description="Choose your preferred creation method. Talk with our AI Architect through live conversation, or enter structured business details."
     >
-      {/* Choice Mode Toggle Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-        {/* Card 1: Talk with AI Agent (Recommended) */}
+      {/* Choice Mode Toggle Cards: Exactly 2 Neutral Choices */}
+      <div
+        role="radiogroup"
+        aria-label="Creation Methods"
+        className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl mx-auto mb-10"
+      >
+        {/* Choice 1: Talk with AI Agent */}
         <button
           type="button"
+          role="radio"
+          aria-checked={onboardingMode === "agent"}
+          tabIndex={0}
           onClick={() => setOnboardingMode("agent")}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              setOnboardingMode("agent");
+            }
+          }}
           className={cn(
-            "relative text-left p-5 sm:p-6 rounded-3xl border-2 transition-all duration-200 cursor-pointer overflow-hidden flex flex-col justify-between",
+            "relative text-left p-6 sm:p-8 rounded-3xl border-2 transition-all duration-200 cursor-pointer overflow-hidden flex flex-col justify-between group focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-violet-500/20",
             onboardingMode === "agent"
-              ? "border-violet-600 bg-violet-50/60 dark:bg-violet-950/30 ring-4 ring-violet-500/10 shadow-lg shadow-violet-500/10"
-              : "border-zinc-200 bg-white hover:border-zinc-300 dark:border-white/10 dark:bg-zinc-900/60 hover:shadow-md"
+              ? "border-violet-600 bg-violet-50/80 dark:bg-violet-950/35 ring-4 ring-violet-500/10 shadow-xl shadow-violet-500/10"
+              : "border-zinc-200/90 bg-white/80 hover:border-zinc-300 dark:border-white/10 dark:bg-zinc-900/60 hover:shadow-md"
           )}
         >
-          <div className="absolute top-3.5 right-3.5 flex items-center gap-1.5">
-            <span className="rounded-full bg-violet-100 text-violet-700 dark:bg-violet-950/70 dark:text-violet-300 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wide">
-              Recommended
-            </span>
-            {onboardingMode === "agent" && (
-              <div className="h-5 w-5 rounded-full bg-violet-600 text-white flex items-center justify-center shadow-xs">
-                <Check className="h-3 w-3" />
-              </div>
-            )}
-          </div>
+          {onboardingMode === "agent" && (
+            <div className="absolute top-5 right-5 h-6 w-6 rounded-full bg-violet-600 text-white flex items-center justify-center shadow-xs">
+              <Check className="h-3.5 w-3.5" />
+            </div>
+          )}
 
           <div>
-            <div className="h-10 w-10 rounded-2xl bg-gradient-to-tr from-blue-600 via-violet-600 to-indigo-600 text-white flex items-center justify-center shadow-md mb-3.5">
-              <Bot className="h-5 w-5" />
+            <div className="h-12 w-12 rounded-2xl bg-gradient-to-tr from-blue-600 via-violet-600 to-indigo-600 text-white flex items-center justify-center shadow-md mb-5 transition-transform duration-200 group-hover:scale-105">
+              <Bot className="h-6 w-6" />
             </div>
-            <h3 className="text-base font-bold text-zinc-900 dark:text-white">
+            <h3 className="text-xl font-bold text-zinc-950 dark:text-white">
               Talk with AI Agent
             </h3>
-            <p className="text-xs text-zinc-600 dark:text-zinc-400 mt-1.5 leading-relaxed">
-              Have a live voice & chat consultation with Mitra to uncover your exact business needs and architect your site.
+            <p className="text-xs sm:text-sm text-zinc-600 dark:text-zinc-400 mt-2 leading-relaxed">
+              For users who want AI to understand their business through conversation. Have a live voice & chat consultation with Mitra AI Architect to architect your site.
             </p>
+
+            <div className="flex flex-wrap gap-1.5 mt-4">
+              <span className="rounded-md bg-zinc-100 dark:bg-zinc-800/80 px-2 py-0.5 text-[10px] font-mono text-zinc-600 dark:text-zinc-300">
+                Voice & Audio
+              </span>
+              <span className="rounded-md bg-zinc-100 dark:bg-zinc-800/80 px-2 py-0.5 text-[10px] font-mono text-zinc-600 dark:text-zinc-300">
+                Adaptive Clarifications
+              </span>
+              <span className="rounded-md bg-zinc-100 dark:bg-zinc-800/80 px-2 py-0.5 text-[10px] font-mono text-zinc-600 dark:text-zinc-300">
+                Zero Blank Canvas
+              </span>
+            </div>
           </div>
 
-          <div className="mt-5 pt-3 border-t border-zinc-200/80 dark:border-white/10">
-            <span className="text-xs font-bold text-violet-600 dark:text-violet-400 flex items-center gap-1.5">
+          <div className="mt-6 pt-4 border-t border-zinc-200/80 dark:border-white/10 flex items-center justify-between">
+            <span className={cn(
+              "text-xs font-bold flex items-center gap-1.5 transition",
+              onboardingMode === "agent" ? "text-violet-600 dark:text-violet-400" : "text-zinc-700 dark:text-zinc-300"
+            )}>
               Consult with AI <ArrowRight className="h-3.5 w-3.5" />
             </span>
-          </div>
-        </button>
-
-        {/* Card 2: Start with a Prompt */}
-        <button
-          type="button"
-          onClick={() => setOnboardingMode("prompt")}
-          className={cn(
-            "relative text-left p-5 sm:p-6 rounded-3xl border-2 transition-all duration-200 cursor-pointer overflow-hidden flex flex-col justify-between",
-            onboardingMode === "prompt"
-              ? "border-violet-600 bg-violet-50/60 dark:bg-violet-950/30 ring-4 ring-violet-500/10 shadow-lg shadow-violet-500/10"
-              : "border-zinc-200 bg-white hover:border-zinc-300 dark:border-white/10 dark:bg-zinc-900/60 hover:shadow-md"
-          )}
-        >
-          {onboardingMode === "prompt" && (
-            <div className="absolute top-3.5 right-3.5 h-5 w-5 rounded-full bg-violet-600 text-white flex items-center justify-center shadow-xs">
-              <Check className="h-3 w-3" />
-            </div>
-          )}
-
-          <div>
-            <div className="h-10 w-10 rounded-2xl bg-zinc-100 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200 flex items-center justify-center mb-3.5">
-              <Sparkles className="h-5 w-5 text-violet-600 dark:text-violet-400" />
-            </div>
-            <h3 className="text-base font-bold text-zinc-900 dark:text-white">
-              Start with a Prompt
-            </h3>
-            <p className="text-xs text-zinc-600 dark:text-zinc-400 mt-1.5 leading-relaxed">
-              Describe your website in your own words and let AI handle the architecture, design, and copywriting.
-            </p>
-          </div>
-
-          <div className="mt-5 pt-3 border-t border-zinc-200/80 dark:border-white/10">
-            <span className="text-xs font-bold text-zinc-700 dark:text-zinc-300 flex items-center gap-1.5">
-              Start with Prompt <ArrowRight className="h-3.5 w-3.5" />
+            <span className="text-[11px] font-mono text-zinc-400 dark:text-zinc-500">
+              Conversational Intake
             </span>
           </div>
         </button>
 
-        {/* Card 3: Use Business Details */}
+        {/* Choice 2: Use Business Details */}
         <button
           type="button"
+          role="radio"
+          aria-checked={onboardingMode === "details"}
+          tabIndex={0}
           onClick={() => setOnboardingMode("details")}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              setOnboardingMode("details");
+            }
+          }}
           className={cn(
-            "relative text-left p-5 sm:p-6 rounded-3xl border-2 transition-all duration-200 cursor-pointer overflow-hidden flex flex-col justify-between",
+            "relative text-left p-6 sm:p-8 rounded-3xl border-2 transition-all duration-200 cursor-pointer overflow-hidden flex flex-col justify-between group focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-violet-500/20",
             onboardingMode === "details"
-              ? "border-violet-600 bg-violet-50/60 dark:bg-violet-950/30 ring-4 ring-violet-500/10 shadow-lg shadow-violet-500/10"
-              : "border-zinc-200 bg-white hover:border-zinc-300 dark:border-white/10 dark:bg-zinc-900/60 hover:shadow-md"
+              ? "border-violet-600 bg-violet-50/80 dark:bg-violet-950/35 ring-4 ring-violet-500/10 shadow-xl shadow-violet-500/10"
+              : "border-zinc-200/90 bg-white/80 hover:border-zinc-300 dark:border-white/10 dark:bg-zinc-900/60 hover:shadow-md"
           )}
         >
           {onboardingMode === "details" && (
-            <div className="absolute top-3.5 right-3.5 h-5 w-5 rounded-full bg-violet-600 text-white flex items-center justify-center shadow-xs">
-              <Check className="h-3 w-3" />
+            <div className="absolute top-5 right-5 h-6 w-6 rounded-full bg-violet-600 text-white flex items-center justify-center shadow-xs">
+              <Check className="h-3.5 w-3.5" />
             </div>
           )}
 
           <div>
-            <div className="h-10 w-10 rounded-2xl bg-zinc-100 text-zinc-800 dark:bg-zinc-800 dark:text-zinc-200 flex items-center justify-center mb-3.5">
-              <Layers className="h-5 w-5" />
+            <div className="h-12 w-12 rounded-2xl bg-zinc-100 text-zinc-800 dark:bg-zinc-800 dark:text-zinc-200 flex items-center justify-center mb-5 transition-transform duration-200 group-hover:scale-105">
+              <Layers className="h-6 w-6" />
             </div>
-            <h3 className="text-base font-bold text-zinc-900 dark:text-white">
+            <h3 className="text-xl font-bold text-zinc-950 dark:text-white">
               Use Business Details
             </h3>
-            <p className="text-xs text-zinc-600 dark:text-zinc-400 mt-1.5 leading-relaxed">
-              Answer a few simple questions and build your website step by step with our structured wizard.
+            <p className="text-xs sm:text-sm text-zinc-600 dark:text-zinc-400 mt-2 leading-relaxed">
+              For users who prefer structured input. Answer a few guided questions and build your website step by step with our structured wizard.
             </p>
+
+            <div className="flex flex-wrap gap-1.5 mt-4">
+              <span className="rounded-md bg-zinc-100 dark:bg-zinc-800/80 px-2 py-0.5 text-[10px] font-mono text-zinc-600 dark:text-zinc-300">
+                Step-by-Step Wizard
+              </span>
+              <span className="rounded-md bg-zinc-100 dark:bg-zinc-800/80 px-2 py-0.5 text-[10px] font-mono text-zinc-600 dark:text-zinc-300">
+                Structured Prompts
+              </span>
+              <span className="rounded-md bg-zinc-100 dark:bg-zinc-800/80 px-2 py-0.5 text-[10px] font-mono text-zinc-600 dark:text-zinc-300">
+                Full Manual Review
+              </span>
+            </div>
           </div>
 
-          <div className="mt-5 pt-3 border-t border-zinc-200/80 dark:border-white/10">
-            <span className="text-xs font-bold text-zinc-700 dark:text-zinc-300 flex items-center gap-1.5">
+          <div className="mt-6 pt-4 border-t border-zinc-200/80 dark:border-white/10 flex items-center justify-between">
+            <span className={cn(
+              "text-xs font-bold flex items-center gap-1.5 transition",
+              onboardingMode === "details" ? "text-violet-600 dark:text-violet-400" : "text-zinc-700 dark:text-zinc-300"
+            )}>
               Enter Details <ArrowRight className="h-3.5 w-3.5" />
+            </span>
+            <span className="text-[11px] font-mono text-zinc-400 dark:text-zinc-500">
+              Guided Form
             </span>
           </div>
         </button>
@@ -370,9 +252,9 @@ export default function OnboardingStartPage() {
         {onboardingMode === "agent" ? (
           <motion.div
             key="agent-mode"
-            initial={{ opacity: 0, y: 10 }}
+            initial={shouldReduceMotion ? { opacity: 1 } : { opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
+            exit={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: -8 }}
             transition={{ duration: 0.2 }}
           >
             <AiTalkingAgent
@@ -385,139 +267,12 @@ export default function OnboardingStartPage() {
               }}
             />
           </motion.div>
-        ) : onboardingMode === "prompt" ? (
-          <motion.div
-            key="prompt-mode"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            transition={{ duration: 0.2 }}
-            className="space-y-6"
-          >
-            {/* Prompt Textarea */}
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <label className="text-sm font-bold text-zinc-900 dark:text-white flex items-center gap-2">
-                  <Sparkles className="h-4 w-4 text-violet-600" />
-                  Tell us about the website you want...
-                </label>
-                <span className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400">
-                  {userPrompt.length} / 800
-                </span>
-              </div>
-              <textarea
-                rows={4}
-                maxLength={800}
-                value={userPrompt}
-                onChange={(e) => {
-                  setUserPrompt(e.target.value);
-                  if (promptError) setPromptError(null);
-                }}
-                placeholder="Example: Create a modern luxury salon website in Mumbai with WhatsApp appointments, services, pricing, testimonials and Google Maps."
-                className={cn(
-                  "w-full rounded-2xl border bg-white p-4 text-sm text-zinc-900 shadow-xs outline-none transition focus:border-violet-500 focus:ring-4 focus:ring-violet-500/10 dark:border-white/10 dark:bg-zinc-900 dark:text-white placeholder:text-zinc-400",
-                  promptError && "border-red-500 focus:border-red-500 focus:ring-red-500/10"
-                )}
-              />
-              {promptError && (
-                <p className="mt-1.5 text-xs font-medium text-red-600 dark:text-red-400">
-                  {promptError}
-                </p>
-              )}
-            </div>
-
-            {/* Category Chips */}
-            <div>
-              <label className="text-xs font-bold text-zinc-700 dark:text-zinc-300 block mb-2.5">
-                Quick Category (Optional)
-              </label>
-              <div className="flex flex-wrap gap-2">
-                {CATEGORY_CHIPS.map((cat) => (
-                  <button
-                    key={cat}
-                    type="button"
-                    onClick={() => setCategory(category === cat ? "" : cat)}
-                    className={cn(
-                      "px-3 py-1.5 rounded-xl text-xs font-semibold border transition cursor-pointer",
-                      category === cat
-                        ? "bg-violet-600 text-white border-violet-600 shadow-sm"
-                        : "bg-white text-zinc-700 border-zinc-200 hover:border-zinc-300 dark:bg-zinc-900 dark:text-zinc-300 dark:border-white/10"
-                    )}
-                  >
-                    {cat}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Selectable Feature Chips */}
-            <div>
-              <label className="text-xs font-bold text-zinc-700 dark:text-zinc-300 block mb-2.5">
-                Add Features & Integrations (Optional)
-              </label>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
-                {FEATURE_CHIPS.map((feat) => {
-                  const isSelected = selectedFeatures.includes(feat.id);
-                  const Icon = feat.icon;
-                  return (
-                    <button
-                      key={feat.id}
-                      type="button"
-                      onClick={() => toggleFeature(feat.id)}
-                      className={cn(
-                        "p-2.5 rounded-xl border text-xs font-medium transition cursor-pointer flex items-center gap-2 select-none text-left",
-                        isSelected
-                          ? "bg-violet-50 text-violet-900 border-violet-500 dark:bg-violet-950/40 dark:text-violet-200"
-                          : "bg-white text-zinc-600 border-zinc-200 hover:border-zinc-300 dark:bg-zinc-900 dark:text-zinc-400 dark:border-white/10"
-                      )}
-                    >
-                      <Icon className={cn("h-3.5 w-3.5", isSelected ? "text-violet-600 dark:text-violet-400" : "text-zinc-400")} />
-                      <span className="truncate">{feat.label}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* WhatsApp input if WhatsApp feature chosen */}
-            {selectedFeatures.includes("whatsapp") && (
-              <div className="rounded-2xl border border-emerald-500/30 bg-emerald-50/40 p-4 dark:bg-emerald-950/20">
-                <InputField
-                  label="WhatsApp Phone Number (Optional)"
-                  placeholder="+91 98765 43210"
-                  helperText="Include country code (+91, +1, etc.)"
-                  value={whatsappNumber}
-                  onChange={(e) => setWhatsappNumber(e.target.value)}
-                />
-              </div>
-            )}
-
-            {/* Submit Button */}
-            <button
-              type="button"
-              disabled={isExtracting}
-              onClick={handlePromptSubmit}
-              className="w-full h-14 rounded-2xl bg-gradient-to-r from-blue-600 via-violet-600 to-indigo-600 text-white font-bold text-base shadow-lg shadow-violet-500/25 hover:opacity-95 active:scale-[0.99] transition disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
-            >
-              {isExtracting ? (
-                <>
-                  <Loader2 className="h-5 w-5 animate-spin" />
-                  <span>Synthesizing Website Architecture...</span>
-                </>
-              ) : (
-                <>
-                  <Sparkles className="h-5 w-5" />
-                  <span>Generate Website with AI</span>
-                </>
-              )}
-            </button>
-          </motion.div>
         ) : (
           <motion.div
             key="details-mode"
-            initial={{ opacity: 0, y: 10 }}
+            initial={shouldReduceMotion ? { opacity: 1 } : { opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
+            exit={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: -8 }}
             transition={{ duration: 0.2 }}
             className="space-y-6"
           >

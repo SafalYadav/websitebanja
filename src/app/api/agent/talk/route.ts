@@ -4,7 +4,8 @@ import type { ExtractedUserNeeds, AgentTalkResponse } from "@/types/aiAgent";
 import { AgentProviderFactory } from "@/lib/ai/agentProviderFactory";
 import { normalizeAgentResponse } from "@/lib/ai/agentNormalizer";
 import { setProjectKnowledge } from "@/lib/knowledge";
-import { getClientIp, authenticateRequest, getUserScopedClient } from "@/lib/supabaseServer";
+import { getClientIp, authenticateRequest } from "@/lib/supabaseServer";
+import { dbCheckProjectExists } from "@/lib/db/queries";
 
 interface RequestMessage {
   role: "user" | "assistant" | "system";
@@ -278,15 +279,9 @@ Detect the language and script of the user's latest message automatically. Alway
 
         if (body.projectId && authenticatedUser) {
           try {
-            const userSupabase = getUserScopedClient(authenticatedUser.token);
-            const { data: project } = await userSupabase
-              .from("projects")
-              .select("id, user_id")
-              .eq("id", body.projectId)
-              .eq("user_id", authenticatedUser.id)
-              .maybeSingle();
+            const projectExists = await dbCheckProjectExists(body.projectId, authenticatedUser.id);
 
-            if (project) {
+            if (projectExists) {
               await setProjectKnowledge(
                 body.projectId,
                 "extracted_needs",

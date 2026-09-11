@@ -10,7 +10,8 @@ import type { ExtractedUserNeeds } from '@/types/aiAgent';
 
 import { normalizeAgentResponse } from '@/lib/ai/agentNormalizer';
 
-import { getClientIp, authenticateRequest, getUserScopedClient } from '@/lib/supabaseServer';
+import { getClientIp, authenticateRequest } from '@/lib/supabaseServer';
+import { dbCheckProjectExists } from '@/lib/db/queries';
 
 // Custom error to indicate that the LLM provider returned an empty response.
 // Used to differentiate validation errors from provider failures.
@@ -201,15 +202,9 @@ export async function POST(req: Request) {
         // If projectId is provided, persist canonical facts to Project Knowledge only if caller owns it
         if (payload.projectId && authenticatedUser) {
           try {
-            const userSupabase = getUserScopedClient(authenticatedUser.token);
-            const { data: project } = await userSupabase
-              .from('projects')
-              .select('id, user_id')
-              .eq('id', payload.projectId)
-              .eq('user_id', authenticatedUser.id)
-              .maybeSingle();
+            const projectExists = await dbCheckProjectExists(payload.projectId, authenticatedUser.id);
 
-            if (project) {
+            if (projectExists) {
               await setProjectKnowledge(
                 payload.projectId,
                 'extracted_needs',

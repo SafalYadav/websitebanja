@@ -7,12 +7,12 @@ export default function AboutEntity() {
     <section
       id="about-entity"
       aria-label="About WebsiteBanja AI"
-      className="py-20 px-6 relative border-t border-zinc-200/80 dark:border-white/10 bg-white/60 dark:bg-zinc-950/40"
+      className="py-20 px-6 relative border-t border-zinc-200/80 dark:border-white/10 bg-white/60 dark:bg-[#060709]"
     >
       <div className="mx-auto max-w-7xl">
         {/* Section Header */}
         <div className="max-w-3xl mx-auto text-center space-y-4 mb-14">
-          <span className="text-xs font-bold uppercase tracking-wider text-violet-600 dark:text-violet-400 bg-violet-50 dark:bg-violet-950/60 border border-violet-200/60 dark:border-violet-800/40 px-3.5 py-1.5 rounded-full inline-block">
+          <span className="text-xs font-bold uppercase tracking-wider text-cyan-600 dark:text-cyan-400 bg-cyan-50 dark:bg-cyan-950/60 border border-cyan-200/60 dark:border-cyan-800/40 px-3.5 py-1.5 rounded-full inline-block">
             Entity & Architecture Overview
           </span>
           <h2 className="text-3xl sm:text-4xl font-black tracking-tight text-zinc-900 dark:text-white">
@@ -27,9 +27,9 @@ export default function AboutEntity() {
         {/* 4 Pillars Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           {/* Pillar 1: Conversational & Prompt Driven */}
-          <div className="rounded-2xl border border-zinc-200/80 bg-white/80 p-6 dark:border-white/10 dark:bg-zinc-900/50 shadow-xs flex flex-col justify-between">
+          <div className="surface-card rounded-2xl p-6 flex flex-col justify-between">
             <div className="space-y-3">
-              <div className="h-10 w-10 rounded-xl bg-violet-100 text-violet-700 dark:bg-violet-950/70 dark:text-violet-300 flex items-center justify-center">
+              <div className="h-10 w-10 rounded-xl bg-cyan-100 text-cyan-700 dark:bg-cyan-950/70 dark:text-cyan-300 flex items-center justify-center shadow-xs">
                 <Bot className="h-5 w-5" />
               </div>
               <h3 className="text-base font-bold text-zinc-900 dark:text-white">
@@ -42,7 +42,7 @@ export default function AboutEntity() {
             <div className="pt-4 border-t border-zinc-100 dark:border-white/5 mt-4">
               <Link
                 href="/agent"
-                className="inline-flex items-center gap-1.5 text-xs font-semibold text-violet-600 dark:text-violet-400 hover:underline"
+                className="inline-flex items-center gap-1.5 text-xs font-semibold text-cyan-600 dark:text-cyan-400 hover:underline"
               >
                 <span>Consult Mitra AI</span>
                 <ArrowRight className="h-3 w-3" />
@@ -51,9 +51,9 @@ export default function AboutEntity() {
           </div>
 
           {/* Pillar 2: Autonomous Generation vs Templates */}
-          <div className="rounded-2xl border border-zinc-200/80 bg-white/80 p-6 dark:border-white/10 dark:bg-zinc-900/50 shadow-xs flex flex-col justify-between">
+          <div className="surface-card rounded-2xl p-6 flex flex-col justify-between">
             <div className="space-y-3">
-              <div className="h-10 w-10 rounded-xl bg-blue-100 text-blue-700 dark:bg-blue-950/70 dark:text-blue-300 flex items-center justify-center">
+              <div className="h-10 w-10 rounded-xl bg-blue-100 text-blue-700 dark:bg-blue-950/70 dark:text-blue-300 flex items-center justify-center shadow-xs">
                 <Wand2 className="h-5 w-5" />
               </div>
               <h3 className="text-base font-bold text-zinc-900 dark:text-white">
@@ -69,9 +69,9 @@ export default function AboutEntity() {
           </div>
 
           {/* Pillar 3: Studio Editor & Full Control */}
-          <div className="rounded-2xl border border-zinc-200/80 bg-white/80 p-6 dark:border-white/10 dark:bg-zinc-900/50 shadow-xs flex flex-col justify-between">
+          <div className="surface-card rounded-2xl p-6 flex flex-col justify-between">
             <div className="space-y-3">
-              <div className="h-10 w-10 rounded-xl bg-purple-100 text-purple-700 dark:bg-purple-950/70 dark:text-purple-300 flex items-center justify-center">
+              <div className="h-10 w-10 rounded-xl bg-indigo-100 text-indigo-700 dark:bg-indigo-950/70 dark:text-indigo-300 flex items-center justify-center shadow-xs">
                 <Layers className="h-5 w-5" />
               </div>
               <h3 className="text-base font-bold text-zinc-900 dark:text-white">
@@ -87,9 +87,9 @@ export default function AboutEntity() {
           </div>
 
           {/* Pillar 4: Who It Is Built For */}
-          <div className="rounded-2xl border border-zinc-200/80 bg-white/80 p-6 dark:border-white/10 dark:bg-zinc-900/50 shadow-xs flex flex-col justify-between">
+          <div className="surface-card rounded-2xl p-6 flex flex-col justify-between">
             <div className="space-y-3">
-              <div className="h-10 w-10 rounded-xl bg-emerald-100 text-emerald-700 dark:bg-emerald-950/70 dark:text-emerald-300 flex items-center justify-center">
+              <div className="h-10 w-10 rounded-xl bg-emerald-100 text-emerald-700 dark:bg-emerald-950/70 dark:text-emerald-300 flex items-center justify-center shadow-xs">
                 <Compass className="h-5 w-5" />
               </div>
               <h3 className="text-base font-bold text-zinc-900 dark:text-white">
@@ -106,13 +106,13 @@ export default function AboutEntity() {
         </div>
 
         {/* Identity & Canonical Statement Banner */}
-        <div className="mt-10 rounded-2xl border border-violet-200/80 bg-gradient-to-r from-violet-50/60 via-indigo-50/40 to-blue-50/60 p-6 dark:border-violet-950/50 dark:from-violet-950/20 dark:via-zinc-900/40 dark:to-blue-950/20 flex flex-col sm:flex-row items-center justify-between gap-4">
+        <div className="mt-10 rounded-2xl border border-cyan-500/30 bg-gradient-to-r from-cyan-950/30 via-[#0A0B10] to-indigo-950/30 p-6 flex flex-col sm:flex-row items-center justify-between gap-4 surface-tactile">
           <div className="flex items-center gap-3">
-            <div className="h-9 w-9 rounded-xl bg-violet-600 text-white flex items-center justify-center flex-shrink-0">
+            <div className="h-9 w-9 rounded-xl bg-cyan-600 text-white flex items-center justify-center flex-shrink-0 shadow-xs">
               <Sparkles className="h-4 w-4" />
             </div>
             <div>
-              <p className="text-xs font-bold uppercase tracking-wider text-violet-700 dark:text-violet-300">
+              <p className="text-xs font-bold uppercase tracking-wider text-cyan-600 dark:text-cyan-400">
                 Authoritative Web Identity
               </p>
               <p className="text-sm text-zinc-700 dark:text-zinc-300">
@@ -123,7 +123,7 @@ export default function AboutEntity() {
           </div>
           <Link
             href="/agent"
-            className="inline-flex items-center gap-2 rounded-xl bg-violet-600 px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-violet-700 transition flex-shrink-0"
+            className="btn-primary-luminous inline-flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold text-white shadow-xs transition flex-shrink-0"
           >
             <span>Try Mitra AI Architect</span>
             <ArrowRight className="h-3.5 w-3.5" />

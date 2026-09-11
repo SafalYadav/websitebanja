@@ -30,6 +30,8 @@ const CATEGORY_KEYWORDS: Record<string, string[]> = {
   Agency: ["agency", "marketing", "digital", "seo", "design", "consulting", "software", "development"],
   Portfolio: ["portfolio", "freelancer", "developer", "designer", "photographer", "artist", "resume"],
   "E-commerce": ["shop", "store", "ecommerce", "e-commerce", "buy", "products", "fashion", "apparel"],
+  Transport: ["transport", "car rental", "rental car", "cab", "taxi", "vehicle", "chauffeur", "fleet", "logistics"],
+  "Local Service": ["plumber", "plumbing", "electrician", "carpenter", "repair", "handyman", "cleaning", "contractor", "maintenance"],
 };
 
 const CATEGORY_SERVICES: Record<string, string[]> = {
@@ -43,6 +45,8 @@ const CATEGORY_SERVICES: Record<string, string[]> = {
   Agency: ["Brand Identity & Strategy", "Custom Web & App Development", "Performance Marketing & SEO", "Social Media Growth", "Creative Content Production"],
   Portfolio: ["Custom Client Projects", "Interactive UI/UX Design", "Full-Stack Development", "Consulting & Strategy", "Creative Direction"],
   "E-commerce": ["Curated Product Collections", "Fast Express Delivery", "Secure Online Payments", "Hassle-Free Returns", "24/7 Customer Support"],
+  Transport: ["Airport Transfers & Pickups", "Chauffeur & Executive Travel", "Self-Drive Vehicle Rentals", "Outstation Trips & Tours", "Corporate Fleet Solutions"],
+  "Local Service": ["Emergency Diagnostic & Repair", "Professional Installation Services", "Preventative Maintenance & Inspection", "Same-Day Emergency Dispatch", "Licensed & Insured Guarantee"],
   Other: ["Custom Tailored Services", "Professional Consultations", "Premium Client Support", "End-to-End Solutions"],
 };
 
@@ -57,6 +61,8 @@ const CATEGORY_THEMES: Record<string, { style: string; pColor: string; sColor: s
   Agency: { style: "Modern", pColor: "#7C3AED", sColor: "#2563EB" },
   Portfolio: { style: "Minimal", pColor: "#18181B", sColor: "#6366F1" },
   "E-commerce": { style: "Vibrant", pColor: "#4F46E5", sColor: "#06B6D4" },
+  Transport: { style: "Bold", pColor: "#1E3A8A", sColor: "#F59E0B" },
+  "Local Service": { style: "Clean", pColor: "#0369A1", sColor: "#0D9488" },
   Other: { style: "Modern", pColor: "#7C3AED", sColor: "#2563EB" },
 };
 
@@ -78,24 +84,46 @@ export function extractBusinessDetailsFast(
 
   // 1. Detect location
   let location = "";
-  const locationMatch = lower.match(/(?:in|at|near|around|for)\s+([a-zA-Z\s]{3,25})/i);
+  const locationMatch = lower.match(/(?:located\s+in|based\s+in|\bin|\bat|\bnear|\baround)\s+([a-zA-Z\s]{3,25})(?:\.|$|,|\s+called|\s+named|\s+with|\s+and)/i);
   if (locationMatch && locationMatch[1]) {
     const rawLoc = locationMatch[1].trim();
-    // Capitalize words
-    location = rawLoc
-      .split(" ")
-      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-      .join(" ");
+    const isGenericWord = /\b(my|a|an|the|website|business|clinic|gym|cafe|restaurant|salon|hotel|agency|shop|store|company)\b/i.test(rawLoc);
+    if (!isGenericWord) {
+      // Capitalize words
+      location = rawLoc
+        .split(" ")
+        .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+        .join(" ");
+    }
   }
 
   // 2. Detect category
   let category = selectedCategory || "";
   if (!category) {
-    for (const [cat, keywords] of Object.entries(CATEGORY_KEYWORDS)) {
-      if (keywords.some((kw) => lower.includes(kw))) {
+    // 2a. Check direct canonical category name match with word boundary
+    for (const cat of Object.keys(CATEGORY_KEYWORDS)) {
+      const catRegex = new RegExp(`\\b${cat.toLowerCase()}\\b`, "i");
+      if (catRegex.test(lower)) {
         category = cat;
         break;
       }
+    }
+  }
+  if (!category) {
+    // 2b. Check keywords with word boundaries, preferring longer/more specific matches
+    let bestCat = "";
+    let bestKwLen = 0;
+    for (const [cat, keywords] of Object.entries(CATEGORY_KEYWORDS)) {
+      for (const kw of keywords) {
+        const kwRegex = new RegExp(`\\b${kw}\\b`, "i");
+        if (kwRegex.test(lower) && kw.length > bestKwLen) {
+          bestCat = cat;
+          bestKwLen = kw.length;
+        }
+      }
+    }
+    if (bestCat) {
+      category = bestCat;
     }
   }
   if (!category) category = "Other";
@@ -105,10 +133,6 @@ export function extractBusinessDetailsFast(
   const phone = phoneMatch ? phoneMatch[0].trim() : "";
 
   // 4. Extract Email
-  // Bounded quantifiers + an '@' presence check keep this linear. The original
-  // /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/ was quadratic on input with no
-  // '@' (two adjacent unbounded classes that both match the same characters), so a
-  // long run of letters forced the engine to retry every start offset.
   const emailMatch = p.includes("@")
     ? p.match(/[a-zA-Z0-9._%+-]{1,64}@[a-zA-Z0-9-]{1,63}(?:\.[a-zA-Z0-9-]{1,63}){0,4}\.[a-zA-Z]{2,24}/)
     : null;
@@ -116,10 +140,14 @@ export function extractBusinessDetailsFast(
 
   // 5. Generate Business Name
   let businessName = "";
-  // Check if user specifically named it e.g. "for Sharma Dental Clinic" or "named Apex Fitness"
-  const namePattern = lower.match(/(?:called|named|for)\s+([A-Za-z0-9\s'&]{3,30})(?:\s+in|\s+with|\s+and|\.|$)/i);
-  if (namePattern && namePattern[1] && !["me", "a", "an", "the", "my"].includes(namePattern[1].trim().toLowerCase())) {
-    businessName = namePattern[1]
+  // Check if user specifically named it e.g. "called Apex Dental Care" or "named Apex Fitness" or "I run ZoomWheels Car Rental"
+  const namePattern = lower.match(/(?:called|named|known\s+as)\s+([A-Za-z0-9\s'&]{3,30})(?:\s+in|\s+with|\s+and|\.|$|,)/i);
+  const runPattern = lower.match(/\b(?:run|operate|own)\s+([A-Za-z0-9\s'&]{3,30})(?:\s+in|\s+with|\s+and|\.|$|,)/i);
+  const forMatch = lower.match(/\bfor\s+([A-Za-z0-9\s'&]{3,30})(?:\s+in|\s+with|\s+and|\.|$|,)/i);
+  const candidateMatch = namePattern || runPattern || (forMatch && !/\b(my|a|an|the|our)\b/i.test(forMatch[1]) ? forMatch : null);
+
+  if (candidateMatch && candidateMatch[1] && !["me", "a", "an", "the", "my"].includes(candidateMatch[1].trim().toLowerCase())) {
+    businessName = candidateMatch[1]
       .trim()
       .split(" ")
       .map((w) => w.charAt(0).toUpperCase() + w.slice(1))

@@ -12,7 +12,7 @@ const supabase = createClient(
 );
 
 async function check() {
-  const { data, error } = await supabase.rpc("get_preview_project", { p_preview_id: "00000000-0000-0000-0000-000000000000" });
+  const { error } = await supabase.rpc("get_preview_project", { p_preview_id: "00000000-0000-0000-0000-000000000000" });
   console.log(error);
 }
 check();

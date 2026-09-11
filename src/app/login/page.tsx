@@ -39,7 +39,8 @@ export default function LoginPage() {
       return;
     }
 
-    router.push(dashboardRoute());
+    const redirectTo = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("redirectTo") : null;
+    router.push(redirectTo || dashboardRoute());
   }
 
   async function handleGoogleLogin() {

@@ -8,6 +8,8 @@ import { CURRENCIES } from "@/components/editor/ProductFullScreenEditor";
 import type { ProductsSectionData } from "@/types/website";
 import type { CatalogItem } from "@/lib/catalog";
 
+const EMPTY_CATALOG: CatalogItem[] = [];
+
 interface ProductsSectionProps {
   sectionKey?: string;
   data?: ProductsSectionData;
@@ -19,14 +21,14 @@ interface ProductsSectionProps {
 export default function ProductsSection({
   sectionKey = "products",
   data,
-  catalogItems = [],
+  catalogItems = EMPTY_CATALOG,
   whatsappNumber,
   isPublic = false,
 }: ProductsSectionProps) {
   const title = data?.title || "Featured Offerings";
   const subtitle = data?.subtitle || "Explore our premium selection with transparent pricing and immediate availability.";
 
-  const rawProducts = catalogItems || [];
+  const rawProducts = catalogItems || EMPTY_CATALOG;
 
   const [activeCategory, setActiveCategory] = useState<string>("All");
 

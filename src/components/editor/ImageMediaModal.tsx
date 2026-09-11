@@ -12,7 +12,7 @@ import {
   Search,
   RefreshCw,
 } from "lucide-react";
-import { supabase } from "@/lib/supabase";
+import { getStorageClient } from "@/lib/storage";
 import { toast } from "@/store/toastStore";
 
 interface ImageMediaModalProps {
@@ -104,12 +104,11 @@ export default function ImageMediaModal({
 
     setIsUploading(true);
     try {
-      // Try uploading to Supabase Storage with strict project scoping
+      // Try uploading to Storage with strict project scoping
       const projectPrefix = projectId ? `${projectId}/` : "general/";
       const fileName = `${projectPrefix}uploads/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.-]/g, "_")}`;
-      const { data, error } = await supabase.storage
-        .from("project-assets")
-        .upload(fileName, file, { cacheControl: "3600", upsert: true });
+      const storage = getStorageClient("project-assets");
+      const { data, error } = await storage.upload(fileName, file, { cacheControl: "3600", upsert: true });
 
       if (error || !data) {
         // Fallback: convert to base64 Data URL so user is never blocked
@@ -124,9 +123,7 @@ export default function ImageMediaModal({
         return;
       }
 
-      const { data: publicData } = supabase.storage
-        .from("project-assets")
-        .getPublicUrl(data.path);
+      const { data: publicData } = storage.getPublicUrl(data.path);
 
       setSelectedUrl(publicData.publicUrl);
       toast.success("Upload Complete", "Image uploaded successfully.");

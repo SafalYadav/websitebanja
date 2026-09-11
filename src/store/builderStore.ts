@@ -119,7 +119,7 @@ export const useBuilderStore = create<BuilderState>((set) => ({
   hydrateFromProject: (project) =>
     set({
       projectId: project.id,
-      onboardingMode: project.onboarding_mode ?? "prompt",
+      onboardingMode: (project.onboarding_mode === "details" ? "details" : "agent"),
       userPrompt: project.user_prompt ?? "",
       selectedFeatures: project.selected_features ?? ["whatsapp", "contact_form", "testimonials", "google_maps"],
       businessName: project.business_name ?? "",

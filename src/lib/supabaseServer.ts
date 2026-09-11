@@ -19,16 +19,33 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
  *    and production behave differently and hides authorization bugs.
  */
 
+import { DEFAULT_SUPABASE_URL, DEFAULT_SUPABASE_ANON_KEY } from "@/lib/supabase";
+
 const SERVER_AUTH_OPTIONS = {
   auth: { persistSession: false, autoRefreshToken: false },
 } as const;
 
+function ensureEnvLoaded() {
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { loadEnvConfig } = require("@next/env");
+      loadEnvConfig(process.cwd());
+    } catch {
+      // Ignore in environments where @next/env is not loaded
+    }
+  }
+}
+
 function requireEnv(name: string): string {
+  ensureEnvLoaded();
   const value = process.env[name];
   if (!value) {
+    if (name === "NEXT_PUBLIC_SUPABASE_URL") return DEFAULT_SUPABASE_URL;
+    if (name === "NEXT_PUBLIC_SUPABASE_ANON_KEY") return DEFAULT_SUPABASE_ANON_KEY;
     throw new Error(`Server misconfiguration: ${name} is not set.`);
   }
-  return value;
+  return value.trim();
 }
 
 /** Anon-key client with no user context. Use only to validate a JWT. */
@@ -77,30 +94,168 @@ export interface AuthenticatedUser {
   email: string | null;
   emailVerified: boolean;
   token: string;
+  app_metadata?: Record<string, unknown>;
 }
 
 /**
  * Validates the request's Bearer token against Supabase Auth.
  * Returns null when there is no valid session — callers must respond 401.
  */
-export async function authenticateRequest(req: Request): Promise<AuthenticatedUser | null> {
+export interface AuthValidationResult {
+  user: AuthenticatedUser | null;
+  status: 200 | 401 | 503;
+  error: string | null;
+}
+
+/**
+ * Executes auth.getUser(token) with up to 3 attempts, backoff, and network error classification.
+ */
+async function getUserWithRetry(token: string, maxAttempts = 3) {
+  let lastResult: Awaited<ReturnType<ReturnType<typeof getAuthClient>["auth"]["getUser"]>> | null = null;
+  let lastError: unknown = null;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      const client = getAuthClient();
+      const res = await client.auth.getUser(token);
+      lastResult = res;
+
+      if (!res.error) {
+        return { data: res.data, error: null, isNetworkError: false };
+      }
+
+      const errMsg = res.error.message || "";
+      const isNet =
+        errMsg.includes("fetch failed") ||
+        res.error.status === 0 ||
+        res.error.status === 502 ||
+        res.error.status === 503 ||
+        res.error.status === 504 ||
+        (res.error as unknown as { code?: string })?.code === "ENOTFOUND" ||
+        (res.error as unknown as { code?: string })?.code === "ECONNRESET";
+
+      if (!isNet || attempt === maxAttempts) {
+        return { data: res.data, error: res.error, isNetworkError: isNet };
+      }
+
+      const delayMs = 150 * Math.pow(2, attempt - 1) + Math.floor(Math.random() * 80);
+      console.warn(`[validateUserAuth] Supabase Auth connection failed on attempt ${attempt}/${maxAttempts} (${errMsg}). Retrying in ${delayMs}ms...`);
+      await new Promise((r) => setTimeout(r, delayMs));
+    } catch (err) {
+      lastError = err;
+      const errMsg = err instanceof Error ? err.message : String(err);
+      const isNet =
+        errMsg.includes("fetch failed") ||
+        errMsg.includes("ENOTFOUND") ||
+        errMsg.includes("ECONNRESET") ||
+        errMsg.includes("ETIMEDOUT");
+
+      if (!isNet || attempt === maxAttempts) {
+        return { data: { user: null }, error: err, isNetworkError: isNet };
+      }
+
+      const delayMs = 150 * Math.pow(2, attempt - 1) + Math.floor(Math.random() * 80);
+      console.warn(`[validateUserAuth] Supabase Auth fetch threw on attempt ${attempt}/${maxAttempts} (${errMsg}). Retrying in ${delayMs}ms...`);
+      await new Promise((r) => setTimeout(r, delayMs));
+    }
+  }
+
+  return {
+    data: lastResult?.data ?? { user: null },
+    error: lastResult?.error ?? lastError,
+    isNetworkError: true,
+  };
+}
+
+/**
+ * Validates the request's Bearer token against Supabase Auth.
+ * Accurately distinguishes between invalid credentials (401) and network/infrastructure errors (503).
+ */
+export async function validateUserAuth(req: Request): Promise<AuthValidationResult> {
+  const authStart = Date.now();
+  console.log("[AUTH] validate:start");
   const token = getBearerToken(req);
-  if (!token) return null;
+  if (!token) {
+    console.warn("[AUTH] validate:failure duration=" + (Date.now() - authStart) + "ms reason=missing_bearer_token");
+    return {
+      user: null,
+      status: 401,
+      error: "Unauthorized: Missing or invalid Bearer token.",
+    };
+  }
+
+  const authProvider = process.env.AUTH_PROVIDER?.toLowerCase();
+  if (authProvider === "azure") {
+    const { validateToken } = await import("./auth/tokenValidator");
+    const res = await validateToken(token);
+    console.log("[AUTH] validate:azure duration=" + (Date.now() - authStart) + "ms status=" + res.status);
+    return res;
+  }
 
   try {
-    const { data: { user }, error } = await getAuthClient().auth.getUser(token);
-    if (error || !user) return null;
+    const { data: { user }, error, isNetworkError } = await getUserWithRetry(token, 3);
+    if (error) {
+      if (isNetworkError) {
+        const errMsg = error instanceof Error ? error.message : (error as { message?: string })?.message || String(error);
+        console.error("[AUTH] validate:network_error duration=" + (Date.now() - authStart) + "ms error=" + errMsg);
+        return {
+          user: null,
+          status: 503,
+          error: "Authentication service temporarily unreachable. Please try again shortly.",
+        };
+      }
 
+      const errObj = error as { message?: string };
+      console.warn("[AUTH] validate:rejected duration=" + (Date.now() - authStart) + "ms reason=" + (errObj?.message || "invalid_token"));
+      return {
+        user: null,
+        status: 401,
+        error: errObj?.message || "Unauthorized: Session invalid or expired.",
+      };
+    }
+
+    if (!user) {
+      console.warn("[AUTH] validate:user_not_found duration=" + (Date.now() - authStart) + "ms");
+      return {
+        user: null,
+        status: 401,
+        error: "Unauthorized: User account not found.",
+      };
+    }
+
+    console.log("[AUTH] validate:success duration=" + (Date.now() - authStart) + "ms userId=" + user.id);
     return {
-      id: user.id,
-      email: user.email ?? null,
-      emailVerified: Boolean(user.email_confirmed_at),
-      token,
+      user: {
+        id: user.id,
+        email: user.email ?? null,
+        emailVerified: Boolean(user.email_confirmed_at),
+        token,
+        app_metadata: (user.app_metadata as Record<string, unknown> | undefined) || {},
+      },
+      status: 200,
+      error: null,
     };
   } catch (err) {
-    console.error("[authenticateRequest] token validation failed:", err);
-    return null;
+    const message = err instanceof Error ? err.message : String(err);
+    const isNetwork = message.includes("fetch failed") || message.includes("ENOTFOUND");
+    console.error("[AUTH] validate:unexpected_error duration=" + (Date.now() - authStart) + "ms isNetwork=" + isNetwork + " error=" + message);
+    return {
+      user: null,
+      status: isNetwork ? 503 : 401,
+      error: isNetwork
+        ? "Authentication service temporarily unreachable. Please try again shortly."
+        : "Unauthorized: Token verification error.",
+    };
   }
+}
+
+/**
+ * Validates the request's Bearer token against Supabase Auth.
+ * Returns null when there is no valid session.
+ */
+export async function authenticateRequest(req: Request): Promise<AuthenticatedUser | null> {
+  const result = await validateUserAuth(req);
+  return result.user;
 }
 
 /**
@@ -109,16 +264,13 @@ export async function authenticateRequest(req: Request): Promise<AuthenticatedUs
  * SECURITY: `x-forwarded-for` is a client-settable header that proxies APPEND to,
  * so the left-most entry is attacker-controlled and must never be trusted. We read
  * the right-most entry (added by the closest trusted proxy) and prefer the
- * platform-provided `x-real-ip` / `x-vercel-forwarded-for` when present.
+ * platform-provided `x-real-ip` (standard reverse proxy / Azure Container Apps ingress) when present.
  *
  * IP is still a weak identifier — prefer a user id whenever the route is authenticated.
  */
 export function getClientIp(req: Request): string {
   const realIp = req.headers.get("x-real-ip")?.trim();
   if (realIp) return realIp;
-
-  const vercelIp = req.headers.get("x-vercel-forwarded-for")?.trim();
-  if (vercelIp) return vercelIp.split(",").pop()!.trim();
 
   const forwarded = req.headers.get("x-forwarded-for");
   if (forwarded) {

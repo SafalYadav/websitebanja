@@ -66,22 +66,25 @@ export default function Footer() {
               Product
             </h3>
             <div className="space-y-3 text-sm text-zinc-600 dark:text-zinc-400 flex flex-col">
-              <Link href="/agent" className="text-left font-medium text-violet-600 dark:text-violet-400 hover:text-violet-700 dark:hover:text-violet-300 transition">
+              <Link href="/agent" className="text-left font-medium text-cyan-600 dark:text-cyan-400 hover:text-cyan-700 dark:hover:text-cyan-300 transition">
                 Mitra AI Architect
               </Link>
-              <button type="button" onClick={() => scrollTo("#how-it-works")} className="text-left hover:text-zinc-900 dark:hover:text-white transition">
-                How It Works
+              <button type="button" onClick={() => scrollTo("#studio-demo")} className="text-left hover:text-zinc-900 dark:hover:text-white transition cursor-pointer">
+                Studio Demo
               </button>
-              <button type="button" onClick={() => scrollTo("#features")} className="text-left hover:text-zinc-900 dark:hover:text-white transition">
+              <button type="button" onClick={() => scrollTo("#features")} className="text-left hover:text-zinc-900 dark:hover:text-white transition cursor-pointer">
                 Features
               </button>
-              <button type="button" onClick={() => scrollTo("#showcase")} className="text-left hover:text-zinc-900 dark:hover:text-white transition">
-                Showcase
+              <button type="button" onClick={() => scrollTo("#how-it-works")} className="text-left hover:text-zinc-900 dark:hover:text-white transition cursor-pointer">
+                How It Works
               </button>
-              <button type="button" onClick={() => scrollTo("#pricing")} className="text-left hover:text-zinc-900 dark:hover:text-white transition">
+              <button type="button" onClick={() => scrollTo("#why-websitebanja")} className="text-left hover:text-zinc-900 dark:hover:text-white transition cursor-pointer">
+                Why WebsiteBanja
+              </button>
+              <button type="button" onClick={() => scrollTo("#pricing")} className="text-left hover:text-zinc-900 dark:hover:text-white transition cursor-pointer">
                 Pricing
               </button>
-              <button type="button" onClick={() => scrollTo("#faq")} className="text-left hover:text-zinc-900 dark:hover:text-white transition">
+              <button type="button" onClick={() => scrollTo("#faq")} className="text-left hover:text-zinc-900 dark:hover:text-white transition cursor-pointer">
                 FAQ
               </button>
               <a href="https://websitebanja.com/llms.txt" target="_blank" rel="noopener noreferrer" className="text-left text-xs text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 transition">
@@ -137,7 +140,7 @@ export default function Footer() {
         <div className="mt-14 border-t border-zinc-200/80 dark:border-white/10 pt-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-zinc-500">
           <p>© {new Date().getFullYear()} WebsiteBanja AI. Built for serious creators.</p>
           <div className="flex items-center gap-6">
-            <span>Powered by OpenAI & Supabase</span>
+            <span>Autonomous AI Website Studio</span>
           </div>
         </div>
       </div>

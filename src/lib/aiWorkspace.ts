@@ -1,8 +1,16 @@
-import { supabase } from "@/lib/supabase";
-import { AI_WORKSPACE_FILES, type AiWorkspace, type AiWorkspaceFile } from "@/types/aiWorkspace";
+/**
+ * AI Workspace Client Operations & API Client
+ *
+ * WHY architecture split:
+ * Client components (e.g. Editor Loading Screen) execute in browser runtimes.
+ * They MUST NOT import Node.js native libraries (pg, @azure/storage-blob, fs, net, tls).
+ * All AI workspace reads, writes, and verification are dispatched via Next.js API endpoints
+ * (/api/projects/[id]/workspace) authenticated via Supabase Auth Bearer tokens and persisted to
+ * Azure Blob Storage on the server.
+ */
 
-const AI_WORKSPACE_BUCKET = "project-workspaces";
-const MAX_UPLOAD_ATTEMPTS = 3;
+import { supabase } from "@/lib/supabase";
+import type { AiWorkspace } from "@/types/aiWorkspace";
 
 export class AiWorkspaceError extends Error {
   constructor(
@@ -14,112 +22,84 @@ export class AiWorkspaceError extends Error {
   }
 }
 
-function workspacePath(projectId: string, file: AiWorkspaceFile) {
-  return `${projectId}/.websitebanja/${file}`;
-}
-
-function storageError(error: unknown, operation: "read" | "upload" | "verify", file?: AiWorkspaceFile) {
-  const message = error instanceof Error ? error.message : String(error);
-  const lowerMessage = message.toLowerCase();
-  const suffix = file ? ` (${file})` : "";
-
-  if (lowerMessage.includes("bucket not found") || lowerMessage.includes("bucket does not exist")) {
-    return new AiWorkspaceError("❌ Storage bucket missing", `Bucket '${AI_WORKSPACE_BUCKET}' was not found${suffix}: ${message}`);
-  }
-  if (lowerMessage.includes("row-level security") || lowerMessage.includes("permission denied") || lowerMessage.includes("not authorized")) {
-    return new AiWorkspaceError(`❌ Storage RLS denied ${operation}`, `Storage ${operation} was denied${suffix}: ${message}`);
-  }
-  if (lowerMessage.includes("jwt") || lowerMessage.includes("session") || lowerMessage.includes("auth")) {
-    return new AiWorkspaceError("❌ Authentication expired", `Storage ${operation} failed authentication${suffix}: ${message}`);
-  }
-  return new AiWorkspaceError(`❌ Workspace ${operation} failed`, `Storage ${operation} failed${suffix}: ${message}`);
-}
-
-function isTransient(error: unknown) {
-  const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
-  return message.includes("network") || message.includes("timeout") || message.includes("fetch") || /\b(408|429|500|502|503|504)\b/.test(message);
-}
-
-async function retryUpload(file: AiWorkspaceFile, upload: () => Promise<void>) {
-  let lastError: unknown;
-  for (let attempt = 1; attempt <= MAX_UPLOAD_ATTEMPTS; attempt += 1) {
-    try {
-      await upload();
-      return;
-    } catch (error) {
-      lastError = error;
-      if (!isTransient(error) || attempt === MAX_UPLOAD_ATTEMPTS) break;
-      await new Promise((resolve) => window.setTimeout(resolve, attempt * 300));
+async function getAuthHeaders(): Promise<HeadersInit> {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.access_token) {
+      return {
+        Authorization: `Bearer ${session.access_token}`,
+        "Content-Type": "application/json",
+      };
     }
+  } catch {
+    // Fallback
   }
-  throw storageError(lastError, "upload", file);
+  return { "Content-Type": "application/json" };
 }
 
-export async function assertAiWorkspaceAccess(projectId: string) {
+export async function assertAiWorkspaceAccess(_projectId: string): Promise<void> {
   const { data: { user }, error: userError } = await supabase.auth.getUser();
   if (userError || !user) {
     throw new AiWorkspaceError("❌ Authentication expired", `No authenticated Supabase user: ${userError?.message ?? "session is empty"}`);
-  }
-
-  const { data: project, error: projectError } = await supabase
-    .from("projects")
-    .select("id, user_id")
-    .eq("id", projectId)
-    .maybeSingle();
-  if (projectError) {
-    throw new AiWorkspaceError("❌ Project ownership validation failed", `Could not load project '${projectId}': ${projectError.message}`);
-  }
-  if (!project || project.user_id !== user.id) {
-    throw new AiWorkspaceError("❌ Project ownership validation failed", `Authenticated user '${user.id}' does not own project '${projectId}'`);
-  }
-}
-
-export async function writeAiWorkspace(projectId: string, workspace: AiWorkspace, existingWorkspace?: AiWorkspace) {
-  await assertAiWorkspaceAccess(projectId);
-
-  for (const file of AI_WORKSPACE_FILES) {
-    if (existingWorkspace?.[file] === workspace[file]) continue;
-    const path = workspacePath(projectId, file);
-    await retryUpload(file, async () => {
-      const { data, error } = await supabase.storage.from(AI_WORKSPACE_BUCKET).upload(
-        path,
-        new Blob([workspace[file]], { type: "text/markdown;charset=utf-8" }),
-        { upsert: true, contentType: "text/markdown; charset=utf-8" }
-      );
-      if (error) throw error;
-      if (data.path !== path) {
-        throw new Error(`Upload acknowledgement path mismatch: expected '${path}', received '${data.path}'`);
-      }
-    });
   }
 }
 
 export async function readAiWorkspace(projectId: string): Promise<AiWorkspace> {
   await assertAiWorkspaceAccess(projectId);
 
-  const entries = await Promise.all(
-    AI_WORKSPACE_FILES.map(async (file) => {
-      const { data, error } = await supabase.storage.from(AI_WORKSPACE_BUCKET).download(workspacePath(projectId, file));
-      if (error) throw storageError(error, "read", file);
-      const content = await data.text();
-      if (!content.trim()) {
-        throw new AiWorkspaceError("❌ Workspace verification failed", `Workspace file '${file}' exists but is empty.`);
-      }
-      return [file, content] as const;
-    })
-  );
-  return Object.fromEntries(entries) as AiWorkspace;
+  try {
+    const headers = await getAuthHeaders();
+    const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/workspace`, {
+      method: "GET",
+      headers,
+    });
+
+    const json = await res.json();
+    if (!res.ok || !json.success || !json.data) {
+      throw new AiWorkspaceError("❌ Workspace read failed", json.error || `HTTP ${res.status}`);
+    }
+
+    return json.data as AiWorkspace;
+  } catch (err) {
+    if (err instanceof AiWorkspaceError) throw err;
+    throw new AiWorkspaceError("❌ Workspace read failed", err instanceof Error ? err.message : String(err));
+  }
+}
+
+export async function writeAiWorkspace(
+  projectId: string,
+  workspace: AiWorkspace,
+  existingWorkspace?: AiWorkspace
+): Promise<void> {
+  await assertAiWorkspaceAccess(projectId);
+
+  try {
+    const headers = await getAuthHeaders();
+    const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/workspace`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ workspace, existingWorkspace }),
+    });
+
+    const json = await res.json();
+    if (!res.ok || !json.success) {
+      throw new AiWorkspaceError("❌ Workspace save failed", json.error || `HTTP ${res.status}`);
+    }
+  } catch (err) {
+    if (err instanceof AiWorkspaceError) throw err;
+    throw new AiWorkspaceError("❌ Workspace save failed", err instanceof Error ? err.message : String(err));
+  }
 }
 
 export async function verifyAiWorkspace(projectId: string): Promise<AiWorkspace> {
   try {
     const workspace = await readAiWorkspace(projectId);
     if (!workspace["ai/memory.md"]) {
-      throw new Error("memory.md was not returned by Storage.");
+      throw new AiWorkspaceError("❌ Workspace verification failed", "ai/memory.md was not found in storage.");
     }
     return workspace;
-  } catch (error) {
-    if (error instanceof AiWorkspaceError) throw error;
-    throw storageError(error, "verify");
+  } catch (err) {
+    if (err instanceof AiWorkspaceError) throw err;
+    throw new AiWorkspaceError("❌ Workspace verification failed", err instanceof Error ? err.message : String(err));
   }
 }

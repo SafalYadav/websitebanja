@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { updateProject } from "@/lib/projects";
-import type { ProjectUpdates } from "@/types/project";
+import type { Project, ProjectUpdates } from "@/types/project";
 
 export function useProjectAutosave(
   projectId: string,
@@ -60,6 +60,13 @@ export function useProjectAutosave(
       if (error) throw error;
       lastSavedRef.current = nextFingerprint;
       setLastSavedAt(new Date());
+      // Keep projects store in sync for seamless instant back navigation
+      try {
+        const { useProjectsStore } = await import("@/store/projectsStore");
+        useProjectsStore.getState().updateProjectInList(projectId, currentUpdates as Partial<Project>);
+      } catch {
+        // ignore if not loaded in test environment
+      }
     } catch (err) {
       console.warn(`[Autosave] Failed to save project ${projectId}:`, err);
       setIsError(true);

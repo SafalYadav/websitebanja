@@ -83,6 +83,12 @@ export function shouldBypassRateLimit(ip: string): boolean {
     return false;
   }
 
+  const cleanIp = (ip || "").trim().toLowerCase();
+  // Always bypass for localhost/loopback in local development
+  if (cleanIp === "127.0.0.1" || cleanIp === "::1" || cleanIp === "localhost") {
+    return true;
+  }
+
   if (process.env.RATE_LIMIT_DEV_BYPASS === "true" || process.env.RATE_LIMIT_DEV_BYPASS === "1") {
     return true;
   }
@@ -96,8 +102,6 @@ export function shouldBypassRateLimit(ip: string): boolean {
     .split(",")
     .map((item) => item.trim().toLowerCase())
     .filter(Boolean);
-
-  const cleanIp = ip.trim().toLowerCase();
 
   return allowedIps.some((allowed) => {
     if (allowed === cleanIp) return true;

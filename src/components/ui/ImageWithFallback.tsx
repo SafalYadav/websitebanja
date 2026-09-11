@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState } from "react";
 import { cn } from "@/lib/utils";
 
 interface ImageWithFallbackProps {
@@ -22,11 +22,10 @@ export default function ImageWithFallback({
   const [isLoaded, setIsLoaded] = useState(false);
   const imgRef = React.useRef<HTMLImageElement>(null);
 
+  /* eslint-disable react-hooks/set-state-in-effect */
   React.useEffect(() => {
-    // Reset states for new src
     setHasError(false);
     setIsLoaded(false);
-    
     // Check if the new image is already cached/complete (hydration)
     if (imgRef.current?.complete) {
       // Unconditionally set isLoaded to true.
@@ -36,6 +35,7 @@ export default function ImageWithFallback({
       setIsLoaded(true);
     }
   }, [src]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   if (!src || hasError) {
     return (

@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { getAuthClient } from "@/lib/supabaseServer";
 import { normalizeDomain, isValidDomain, CNAME_TARGET, A_RECORD_IP } from "@/lib/domains";
 import { trackAnalyticsEvent } from "@/lib/analytics";
+import { dbGetProject, dbUpdateProjectCustomDomain } from "@/lib/db/queries";
 import dns from "dns/promises";
 
 export async function POST(req: Request) {
@@ -11,7 +12,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
     }
     const token = authHeader.replace("Bearer ", "");
-    const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
+    const supabase = getAuthClient();
     const { data: { user }, error: authError } = await supabase.auth.getUser(token);
     if (authError || !user) {
       return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
@@ -32,15 +33,9 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, message: "Please enter a valid domain (e.g. yourbrand.com)." }, { status: 400 });
     }
 
-    // 1. Verify project ownership
-    const { data: project, error: projErr } = await supabase
-      .from("projects")
-      .select("id, user_id, custom_domain")
-      .eq("id", projectId)
-      .eq("user_id", user.id)
-      .single();
-
-    if (projErr || !project) {
+    // 1. Verify project ownership via Azure PostgreSQL
+    const project = await dbGetProject(projectId, user.id);
+    if (!project) {
       return NextResponse.json({ success: false, message: "Project not found or unauthorized." }, { status: 404 });
     }
 
@@ -66,21 +61,15 @@ export async function POST(req: Request) {
       verified = false;
     }
 
-    // 3. Update project custom domain state in Supabase
+    // 3. Update project custom domain state in Azure PostgreSQL
     const status = verified ? "verified" : "pending_verification";
-    const { error: updateErr } = await supabase
-      .from("projects")
-      .update({
-        custom_domain: domain,
-        custom_domain_status: status,
-        custom_domain_verified_at: verified ? new Date().toISOString() : null,
-      })
-      .eq("id", projectId)
-      .eq("user_id", user.id);
-
-    if (updateErr) {
-      throw updateErr;
-    }
+    await dbUpdateProjectCustomDomain(
+      projectId,
+      user.id,
+      domain,
+      status,
+      verified ? new Date().toISOString() : null
+    );
 
     await trackAnalyticsEvent({
       eventType: verified ? "domain_verify" : "domain_connect",

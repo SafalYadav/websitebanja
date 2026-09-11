@@ -208,6 +208,191 @@ const RawAgentSchema = z.object({
     .optional(),
 });
 
+const CANONICAL_CATEGORIES: Record<string, string[]> = {
+  Gym: ["gym", "fitness", "workout", "crossfit", "trainer", "bodybuilding", "yoga", "pilates", "training"],
+  Restaurant: ["restaurant", "food", "dining", "cuisine", "bistro", "eatery", "bar & grill"],
+  Cafe: ["cafe", "coffee", "bakery", "pastry", "brew", "tea", "espresso"],
+  Salon: ["salon", "spa", "hair", "beauty", "parlour", "barber", "skincare", "nails", "makeup"],
+  Clinic: ["clinic", "hospital", "doctor", "dental", "dentist", "medical", "healthcare", "therapy", "pharma"],
+  "Real Estate": ["real estate", "property", "realtor", "apartments", "villas", "housing", "builder"],
+  Hotel: ["hotel", "resort", "homestay", "inn", "lodge", "stay", "guest house"],
+  Agency: ["agency", "marketing", "digital", "seo", "design", "consulting", "software", "development"],
+  Portfolio: ["portfolio", "freelancer", "developer", "designer", "photographer", "artist", "resume"],
+  "E-commerce": ["shop", "store", "ecommerce", "e-commerce", "buy", "products", "fashion", "apparel"],
+  Transport: ["transport", "car rental", "rental car", "cab", "taxi", "vehicle", "chauffeur", "fleet", "logistics"],
+  "Local Service": ["plumber", "plumbing", "electrician", "carpenter", "repair", "handyman", "cleaning", "contractor", "maintenance"],
+};
+
+export function normalizeCategory(rawCategory?: string): string | undefined {
+  if (!rawCategory) return undefined;
+  const lower = rawCategory.toLowerCase();
+  for (const [canonical, keywords] of Object.entries(CANONICAL_CATEGORIES)) {
+    if (keywords.some((kw) => lower.includes(kw)) || lower.includes(canonical.toLowerCase())) {
+      return canonical;
+    }
+  }
+  return rawCategory;
+}
+
+export const COLOR_MAP: Record<string, string> = {
+  "dark green": "#15803d",
+  "forest green": "#166534",
+  "emerald green": "#059669",
+  "emerald": "#059669",
+  "olive green": "#4d7c0f",
+  "light green": "#86efac",
+  "mint green": "#6ee7b7",
+  "green": "#16a34a",
+  "navy blue": "#1e3a8a",
+  "royal blue": "#1d4ed8",
+  "sky blue": "#0284c7",
+  "ocean blue": "#0284c7",
+  "blue": "#2563eb",
+  "crimson red": "#b91c1c",
+  "dark red": "#991b1b",
+  "crimson": "#dc2626",
+  "red": "#dc2626",
+  "deep purple": "#581c87",
+  "purple": "#7c3aed",
+  "violet": "#7c3aed",
+  "lavender": "#a855f7",
+  "orange": "#ea580c",
+  "dark orange": "#c2410c",
+  "gold": "#d97706",
+  "amber": "#d97706",
+  "yellow": "#ca8a04",
+  "teal": "#0d9488",
+  "dark teal": "#0f766e",
+  "cyan": "#06b6d4",
+  "pink": "#db2777",
+  "rose": "#e11d48",
+  "black": "#18181b",
+  "dark": "#18181b",
+  "charcoal": "#27272a",
+  "white": "#ffffff",
+  "gray": "#4b5563",
+  "grey": "#4b5563",
+};
+
+export function extractColorFromText(text: string): string | undefined {
+  if (!text) return undefined;
+  const lower = text.toLowerCase();
+
+  // Check for hex code (e.g. #15803d)
+  const hexMatch = text.match(/#([0-9a-fA-F]{6}|[0-9a-fA-F]{3})\b/);
+  if (hexMatch) {
+    return hexMatch[0].toLowerCase();
+  }
+
+  // Check for color phrases like "color to dark green", "primary color is navy blue", "make it crimson"
+  for (const [colorName, hex] of Object.entries(COLOR_MAP)) {
+    const pattern = new RegExp(
+      `(?:(?:primary|secondary|theme|brand)?\\s*color(?:\\s+(?:to|is|as))?|make\\s+it|use|change\\s+to)\\s+${colorName}\\b|\\b${colorName}\\s+color\\b|\\b${colorName}\\b`,
+      "i"
+    );
+    if (pattern.test(lower)) {
+      return hex;
+    }
+  }
+
+  return undefined;
+}
+
+export function extractFeaturesWithModifications(
+  userMessage: string,
+  rawExtractedFeatures?: unknown,
+  priorFeatures?: string[]
+): string[] {
+  const msgLower = userMessage.toLowerCase();
+  const existing = Array.isArray(rawExtractedFeatures) && rawExtractedFeatures.length > 0
+    ? rawExtractedFeatures.map(String)
+    : priorFeatures && priorFeatures.length > 0
+    ? priorFeatures
+    : ["whatsapp", "contact_form", "testimonials", "google_maps"];
+
+  const featSet = new Set(existing);
+
+  // Helper for negation / removal intent
+  const isNegated = (targetKeyword: string): boolean => {
+    const regex = new RegExp(
+      `(?:remove|delete|without|drop|don't\\s+(?:want|need|include)|no\\s+|exclude|skip|hata\\s*do|hatao|mat\\s+rakh[oa])(?:\\s+(?:the|our))?(?:\\s+[a-z0-9_-]+)*?\\s+${targetKeyword}`,
+      "i"
+    );
+    const postNegatedRegex = new RegExp(
+      `${targetKeyword}(?:\\s+[a-z0-9_-]+)*?\\s+(?:ko\\s+hata\\s*do|hatao|remove|delete|mat\\s+rakh[oa])`,
+      "i"
+    );
+    return regex.test(msgLower) || postNegatedRegex.test(msgLower);
+  };
+
+  // Helper for retention / keep intent
+  const isRetained = (targetKeyword: string): boolean => {
+    const regex = new RegExp(
+      `(?:keep|retain|add\\s+back|rakho|re-add)\\s+(?:the\\s+)?${targetKeyword}`,
+      "i"
+    );
+    return regex.test(msgLower);
+  };
+
+  // 1. WhatsApp
+  if (msgLower.includes("whatsapp")) {
+    if (isNegated("whatsapp")) {
+      featSet.delete("whatsapp");
+    } else {
+      featSet.add("whatsapp");
+    }
+  }
+
+  // 2. Testimonials / Reviews
+  if (msgLower.includes("testimonial") || msgLower.includes("review")) {
+    if (isNegated("testimonial") || isNegated("review")) {
+      featSet.delete("testimonials");
+    } else if (isRetained("testimonial") || isRetained("review") || !existing.includes("testimonials")) {
+      featSet.add("testimonials");
+    }
+  }
+
+  // 3. Pricing / Packages
+  if (msgLower.includes("pricing") || msgLower.includes("price") || msgLower.includes("package")) {
+    if (isRetained("pricing") || isRetained("price") || isRetained("package")) {
+      featSet.add("pricing");
+    } else if (isNegated("pricing") || isNegated("price") || isNegated("package")) {
+      featSet.delete("pricing");
+    } else if (msgLower.includes("add pricing")) {
+      featSet.add("pricing");
+    }
+  }
+
+  // 4. Contact Form / Contact
+  if (msgLower.includes("contact") && (msgLower.includes("form") || msgLower.includes("section"))) {
+    if (isNegated("contact")) {
+      featSet.delete("contact_form");
+    } else {
+      featSet.add("contact_form");
+    }
+  }
+
+  // 5. Maps
+  if (msgLower.includes("map")) {
+    if (isNegated("map")) {
+      featSet.delete("google_maps");
+    } else {
+      featSet.add("google_maps");
+    }
+  }
+
+  // 6. Appointments / Booking
+  if (msgLower.includes("booking") || msgLower.includes("appointment")) {
+    if (isNegated("booking") || isNegated("appointment")) {
+      featSet.delete("appointments");
+    } else {
+      featSet.add("appointments");
+    }
+  }
+
+  return Array.from(featSet);
+}
+
 /**
  * Normalizes raw LLM output into the strict AgentTalkResponse schema.
  * Safely parses JSON (stripping fences), applies schema validation,
@@ -218,7 +403,7 @@ export function normalizeAgentResponse(
   priorNeeds: ExtractedUserNeeds = {},
   userMessage: string = ""
 ): NonNullable<AgentTalkResponse["data"]> {
-  const wantsToBuild = /generate|build|create my website|let's go|done|ready|yes.*generate|build now/i.test(userMessage);
+  const wantsToBuild = /\b(?:build|generate|create)\s+(?:it|my\s+website|the\s+website|site)\s+now\b|\bstart\s+building\b|\byes[,\s]+(?:generate|build|create)\b|\bready to build\b|\bbuild now\b|\bgenerate now\b/i.test(userMessage);
 
   let parsed: z.infer<typeof RawAgentSchema> = {};
 
@@ -254,6 +439,7 @@ export function normalizeAgentResponse(
   );
 
   const rawExtracted = (parsed.extractedNeeds || {}) as Record<string, any>;
+  const extractedColorFromMsg = extractColorFromText(userMessage);
 
   // Merge canonical facts: prior needs + fast extracted + model extracted
   const mergedNeeds: ExtractedUserNeeds = {
@@ -261,43 +447,62 @@ export function normalizeAgentResponse(
       (typeof rawExtracted.businessName === "string" && rawExtracted.businessName.trim()) ||
       priorNeeds.businessName ||
       (fastExtracted.businessName !== "My Business" ? fastExtracted.businessName : undefined),
-    category:
+    category: normalizeCategory(
       (typeof rawExtracted.category === "string" && rawExtracted.category.trim()) ||
       (typeof rawExtracted.businessType === "string" && rawExtracted.businessType.trim()) ||
       priorNeeds.category ||
-      fastExtracted.category,
-    description:
-      (typeof rawExtracted.description === "string" && rawExtracted.description.trim()) ||
-      priorNeeds.description ||
-      fastExtracted.description,
+      fastExtracted.category
+    ),
+    description: (() => {
+      const explicitDesc = typeof rawExtracted.description === "string" && rawExtracted.description.trim();
+      const bName =
+        (typeof rawExtracted.businessName === "string" && rawExtracted.businessName.trim()) ||
+        priorNeeds.businessName ||
+        (fastExtracted.businessName !== "My Business" ? fastExtracted.businessName : undefined);
+      if (explicitDesc && (!bName || explicitDesc.toLowerCase().includes(bName.toLowerCase()))) {
+        return explicitDesc;
+      }
+      if (priorNeeds.description && bName && priorNeeds.description.toLowerCase().includes(bName.toLowerCase())) {
+        return priorNeeds.description;
+      }
+      return fastExtracted.description;
+    })(),
     targetAudience:
       (typeof rawExtracted.targetAudience === "string" && rawExtracted.targetAudience.trim()) ||
       priorNeeds.targetAudience ||
       fastExtracted.targetAudience,
-    services:
-      Array.isArray(rawExtracted.services) && rawExtracted.services.length > 0
+    services: (() => {
+      const msgLower = userMessage.toLowerCase();
+      let s = Array.isArray(rawExtracted.services) && rawExtracted.services.length > 0
         ? rawExtracted.services.map(String)
         : priorNeeds.services && priorNeeds.services.length > 0
         ? priorNeeds.services
-        : fastExtracted.services,
-    features:
-      Array.isArray(rawExtracted.features) && rawExtracted.features.length > 0
-        ? rawExtracted.features.map(String)
-        : priorNeeds.features && priorNeeds.features.length > 0
-        ? priorNeeds.features
-        : ["whatsapp", "contact_form", "testimonials", "google_maps"],
+        : fastExtracted.services;
+
+      const isPricingNegated = /(?:remove|delete|without|drop|don't\s+(?:want|need|include)|no\s+|exclude|skip|hata\s*do|hatao|mat\s+rakh[oa])\s*(?:the\s*)?(?:pricing|prices?|packages?)/i.test(msgLower);
+      const isPricingRetained = /(?:keep|retain|add\s+back|rakho|re-add)\s*(?:the\s*)?(?:pricing|prices?|packages?)/i.test(msgLower);
+
+      if (isPricingNegated) {
+        s = s.filter((item) => !/price|pricing|package/i.test(item));
+      } else if (isPricingRetained && !s.some((item) => /price|pricing|package/i.test(item))) {
+        s = [...s, "Essential Pricing & Consultations"];
+      }
+      return s;
+    })(),
+    features: extractFeaturesWithModifications(userMessage, rawExtracted.features, priorNeeds.features),
     style:
       (typeof rawExtracted.style === "string" && rawExtracted.style.trim()) ||
       (typeof rawExtracted.designStyle === "string" && rawExtracted.designStyle.trim()) ||
       priorNeeds.style ||
       fastExtracted.style,
     primaryColor:
-      (typeof rawExtracted.primaryColor === "string" && rawExtracted.primaryColor.trim()) ||
+      extractedColorFromMsg ||
       priorNeeds.primaryColor ||
+      (typeof rawExtracted.primaryColor === "string" && rawExtracted.primaryColor.trim()) ||
       fastExtracted.primaryColor,
     secondaryColor:
-      (typeof rawExtracted.secondaryColor === "string" && rawExtracted.secondaryColor.trim()) ||
       priorNeeds.secondaryColor ||
+      (typeof rawExtracted.secondaryColor === "string" && rawExtracted.secondaryColor.trim()) ||
       fastExtracted.secondaryColor,
     phone:
       (typeof rawExtracted.phone === "string" && rawExtracted.phone.trim()) ||
@@ -345,10 +550,17 @@ export function normalizeAgentResponse(
   // 6. Canonical Speech: Single Source of Truth for both visible UI text and spoken audio
   const canonicalSpeech = cleanSpeechText(cleanReply);
 
-  // 7. Filter suggested replies
-  const suggestedReplies = Array.isArray(parsed.suggestedReplies)
+  // 7. Filter suggested replies, with robust defaults if model produces none
+  const parsedReplies = Array.isArray(parsed.suggestedReplies)
     ? parsed.suggestedReplies.filter((r): r is string => typeof r === "string" && r.trim().length > 0).slice(0, 4)
     : [];
+  const defaultSuggestions = [
+    "Tell me about your services",
+    "Choose brand colors",
+    "Add contact & WhatsApp",
+    "Generate my website",
+  ];
+  const suggestedReplies = parsedReplies.length > 0 ? parsedReplies : defaultSuggestions;
 
   const shouldTriggerImmediateBuild = Boolean(parsed.triggerImmediateBuild) || wantsToBuild;
   const isReady = readiness.isReadyToBuild || shouldTriggerImmediateBuild;

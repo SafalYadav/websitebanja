@@ -40,18 +40,91 @@ export interface PageSeoConfig {
   noIndex?: boolean;
 }
 
+export type BackgroundType =
+  | "solid"
+  | "tonal_field"
+  | "gradient"
+  | "dot_grid"
+  | "tech_grid"
+  | "noise"
+  | "full_bleed"
+  | "editorial_whitespace";
+
+export interface BackgroundStyleConfig {
+  type: BackgroundType;
+  color?: string;
+  accentColor?: string;
+  patternOpacity?: number;
+  imageUrl?: string;
+  overlayOpacity?: number;
+}
+
+export type Spatial3dLevel = "NONE" | "SUBTLE_2_5D" | "ADVANCED_CSS_3D" | "RICH_SPATIAL";
+
+export interface Spatial3dConfig {
+  enabled: boolean;
+  level: Spatial3dLevel;
+  targetSection?: string;
+  perspective?: number;
+  tiltMaxDeg?: number;
+  zSeparationPx?: number;
+  mobileFallback: "flat" | "2.5d";
+}
+
+export interface ImageIntentConfig {
+  subject: string;
+  visualStyle: string;
+  aspectRatio: string;
+  composition: string;
+  crop: string;
+  purpose: string;
+  fallbackType?: "svg_geometric" | "abstract_mesh" | "tonal_composition";
+}
+
+export interface DesignStrategyData {
+  visualArchetype:
+    | "minimal_editorial"
+    | "dark_technical"
+    | "clean_clinical"
+    | "warm_artisanal"
+    | "bold_brutalist"
+    | "expressive_creative"
+    | "luxury_bespoke"
+    | "high_trust_service";
+  heroType:
+    | "split_showcase"
+    | "fullscreen_visual"
+    | "minimal_editorial"
+    | "spatial_depth_hero"
+    | "bento_grid_hero"
+    | "action_focused";
+  colorMood: string;
+  typographyStyle: string;
+  cardTreatment: "bordered" | "glassmorphic" | "elevated" | "flat_minimal" | "subtle_gradient";
+  backgroundStrategy: BackgroundStyleConfig;
+  spatial3d: Spatial3dConfig;
+  sectionSequence?: string[];
+}
+
 export interface Hero {
   title: string;
   subtitle: string;
   button: string;
   image?: string;
   buttonAction?: ButtonActionConfig;
+  layoutVariant?: "split_showcase" | "fullscreen_visual" | "minimal_editorial" | "spatial_depth_hero" | "bento_grid_hero" | "action_focused";
+  imageIntent?: ImageIntentConfig;
+  backgroundStyle?: BackgroundStyleConfig;
+  spatial3d?: Spatial3dConfig;
+  badges?: string[];
 }
 
 export interface About {
   title: string;
   content: string;
   image?: string;
+  imageIntent?: ImageIntentConfig;
+  backgroundStyle?: BackgroundStyleConfig;
 }
 
 export interface Service {
@@ -191,6 +264,9 @@ export interface WebsiteData {
   leads?: SiteLead[];
   seo?: PageSeoConfig;
   versions?: WebsiteVersionSnapshot[];
+
+  // Design Intelligence Strategy & Spatial Configuration
+  designStrategy?: DesignStrategyData;
 
   sectionOrder?: string[];
   [key: string]: unknown;

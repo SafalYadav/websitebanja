@@ -268,8 +268,7 @@ test("Agent SSE route enforces project ownership check before setProjectKnowledg
     "utf-8"
   );
   assert.ok(
-    sseContent.includes(".from('projects')") &&
-      sseContent.includes("user_id") &&
+    (sseContent.includes("dbCheckProjectExists") || sseContent.includes(".from('projects')")) &&
       sseContent.includes("authenticatedUser.id"),
     "SSE route must verify project belongs to authenticated user before modifying knowledge"
   );
@@ -289,8 +288,7 @@ test("Agent Talk route enforces project ownership check before setProjectKnowled
     "utf-8"
   );
   assert.ok(
-    talkContent.includes("projects") &&
-      talkContent.includes("user_id") &&
+    (talkContent.includes("dbCheckProjectExists") || talkContent.includes("projects")) &&
       talkContent.includes("authenticatedUser.id"),
     "Talk route must verify project belongs to authenticated user before modifying knowledge"
   );
@@ -314,8 +312,7 @@ test("Requirement route enforces auth, rate limiting, and project ownership", ()
     "Requirement route must require user authentication"
   );
   assert.ok(
-    reqContent.includes("projects") &&
-      reqContent.includes("user_id") &&
+    (reqContent.includes("dbCheckProjectExists") || reqContent.includes("projects")) &&
       reqContent.includes("user.id"),
     "Requirement route must verify project ownership before setProjectKnowledge"
   );

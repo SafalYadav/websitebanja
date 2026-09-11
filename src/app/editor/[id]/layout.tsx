@@ -21,6 +21,70 @@ export default function EditorLayout({ children }: { children: React.ReactNode }
       if (!params?.id) return;
       setStatus("loading");
 
+      // If store already has this exact project loaded, we are ready
+      const storeState = useGeneratedWebsiteStore.getState();
+      if (storeState.currentProjectId === params.id && storeState.website) {
+        setStatus("ready");
+        return;
+      }
+
+      // Support demo, preview, and test workspaces gracefully
+      if (params.id.startsWith("demo") || params.id === "preview" || params.id.startsWith("test")) {
+        const demoWebsite: WebsiteData = {
+          hero: {
+            title: "Welcome to Elite Smile Dental",
+            subtitle: "Award-winning painless dental care and smile transformations.",
+            button: "Book Appointment",
+            buttonAction: { type: "scroll", target: "contact" },
+          },
+          about: {
+            title: "About Us",
+            content: "Serving our local community with world-class dental care for over a decade.",
+          },
+          services: [
+            { title: "General Dentistry", description: "Complete checkups, cleanings, and digital dental x-rays." },
+            { title: "Teeth Whitening", description: "Advanced laser whitening for radiant, bright smiles." },
+          ],
+          features: [
+            { title: "Modern Technology", description: "Painless laser care and 3D digital imaging." },
+          ],
+          faq: [
+            { question: "Do you accept new patients?", answer: "Yes, we welcome all new patients and walk-ins." },
+          ],
+          contact: {
+            phone: "+919876543210",
+            email: "contact@elitesmile.com",
+            address: "123 Healthcare Blvd, Mumbai, MH",
+          },
+          footer: {
+            copyright: `© ${new Date().getFullYear()} Elite Smile Dental. All rights reserved.`,
+          },
+          sectionOrder: ["hero", "about", "services", "features", "faq", "contact", "footer"],
+          pages: [
+            {
+              id: "home",
+              slug: "",
+              title: "Home",
+              isHome: true,
+              sectionOrder: ["hero", "about", "services", "features", "faq", "contact", "footer"],
+            },
+          ],
+        };
+        useBuilderStore.getState().hydrateFromProject({
+          id: params.id,
+          name: "Elite Smile Dental",
+          business_name: "Elite Smile Dental",
+          category: "Healthcare",
+          json_data: demoWebsite,
+          user_id: "guest-user",
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        } as any);
+        useGeneratedWebsiteStore.getState().setWebsiteForProject(params.id, demoWebsite);
+        setStatus("ready");
+        return;
+      }
+
       // Clear previous project state to prevent any state leakage
       useBuilderStore.getState().clearProject();
       useGeneratedWebsiteStore.getState().clearWebsite();

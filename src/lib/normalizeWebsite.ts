@@ -1,5 +1,6 @@
-import { getCategoryImages } from "./categoryImages";
-import type { WebsiteData, Hero, About, Service, Feature, FAQ, Contact, Footer, ButtonActionConfig } from "@/types/website";
+import { getCategoryImages, getImageIntentForSection } from "./categoryImages";
+import { generateDesignStrategy } from "./ai/designStrategy";
+import type { WebsiteData, Hero, About, Service, Feature, FAQ, Contact, Footer, ButtonActionConfig, DesignStrategyData } from "@/types/website";
 
 export interface NormalizedWebsiteData {
   hero: Hero & { image?: string };
@@ -10,6 +11,7 @@ export interface NormalizedWebsiteData {
   contact: Contact;
   footer: Footer;
   sectionOrder: string[];
+  designStrategy?: DesignStrategyData;
   navbar?: import("@/types/website").NavbarConfig;
   pages?: import("@/types/website").WebsitePage[];
   products?: import("@/types/website").ProductItem[];
@@ -25,6 +27,11 @@ export function normalizeWebsiteData(
   description?: string | null
 ): NormalizedWebsiteData {
   const data = raw || {};
+  const strategy = data.designStrategy || generateDesignStrategy({
+    category: category ?? undefined,
+    businessName: businessName ?? undefined,
+    description: description ?? undefined,
+  });
   const images = getCategoryImages(category, businessName, description);
 
   // 1. Normalize Hero
@@ -38,6 +45,23 @@ export function normalizeWebsiteData(
     button: typeof rawHero.button === "string" && rawHero.button.trim() ? rawHero.button : "Explore Services",
     image: typeof rawHero.image === "string" && rawHero.image.trim() ? rawHero.image : images.hero,
     buttonAction: rawHero.buttonAction,
+    layoutVariant: rawHero.layoutVariant || strategy.heroType,
+    imageIntent: (() => {
+      const defaultIntent = getImageIntentForSection(category, "hero", businessName);
+      const raw = rawHero.imageIntent as Record<string, unknown> | undefined;
+      if (!raw) return defaultIntent;
+      return {
+        subject: (raw.subject as string) || (raw.description as string) || defaultIntent.subject,
+        visualStyle: (raw.visualStyle as string) || (raw.lighting as string) || defaultIntent.visualStyle,
+        aspectRatio: (raw.aspectRatio as string) || defaultIntent.aspectRatio,
+        composition: (raw.composition as string) || defaultIntent.composition,
+        crop: (raw.crop as string) || defaultIntent.crop,
+        purpose: (raw.purpose as string) || defaultIntent.purpose,
+        fallbackType: (raw.fallbackType as "svg_geometric" | "abstract_mesh" | "tonal_composition") || defaultIntent.fallbackType,
+      };
+    })(),
+    backgroundStyle: rawHero.backgroundStyle || strategy.backgroundStrategy,
+    spatial3d: rawHero.spatial3d || strategy.spatial3d,
   };
 
   // 2. Normalize About
@@ -73,6 +97,25 @@ export function normalizeWebsiteData(
       image: typeof s.image === "string" && s.image.trim() ? s.image : images.services[idx % images.services.length],
       buttonAction: (s.buttonAction as ButtonActionConfig | undefined),
     }));
+
+  if (services.length === 0) {
+    const catLower = (category || "").toLowerCase();
+    const fallbackTitles = catLower.includes("dental") || catLower.includes("clinic")
+      ? ["Comprehensive Oral Examination", "Painless Root Canal Therapy", "Cosmetic Smile Makeover", "Dental Implants"]
+      : catLower.includes("restaurant") || catLower.includes("food")
+      ? ["Artisanal Dine-in Experience", "Chef's Tasting Menu", "Private Party Catering", "Express Takeaway & Delivery"]
+      : catLower.includes("car") || catLower.includes("rental")
+      ? ["Self-Drive Premium Fleet", "Chauffeur Airport Transfers", "Long-Term Corporate Leasing", "24/7 Roadside Assistance"]
+      : ["Tailored Solutions", "Professional Consultation", "Rapid Implementation", "24/7 Dedicated Support"];
+
+    for (let idx = 0; idx < fallbackTitles.length; idx++) {
+      services.push({
+        title: fallbackTitles[idx],
+        description: "Delivering uncompromising quality and dedicated service tailored to your exact needs.",
+        image: images.services[idx % images.services.length],
+      });
+    }
+  }
 
   // 4. Normalize Features
   let rawFeaturesList: unknown[] = [];
@@ -121,9 +164,9 @@ export function normalizeWebsiteData(
   // 6. Normalize Contact
   const rawContact = (data.contact && typeof data.contact === "object" ? data.contact : {}) as Partial<Contact>;
   const contact: Contact = {
-    phone: typeof rawContact.phone === "string" ? rawContact.phone : "",
-    email: typeof rawContact.email === "string" ? rawContact.email : "",
-    address: typeof rawContact.address === "string" ? rawContact.address : "",
+    phone: typeof rawContact.phone === "string" && rawContact.phone.trim() ? rawContact.phone : "+1 (555) 019-2834",
+    email: typeof rawContact.email === "string" && rawContact.email.trim() ? rawContact.email : "contact@websitebanja.com",
+    address: typeof rawContact.address === "string" && rawContact.address.trim() ? rawContact.address : "Downtown Metropolitan Hub",
   };
 
   // 7. Normalize Footer
@@ -140,7 +183,7 @@ export function normalizeWebsiteData(
   if (Array.isArray(data.sectionOrder) && data.sectionOrder.length > 0) {
     sectionOrder = data.sectionOrder.filter((k): k is string => typeof k === "string" && Boolean(k.trim()));
   } else {
-    sectionOrder = [...DEFAULT_ORDER];
+    sectionOrder = [...(strategy.sectionSequence || DEFAULT_ORDER)];
   }
 
   const result: NormalizedWebsiteData = {
@@ -153,6 +196,7 @@ export function normalizeWebsiteData(
     contact,
     footer,
     sectionOrder,
+    designStrategy: strategy,
   };
 
   return result;

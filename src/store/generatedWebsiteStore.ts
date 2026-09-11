@@ -43,6 +43,7 @@ interface GeneratedWebsiteState {
   // Setters
   setWebsite: (website: WebsiteData) => void;
   setWebsiteForProject: (projectId: string, website: WebsiteData) => void;
+  applyAiModification: (updatedWebsite: WebsiteData) => void;
   clearWebsite: () => void;
   setIsGenerating: (value: boolean) => void;
   setSelectedSection: (section: string | null) => void;
@@ -205,6 +206,26 @@ export const useGeneratedWebsiteStore = create<GeneratedWebsiteState>((set, get)
       activePageId: initialPage?.id || "home",
       history: [website],
       historyIndex: 0,
+    });
+  },
+
+  applyAiModification: (updatedWebsite) => {
+    const { history, historyIndex, website } = get();
+    if (!website) {
+      get().setWebsite(updatedWebsite);
+      return;
+    }
+    const cleanWebsite = { ...updatedWebsite };
+    if (!cleanWebsite.sectionOrder) {
+      cleanWebsite.sectionOrder = website.sectionOrder || [...DEFAULT_ORDER];
+    }
+    cleanWebsite.pages = ensureDefaultPages(cleanWebsite);
+
+    const newHistory = [...history.slice(0, historyIndex + 1), cleanWebsite];
+    set({
+      website: cleanWebsite,
+      history: newHistory,
+      historyIndex: newHistory.length - 1,
     });
   },
 

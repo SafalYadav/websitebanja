@@ -3,53 +3,48 @@
 import { motion, useReducedMotion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { dashboardRoute } from "@/lib/editorRoutes";
-import { ArrowRight, Sparkles, Zap, ShieldCheck, Globe } from "lucide-react";
-import InteractiveDemo from "@/components/landing/InteractiveDemo";
+import { ArrowRight, Zap, ShieldCheck, Globe, Palette, Sparkles } from "lucide-react";
 
 export default function Hero() {
   const router = useRouter();
   const shouldReduceMotion = useReducedMotion();
 
-  const scrollTo = (target: string) => {
-    const el = document.querySelector(target);
-    if (el) {
-      el.scrollIntoView({ behavior: "smooth", block: "start" });
-    }
-  };
-
   return (
-    <section id="home" className="relative pt-32 pb-20 sm:pt-40 sm:pb-28 overflow-hidden">
-      {/* Ambient background glows */}
-      <div className="pointer-events-none absolute top-1/4 left-1/2 -translate-x-1/2 h-[450px] w-[650px] rounded-full bg-violet-600/10 blur-[140px] dark:bg-violet-600/15" />
-      <div className="pointer-events-none absolute top-20 right-10 h-72 w-72 rounded-full bg-blue-500/10 blur-[120px]" />
-      <div className="pointer-events-none absolute top-40 left-10 h-72 w-72 rounded-full bg-cyan-500/10 blur-[120px]" />
+    <section id="home" className="relative pt-32 pb-20 sm:pt-44 sm:pb-28 overflow-hidden">
+      {/* Dynamic atmospheric mesh backgrounds */}
+      <div className="pointer-events-none absolute -top-28 left-1/2 -translate-x-1/2 h-[550px] w-[960px] rounded-full bg-gradient-to-b from-cyan-500/15 via-blue-500/10 to-indigo-600/10 blur-[140px] dark:from-cyan-500/20 dark:via-blue-600/10" />
+      <div className="pointer-events-none absolute top-1/3 -left-32 h-96 w-96 rounded-full bg-cyan-500/10 blur-[130px] dark:bg-cyan-600/15" />
+      <div className="pointer-events-none absolute top-1/4 -right-32 h-96 w-96 rounded-full bg-indigo-500/10 blur-[130px] dark:bg-indigo-600/15" />
 
       <div className="relative mx-auto max-w-7xl px-6">
-        {/* Main Hero Header */}
-        <div className="text-center max-w-3xl mx-auto space-y-6">
-          {/* Badge */}
+        {/* Editorial Hero Header */}
+        <div className="text-center max-w-4xl mx-auto space-y-6">
+          {/* Studio Telemetry Badge */}
           <motion.div
             initial={shouldReduceMotion ? { opacity: 1 } : { opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3 }}
-            className="inline-flex items-center gap-2 rounded-full border border-violet-200 bg-violet-50/80 px-4 py-1.5 backdrop-blur-md dark:border-violet-800/40 dark:bg-violet-950/40"
+            className="inline-flex items-center gap-2.5 rounded-full border border-cyan-200/80 bg-white/90 px-4 py-1.5 shadow-xs backdrop-blur-xl dark:border-cyan-500/20 dark:bg-cyan-950/40"
           >
-            <Sparkles className="h-4 w-4 text-violet-600 dark:text-violet-400" />
-            <span className="text-xs font-semibold tracking-wide text-violet-700 dark:text-violet-300">
-              Next-Gen Autonomous AI Website Builder
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75" />
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-cyan-500" />
+            </span>
+            <span className="font-mono text-[11px] font-bold uppercase tracking-wider text-cyan-800 dark:text-cyan-300">
+              Autonomous Business Website Studio • Instant Launch
             </span>
           </motion.div>
 
-          {/* Headline */}
+          {/* High-Impact Headline */}
           <motion.h1
-            initial={shouldReduceMotion ? { opacity: 1 } : { opacity: 0, y: 16 }}
+            initial={shouldReduceMotion ? { opacity: 1 } : { opacity: 0, y: 18 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.35, delay: 0.1 }}
-            className="text-4xl sm:text-6xl md:text-7xl font-black tracking-tight text-zinc-900 dark:text-white leading-[1.08]"
+            transition={{ duration: 0.35, delay: 0.08 }}
+            className="text-4xl sm:text-6xl md:text-7xl lg:text-8xl font-black tracking-[-0.04em] text-zinc-950 dark:text-white leading-[0.98]"
           >
-            Describe your business.{" "}
-            <span className="bg-gradient-to-r from-blue-600 via-violet-600 to-indigo-600 bg-clip-text text-transparent">
-              AI builds your website.
+            The Autonomous AI{" "}
+            <span className="bg-gradient-to-r from-cyan-600 via-blue-600 to-indigo-600 dark:from-cyan-400 dark:via-sky-300 dark:to-indigo-400 bg-clip-text text-transparent">
+              Website Studio.
             </span>
           </motion.h1>
 
@@ -57,68 +52,66 @@ export default function Hero() {
           <motion.p
             initial={shouldReduceMotion ? { opacity: 1 } : { opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.35, delay: 0.2 }}
-            className="text-base sm:text-xl text-zinc-600 dark:text-zinc-400 leading-relaxed max-w-2xl mx-auto"
+            transition={{ duration: 0.35, delay: 0.16 }}
+            className="text-base sm:text-xl md:text-2xl text-zinc-600 dark:text-zinc-300 leading-relaxed max-w-3xl mx-auto font-normal"
           >
-            Generate complete, multi-section business websites in 60 seconds with bespoke copywriting, palettes, and live visual studio editing. Zero coding or templates required.
+            Turn raw business ideas into bespoke, conversion-grade websites in 60 seconds.
+            Every layout, color harmony, and sales copy tailored specifically for your business — zero templates, zero code.
           </motion.p>
 
           {/* Action CTAs */}
+          {/* Action CTAs: Balanced Neutral Choice */}
           <motion.div
             initial={shouldReduceMotion ? { opacity: 1 } : { opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.35, delay: 0.3 }}
-            className="flex flex-wrap items-center justify-center gap-4 pt-2"
+            transition={{ duration: 0.35, delay: 0.24 }}
+            className="flex flex-wrap items-center justify-center gap-4 pt-3"
           >
+            <button
+              type="button"
+              onClick={() => router.push("/agent")}
+              className="btn-primary-luminous group inline-flex items-center gap-3 rounded-2xl px-8 py-4 text-base font-bold text-white shadow-xl transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] cursor-pointer focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-cyan-500/30"
+            >
+              <Sparkles className="h-5 w-5 text-cyan-200" />
+              <span>Talk with AI Agent</span>
+              <ArrowRight className="h-5 w-5 transition-transform duration-200 group-hover:translate-x-1" />
+            </button>
+
             <button
               type="button"
               onClick={() => router.push(dashboardRoute())}
-              className="flex items-center gap-2.5 rounded-2xl bg-gradient-to-r from-blue-600 via-violet-600 to-indigo-600 px-8 py-4 text-base font-bold text-white shadow-xl shadow-violet-600/25 transition hover:opacity-95 hover:scale-[1.02] active:scale-[0.98]"
+              className="inline-flex items-center gap-2.5 rounded-2xl border border-zinc-300/90 bg-white/90 px-8 py-4 text-base font-bold text-zinc-900 shadow-xs backdrop-blur-md transition-all duration-200 hover:bg-zinc-100 hover:border-zinc-400 dark:border-white/15 dark:bg-zinc-900/90 dark:text-zinc-100 dark:hover:bg-zinc-800 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500"
             >
-              <span>Create Website Free</span>
-              <ArrowRight className="h-5 w-5" />
-            </button>
-
-            <button
-              type="button"
-              onClick={() => scrollTo("#how-it-works")}
-              className="flex items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-7 py-4 text-base font-semibold text-zinc-800 shadow-sm transition hover:bg-zinc-100 dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
-            >
-              See How It Works
+              <span>Use Business Details</span>
+              <ArrowRight className="h-4 w-4 text-zinc-400" />
             </button>
           </motion.div>
 
-          {/* Key Value Points */}
+          {/* Value Proof Badges */}
           <motion.div
             initial={shouldReduceMotion ? { opacity: 1 } : { opacity: 0 }}
             animate={{ opacity: 1 }}
-            transition={{ duration: 0.4, delay: 0.4 }}
-            className="flex flex-wrap items-center justify-center gap-6 pt-4 text-xs font-medium text-zinc-500 dark:text-zinc-400"
+            transition={{ duration: 0.4, delay: 0.32 }}
+            className="flex flex-wrap items-center justify-center gap-y-3 gap-x-8 pt-6 text-xs font-semibold text-zinc-500 dark:text-zinc-400"
           >
             <div className="flex items-center gap-2">
               <Zap className="h-4 w-4 text-amber-500" />
-              <span>Instant 60s Generation</span>
+              <span>Synthesizes in &lt;60s</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Palette className="h-4 w-4 text-cyan-500" />
+              <span>Bespoke Brand Layouts</span>
             </div>
             <div className="flex items-center gap-2">
               <Globe className="h-4 w-4 text-blue-500" />
-              <span>1-Click Global Publishing</span>
+              <span>Instant Edge CDN Hosting</span>
             </div>
             <div className="flex items-center gap-2">
               <ShieldCheck className="h-4 w-4 text-emerald-500" />
-              <span>No Credit Card Required</span>
+              <span>Free Plan Available</span>
             </div>
           </motion.div>
         </div>
-
-        {/* Live Interactive Product Demo Showcase */}
-        <motion.div
-          initial={shouldReduceMotion ? { opacity: 1 } : { opacity: 0, y: 30 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.35 }}
-          className="mt-14"
-        >
-          <InteractiveDemo />
-        </motion.div>
       </div>
     </section>
   );

@@ -383,7 +383,7 @@ export default function AdminDashboardPage() {
                   {formatINR(overview.mrrINR)}
                 </h3>
                 <p className="text-xs text-zinc-500 mt-1">
-                  {overview.paidUsers} active Paid Pro subscribers (₹2,000/mo)
+                  {overview.paidUsers} active Paid Pro subscribers (₹500/mo)
                 </p>
               </motion.div>
 
@@ -571,7 +571,7 @@ export default function AdminDashboardPage() {
                     SaaS Monetization & Subscriptions
                   </h3>
                   <p className="text-xs text-zinc-500 mt-0.5">
-                    INR Billing Metrics (Free ₹0 vs Paid Pro ₹2,000/mo)
+                    INR Billing Metrics (Free ₹0 vs Paid Pro ₹500/mo)
                   </p>
                 </div>
               </div>

@@ -6,7 +6,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useVoiceAgent } from "@/hooks/useVoiceAgent";
 import { useBuilderStore } from "@/store/builderStore";
 import { createProject, updateProject } from "@/lib/projects";
-import { editorRoute } from "@/lib/editorRoutes";
+import { editorRoute, loginRoute } from "@/lib/editorRoutes";
+import { supabase } from "@/lib/supabase";
 import { toast } from "@/store/toastStore";
 import { cn } from "@/lib/utils";
 import type { ExtractedUserNeeds, AgentMessage, AgentTalkResponse } from "@/types/aiAgent";
@@ -72,6 +73,7 @@ export default function AiTalkingAgent({
   const router = useRouter();
 
   // Builder store bindings
+  const setProjectId = useBuilderStore((state) => state.setProjectId);
   const setBusinessName = useBuilderStore((state) => state.setBusinessName);
   const setCategory = useBuilderStore((state) => state.setCategory);
   const setDescription = useBuilderStore((state) => state.setDescription);
@@ -88,18 +90,14 @@ export default function AiTalkingAgent({
   // Voice Agent Hook
   const {
     isSpeaking,
-    isLoadingVoice,
     voiceState,
     setVoiceState,
     isListening,
     isVoiceMuted,
     isVoiceSupported,
     voiceError,
-    isLiveConnected,
     isContinuousMode,
     setIsContinuousMode,
-    voiceLanguage,
-    setVoiceLanguage,
     unlockAudio,
     speak,
     stopSpeaking,
@@ -143,13 +141,9 @@ export default function AiTalkingAgent({
 
   // State refs to ensure async voice callbacks always access the freshest state
   const messagesRef = useRef(messages);
-  messagesRef.current = messages;
   const extractedNeedsRef = useRef(extractedNeeds);
-  extractedNeedsRef.current = extractedNeeds;
   const isLoadingRef = useRef(isLoading);
-  isLoadingRef.current = isLoading;
   const isContinuousModeRef = useRef(isContinuousMode);
-  isContinuousModeRef.current = isContinuousMode;
   const handleSendMessageRef = useRef<(text?: string) => Promise<void>>(() => Promise.resolve());
   const handleBuildWebsiteRef = useRef<() => Promise<void>>(() => Promise.resolve());
 
@@ -197,7 +191,7 @@ export default function AiTalkingAgent({
 
     if (!hasCompletedGreetingRef.current && !isSpeaking) {
       speak(
-        INITIAL_GREETING.speechText || INITIAL_GREETING.content,
+        INITIAL_GREETING.content,
         undefined,
         () => {
           hasCompletedGreetingRef.current = true;
@@ -219,7 +213,7 @@ export default function AiTalkingAgent({
     } else if (!isSpeaking) {
       triggerNextVoiceTurn();
     }
-  }, [speak, triggerNextVoiceTurn, unlockAudio, setVoiceState, isSpeaking]);
+  }, [speak, triggerNextVoiceTurn, unlockAudio, setVoiceState, isSpeaking, setIsContinuousMode]);
 
   // User gesture unlock for Safari / WebKit Web Audio (no blocking mic prompts)
   useEffect(() => {
@@ -241,7 +235,7 @@ export default function AiTalkingAgent({
       if (!hasSpokenInitialRef.current && !hasCompletedGreetingRef.current) {
         hasSpokenInitialRef.current = true;
         speak(
-          INITIAL_GREETING.speechText || INITIAL_GREETING.content,
+          INITIAL_GREETING.content,
           undefined,
           () => {
             hasCompletedGreetingRef.current = true;
@@ -430,7 +424,7 @@ export default function AiTalkingAgent({
     setReadinessScore(20);
     setIsReadyToBuild(false);
     setInputText("");
-    speak(INITIAL_GREETING.speechText || INITIAL_GREETING.content);
+    speak(INITIAL_GREETING.content);
   };
 
   // Hydrate Store and Launch Generator
@@ -475,9 +469,22 @@ export default function AiTalkingAgent({
         return;
       }
 
+      // Verify authentication before project creation to handle guests gracefully
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        setIsBuilding(false);
+        if (typeof window !== "undefined") {
+          localStorage.setItem("wb_pending_project_needs", JSON.stringify(extractedNeeds));
+        }
+        toast.info("Account Required", "Please sign in or create a free account to generate and save your website.");
+        router.push(`${loginRoute()}?redirectTo=${encodeURIComponent("/agent?autoGenerate=true")}`);
+        return;
+      }
+
       let targetId = projectId;
 
       if (targetId) {
+        setProjectId(targetId);
         await updateProject(targetId, {
           name: finalBusinessName,
           business_name: finalBusinessName,
@@ -495,6 +502,7 @@ export default function AiTalkingAgent({
         const { data: newProj, error } = await createProject(finalBusinessName);
         if (error || !newProj) throw error || new Error("Failed to create project");
         targetId = newProj.id;
+        setProjectId(targetId);
         await updateProject(targetId, {
           category: finalCategory,
           description: finalDescription,
@@ -519,9 +527,42 @@ export default function AiTalkingAgent({
     }
   };
 
-  // Synchronize latest function references on every render so async callbacks invoke current closures
-  handleSendMessageRef.current = handleSendMessage;
-  handleBuildWebsiteRef.current = handleBuildWebsite;
+  // Auto-resume generation after guest login redirect
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get("autoGenerate") === "true") {
+      const savedNeedsRaw = localStorage.getItem("wb_pending_project_needs");
+      if (savedNeedsRaw) {
+        try {
+          const parsedSaved = JSON.parse(savedNeedsRaw);
+          if (parsedSaved && typeof parsedSaved === "object") {
+            localStorage.removeItem("wb_pending_project_needs");
+            void supabase.auth.getSession().then(({ data: { session } }) => {
+              setExtractedNeeds((prev) => ({ ...prev, ...parsedSaved }));
+              if (session) {
+                setTimeout(() => {
+                  void handleBuildWebsiteRef.current();
+                }, 400);
+              }
+            });
+          }
+        } catch {
+          // ignore parse error
+        }
+      }
+    }
+  }, []);
+
+  // Synchronize latest references after render so async callbacks invoke current closures and state
+  useEffect(() => {
+    messagesRef.current = messages;
+    extractedNeedsRef.current = extractedNeeds;
+    isLoadingRef.current = isLoading;
+    isContinuousModeRef.current = isContinuousMode;
+    handleSendMessageRef.current = handleSendMessage;
+    handleBuildWebsiteRef.current = handleBuildWebsite;
+  });
 
   return (
     <div
@@ -688,6 +729,7 @@ export default function AiTalkingAgent({
                   )}
 
                   <div
+                    data-role={isAgent ? "assistant-message" : "user-message"}
                     className={cn(
                       "rounded-3xl p-4 text-xs sm:text-sm leading-relaxed shadow-xs relative group",
                       isAgent
@@ -703,7 +745,8 @@ export default function AiTalkingAgent({
                         type="button"
                         onClick={() => {
                           unlockAudio();
-                          speak(msg.speechText || msg.content);
+                          console.log(`[VoiceReplay] Replaying exact canonical message content: "${msg.content.slice(0, 60)}..."`);
+                          speak(msg.content);
                         }}
                         className="mt-2 text-[11px] text-zinc-400 hover:text-violet-600 dark:hover:text-violet-400 flex items-center gap-1 transition"
                         title="Listen to this response"
@@ -826,6 +869,7 @@ export default function AiTalkingAgent({
           <div className="relative flex items-center gap-2">
             <textarea
               ref={inputRef}
+              data-testid="agent-textarea"
               rows={2}
               value={inputText}
               onChange={(e) => setInputText(e.target.value)}
@@ -912,6 +956,7 @@ export default function AiTalkingAgent({
               {/* Send Button */}
               <button
                 type="button"
+                data-testid="send-message-btn"
                 disabled={!inputText.trim() || isLoading}
                 onClick={() => void handleSendMessage()}
                 className="p-2 rounded-xl bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-40 transition shadow-md shadow-violet-500/20 cursor-pointer"

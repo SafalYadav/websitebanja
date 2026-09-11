@@ -25,7 +25,7 @@ const SUGGESTED_PROMPTS = [
 
 export default function AiStudioAssistant() {
   const website = useGeneratedWebsiteStore((state) => state.website);
-  const setWebsite = useGeneratedWebsiteStore((state) => state.setWebsite);
+  const applyAiModification = useGeneratedWebsiteStore((state) => state.applyAiModification);
   const undo = useGeneratedWebsiteStore((state) => state.undo);
   const selectedElement = useGeneratedWebsiteStore((state) => state.selectedElement);
   const activePageId = useGeneratedWebsiteStore((state) => state.activePageId);
@@ -51,6 +51,9 @@ export default function AiStudioAssistant() {
         headers["Authorization"] = `Bearer ${session.access_token}`;
       }
 
+      const effectiveBusinessName = businessName || website.businessName || (website.header as any)?.logoText || "Business";
+      const effectiveCategory = category || (website as any).category || "General";
+
       const res = await fetch("/api/studio/ai-action", {
         method: "POST",
         headers,
@@ -58,8 +61,8 @@ export default function AiStudioAssistant() {
           prompt: textToRun,
           currentWebsite: website,
           selectedElement,
-          businessName,
-          category,
+          businessName: effectiveBusinessName,
+          category: effectiveCategory,
         }),
       });
 
@@ -69,7 +72,7 @@ export default function AiStudioAssistant() {
       }
 
       // Intercept catalog actions to write directly to DB
-      const projectId = useBuilderStore.getState().projectId;
+      const projectId = useGeneratedWebsiteStore.getState().currentProjectId || useBuilderStore.getState().projectId;
       if (projectId) {
         const { createCatalogItem, updateCatalogItem } = await import("@/lib/catalog");
         for (const act of (data.actions || []) as StudioAiAction[]) {
@@ -103,7 +106,7 @@ export default function AiStudioAssistant() {
         activePageId || undefined
       );
 
-      setWebsite(updatedWebsite);
+      applyAiModification(updatedWebsite);
 
       const newLog = {
         prompt: textToRun,
@@ -179,6 +182,7 @@ export default function AiStudioAssistant() {
       <div className="relative">
         <textarea
           rows={3}
+          data-testid="studio-copilot-input"
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
           onKeyDown={(e) => {
@@ -195,6 +199,7 @@ export default function AiStudioAssistant() {
           <span className="text-[10px] text-zinc-400 hidden sm:inline">⌘ + Enter</span>
           <button
             type="button"
+            data-testid="studio-copilot-apply-btn"
             onClick={() => handleExecutePrompt()}
             disabled={!prompt.trim() || isLoading}
             className="flex h-8 items-center gap-1.5 rounded-xl bg-violet-600 px-3 text-xs font-bold text-white shadow-md shadow-violet-500/25 hover:bg-violet-700 disabled:opacity-40 transition"
@@ -223,6 +228,7 @@ export default function AiStudioAssistant() {
           {historyLogs.length > 0 && (
             <button
               type="button"
+              data-testid="studio-copilot-undo-btn"
               onClick={undo}
               className="flex items-center gap-1 text-xs font-bold text-violet-600 hover:text-violet-700 dark:text-violet-400"
             >

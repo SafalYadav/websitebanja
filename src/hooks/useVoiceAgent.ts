@@ -1,8 +1,10 @@
 // src/hooks/useVoiceAgent.ts
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useSyncExternalStore } from "react";
 import { LiveAudioStreamer } from "@/lib/audio/liveAudioStreamer";
+
+const emptySubscribe = () => () => {};
 
 // Web Speech API TypeScript type shims
 interface SpeechRecognitionErrorEvent extends Event {
@@ -44,9 +46,13 @@ export function useVoiceAgent() {
   const [isLoadingVoice, setIsLoadingVoice] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [isVoiceMuted, setIsVoiceMuted] = useState(false);
-  const [isVoiceSupported, setIsVoiceSupported] = useState(false);
+  const isVoiceSupported = useSyncExternalStore(
+    emptySubscribe,
+    () => Boolean(typeof window !== "undefined" && (window.SpeechRecognition || (window as unknown as { webkitSpeechRecognition?: unknown }).webkitSpeechRecognition)),
+    () => false
+  );
   const [voiceError, setVoiceError] = useState<string | null>(null);
-  const [isLiveConnected, setIsLiveConnected] = useState(true);
+  const [isLiveConnected] = useState(true);
   const [isContinuousMode, setIsContinuousMode] = useState(true);
   const [voiceLanguage, setVoiceLanguage] = useState<string>("en-IN");
 
@@ -164,6 +170,14 @@ export function useVoiceAgent() {
       streamerRef.current.stopAndClear();
     }
 
+    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+      try {
+        window.speechSynthesis.cancel();
+      } catch {
+        // ignore
+      }
+    }
+
     setIsSpeaking(false);
     setIsLoadingVoice(false);
   }, []);
@@ -205,14 +219,15 @@ export function useVoiceAgent() {
       setVoiceError(null);
 
       const tTtsStart = performance.now();
-      console.log(`[VoiceDebug] voice request started: "${trimmedText}"`);
+      console.log(`[CanonicalVoice] Event: SPEAK | len: ${trimmedText.length} | text: "${trimmedText.slice(0, 70)}..."`);
 
-      const cleanLower = trimmedText.toLowerCase();
-      const isGreeting = cleanLower.includes("i'm mitra") && cleanLower.includes("website architect");
+      const cleanLower = trimmedText.toLowerCase().replace(/\s+/g, " ");
+      const canonicalGreetingClean = "hey there! i'm mitra, your ai website architect. what kind of business or website are you building today? tell me your vision, or tap the mic and let's chat!";
+      const isGreeting = cleanLower === canonicalGreetingClean;
 
-      // Instant 0ms client-side playback of preloaded greeting buffer
+      // Instant 0ms client-side playback of preloaded greeting buffer ONLY on exact match
       if (isGreeting && preloadedGreetingBufferRef.current && streamerRef.current) {
-        console.log("[VoiceAgent] Instant 0ms playback of preloaded greeting buffer!");
+        console.log("[VoiceAgent] Instant 0ms playback of preloaded greeting buffer (exact match verified)!");
         onPlaybackStartCallbackRef.current?.();
         await streamerRef.current.pushChunk(preloadedGreetingBufferRef.current);
         streamerRef.current.signalTurnComplete(() => {
@@ -225,6 +240,49 @@ export function useVoiceAgent() {
         });
         return;
       }
+
+      const fallbackToSpeechSynthesis = (): boolean => {
+        if (typeof window !== "undefined" && "speechSynthesis" in window) {
+          console.log(`[VoiceAgent] Speaking exact canonical text via native window.speechSynthesis: "${trimmedText.slice(0, 50)}..."`);
+          try {
+            window.speechSynthesis.cancel();
+            const utterance = new SpeechSynthesisUtterance(trimmedText);
+            utterance.rate = 1.0;
+            utterance.pitch = 1.0;
+            utterance.onstart = () => {
+              if (playId === activePlayIdRef.current) {
+                setIsSpeaking(true);
+                setIsLoadingVoice(false);
+                setVoiceState("speaking");
+                onPlaybackStartCallbackRef.current?.();
+              }
+            };
+            utterance.onend = () => {
+              if (playId === activePlayIdRef.current) {
+                setIsSpeaking(false);
+                setIsLoadingVoice(false);
+                setVoiceState("idle");
+                onPlaybackFinishedCallbackRef.current?.();
+              }
+            };
+            utterance.onerror = (e) => {
+              console.warn("[VoiceAgent] Native SpeechSynthesis error:", e);
+              if (playId === activePlayIdRef.current) {
+                setIsSpeaking(false);
+                setIsLoadingVoice(false);
+                setVoiceState("idle");
+                onPlaybackFinishedCallbackRef.current?.();
+              }
+            };
+            muteMic();
+            window.speechSynthesis.speak(utterance);
+            return true;
+          } catch (synthErr) {
+            console.warn("[VoiceAgent] SpeechSynthesis launch failed:", synthErr);
+          }
+        }
+        return false;
+      };
 
       const abortController = new AbortController();
       const abortTimeout = setTimeout(() => abortController.abort(), 18000);
@@ -298,7 +356,8 @@ export function useVoiceAgent() {
               }
             });
           } else {
-            console.warn("[VoiceAgent] No audio bytes received from voice endpoint.");
+            console.warn("[VoiceAgent] No audio bytes received from voice endpoint. Attempting native speech synthesis fallback.");
+            if (fallbackToSpeechSynthesis()) return;
             setIsSpeaking(false);
             setIsLoadingVoice(false);
             setVoiceState("idle");
@@ -357,6 +416,7 @@ export function useVoiceAgent() {
       } catch (err) {
         if (playId === activePlayIdRef.current) {
           console.warn("[VoiceAgent] Voice playback error:", err);
+          if (fallbackToSpeechSynthesis()) return;
           setIsSpeaking(false);
           setIsLoadingVoice(false);
           setVoiceState("error");
@@ -552,11 +612,32 @@ export function useVoiceAgent() {
     setVoiceState("idle");
   }, [muteMic]);
 
+  // Preload canonical greeting audio buffer on mount for instant 0ms latency upon interaction
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      setIsVoiceSupported(Boolean(window.SpeechRecognition || window.webkitSpeechRecognition));
-    }
+    let isCancelled = false;
+    const greetingText = "Hey there! I'm Mitra, your AI Website Architect. What kind of business or website are you building today? Tell me your vision, or tap the mic and let's chat!";
+    fetch("/api/agent/voice", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: greetingText }),
+    })
+      .then((res) => (res.ok ? res.arrayBuffer() : null))
+      .then((buf) => {
+        if (!isCancelled && buf && buf.byteLength > 0) {
+          preloadedGreetingBufferRef.current = buf;
+          console.log(`[VoiceAgent] Preloaded greeting audio buffer ready (${buf.byteLength} bytes)`);
+        }
+      })
+      .catch((err) => {
+        console.warn("[VoiceAgent] Preload greeting audio warning:", err);
+      });
 
+    return () => {
+      isCancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
     return () => {
       stopSpeaking();
       muteMic();

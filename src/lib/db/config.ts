@@ -2,10 +2,14 @@
 
 /**
  * Database Configuration & Connection Settings
- * Supports dual-connection architecture for seamless migration from Supabase to Azure PostgreSQL.
+ *
+ * ARCHITECTURAL DECISION:
+ * WebsiteBanja AI uses Azure PostgreSQL as its canonical application database.
+ * Supabase Auth remains active for user authentication only.
+ * The database provider is locked to "azure".
  */
 
-export type DatabaseProvider = "supabase" | "azure";
+export type DatabaseProvider = "azure";
 
 export interface DatabaseConfig {
   provider: DatabaseProvider;
@@ -32,11 +36,10 @@ export interface DatabaseConfig {
 }
 
 /**
- * Resolves current database configuration from environment variables.
- * Safe fallback to Supabase if Azure PostgreSQL is not yet configured.
+ * Resolves database configuration from environment variables for Azure PostgreSQL.
  */
 export function getDatabaseConfig(): DatabaseConfig {
-  const provider = (process.env.DB_PROVIDER?.toLowerCase() === "azure" ? "azure" : "supabase") as DatabaseProvider;
+  const provider: DatabaseProvider = "azure";
   
   let databaseUrl = process.env.DATABASE_URL || process.env.AZURE_POSTGRESQL_CONNECTION_STRING || null;
   let directDatabaseUrl = process.env.DIRECT_DATABASE_URL || process.env.AZURE_POSTGRESQL_DIRECT_URL || databaseUrl;
@@ -78,4 +81,3 @@ export function getDatabaseConfig(): DatabaseConfig {
     isAzureConfigured: Boolean((databaseUrl && databaseUrl.includes("postgres")) || (user && password)),
   };
 }
-

@@ -1,5 +1,7 @@
 import OpenAI from "openai";
 
+export const OPENAI_GENERATION_MODEL = process.env.OPENAI_GENERATION_MODEL || "gpt-5.6-luna";
+
 let _client: OpenAI | null = null;
 
 export function getOpenAIClient(): OpenAI {

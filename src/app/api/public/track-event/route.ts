@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
 import { checkMemoryRateLimit } from "@/lib/rateLimit";
 import { getClientIp } from "@/lib/supabaseServer";
+import { dbGetProjectByPublicSlug, dbInsertAnalyticsEvent } from "@/lib/db/queries";
 
 export const dynamic = "force-dynamic";
 
@@ -42,23 +42,12 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-    const supabaseKey =
-      process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-    const supabase = createClient(supabaseUrl, supabaseKey, {
-      auth: { persistSession: false, autoRefreshToken: false },
-    });
-
     let resolvedProjectId = typeof projectId === "string" ? projectId.slice(0, 100) : null;
-    let resolvedUserId = null;
+    let resolvedUserId: string | null = null;
 
     if (!resolvedProjectId && slug && typeof slug === "string") {
       const cleanSlug = slug.trim().slice(0, 100);
-      const { data: proj } = await supabase
-        .from("projects")
-        .select("id, user_id")
-        .eq("public_slug", cleanSlug)
-        .single();
+      const proj = await dbGetProjectByPublicSlug(cleanSlug);
       if (proj) {
         resolvedProjectId = proj.id;
         resolvedUserId = proj.user_id;
@@ -66,12 +55,11 @@ export async function POST(req: NextRequest) {
     }
 
     if (resolvedProjectId) {
-      await supabase.from("analytics_events").insert({
-        project_id: resolvedProjectId,
-        user_id: resolvedUserId,
-        event_type: cleanEventType,
+      await dbInsertAnalyticsEvent({
+        projectId: resolvedProjectId,
+        userId: resolvedUserId,
+        eventType: cleanEventType,
         metadata: boundedMetadata,
-        created_at: new Date().toISOString(),
       });
     }
 

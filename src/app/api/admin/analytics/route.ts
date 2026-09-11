@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
 import { verifyAdminAuth } from "@/lib/adminAuth";
+import {
+  dbGetAdminProjectsSummary,
+  dbGetAdminAnalyticsEvents,
+  dbGetAdminSubscriptions,
+} from "@/lib/db/queries";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -21,55 +25,36 @@ export async function GET(req: Request) {
       );
     }
 
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-    // Use Service Role Key if available on server for full admin analytics view, otherwise anon key
-    const supabaseKey =
-      process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-    const supabase = createClient(supabaseUrl, supabaseKey, {
-      auth: {
-        persistSession: false,
-        autoRefreshToken: false,
-      },
+    // 2. Fetch Projects Summary directly from Azure PostgreSQL
+    const projectsData = await dbGetAdminProjectsSummary().catch((err) => {
+      console.warn("[Admin API Projects Fetch Warning]", err);
+      return [];
     });
 
-    // 2. Fetch Projects Summary directly from database
-    const { data: projectsData, error: projErr } = await supabase
-      .from("projects")
-      .select("id, user_id, name, business_name, category, is_published, public_slug, custom_domain, created_at, updated_at")
-      .order("created_at", { ascending: false });
-
-    if (projErr) {
-      console.warn("[Admin API Projects Fetch Warning]", projErr);
-    }
-
-    const projects = projectsData || [];
+    const projects = projectsData as any[];
     const totalProjects = projects.length;
     const publishedProjects = projects.filter((p) => p.is_published).length;
     const customDomainCount = projects.filter((p) => Boolean(p.custom_domain)).length;
 
-    // 3. Fetch Analytics Events
-    const { data: eventsData, error: eventErr } = await supabase
-      .from("analytics_events")
-      .select("id, user_id, project_id, event_type, metadata, created_at")
-      .order("created_at", { ascending: false })
-      .limit(100);
+    // 3. Fetch Analytics Events from Azure PostgreSQL
+    const eventsData = await dbGetAdminAnalyticsEvents(100).catch((err) => {
+      console.warn("[Admin API Events Fetch Warning]", err);
+      return [];
+    });
 
-    if (eventErr) {
-      console.warn("[Admin API Events Fetch Warning]", eventErr);
-    }
-
-    const events = eventsData || [];
+    const events = eventsData as any[];
     const aiRequests = events.filter((e) => e.event_type === "ai_request").length;
     const aiFailures = events.filter((e) => e.event_type === "ai_failure").length;
     const aiSuccesses = events.filter((e) => e.event_type === "ai_success").length;
     const totalGenerations = Math.max(aiSuccesses, totalProjects);
 
-    // 4. Fetch Subscriptions / Plans
-    const { data: subData } = await supabase
-      .from("subscriptions")
-      .select("id, user_id, plan_id, status, amount_inr, created_at");
+    // 4. Fetch Subscriptions / Plans from Azure PostgreSQL
+    const subData = await dbGetAdminSubscriptions().catch((err) => {
+      console.warn("[Admin API Subscriptions Fetch Warning]", err);
+      return [];
+    });
 
-    const subscriptions = subData || [];
+    const subscriptions = subData as any[];
     const paidSubscriptions = subscriptions.filter((s) => s.status === "active_paid" || s.plan_id === "paid_pro");
     const paidUsersCount = paidSubscriptions.length;
 
@@ -104,7 +89,7 @@ export async function GET(req: Request) {
 
       return {
         userId: uid,
-        plan: isPaid ? "Paid Pro (₹2,000/mo)" : "Free Starter",
+        plan: isPaid ? "Paid Pro (₹500/mo)" : "Free Starter",
         projectsCount: userProjects.length,
         publishedCount: userProjects.filter((p) => p.is_published).length,
         generationsCount: Math.max(userProjects.length, userEvents.length),

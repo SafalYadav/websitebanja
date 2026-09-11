@@ -1,4 +1,13 @@
-import { createClient } from "@supabase/supabase-js";
+/**
+ * Server-safe analytics event recorder.
+ *
+ * WHY: Writes event logs asynchronously to Azure PostgreSQL without blocking
+ * primary user request flows. Uses the central db/queries.ts pool.
+ *
+ * ARCHITECTURE: No Supabase client — all analytics goes directly to Azure PostgreSQL.
+ */
+
+import { dbInsertAnalyticsEvent } from "./db/queries";
 
 export type AnalyticsEventType =
   | "user_signup"
@@ -30,17 +39,10 @@ export async function trackAnalyticsEvent({
   metadata = {},
 }: TrackEventParams): Promise<void> {
   try {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-    if (!supabaseUrl || !supabaseKey) return;
-
-    const supabase = createClient(supabaseUrl, supabaseKey);
-
-    await supabase.from("analytics_events").insert({
-      event_type: eventType,
-      user_id: userId ?? null,
-      project_id: projectId ?? null,
+    await dbInsertAnalyticsEvent({
+      eventType,
+      userId,
+      projectId,
       metadata,
     });
   } catch (err) {

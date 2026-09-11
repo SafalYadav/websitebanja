@@ -138,7 +138,7 @@ async function callGeminiRestGenerate(
 
 /**
  * Streams raw linear PCM audio from Google Generative Language API using SSE.
- * Uses direct fetch with x-goog-api-key and ?key= to avoid SDK auth interference on Vercel.
+ * Uses direct fetch with x-goog-api-key and ?key= to avoid SDK auth interference in container environments.
  */
 async function callGeminiRestStream(
   apiKey: string,

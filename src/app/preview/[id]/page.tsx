@@ -1,6 +1,10 @@
 import { notFound } from "next/navigation";
-import { getPreviewLinkData, getPreviewProject } from "@/lib/projects";
-import { getPreviewCatalogItems, type CatalogItem } from "@/lib/catalog";
+import {
+  getPublicPreviewLinkData as getPreviewLinkData,
+  getPublicPreviewProject as getPreviewProject,
+  getPublicPreviewCatalogItems as getPreviewCatalogItems,
+} from "@/lib/server/publicSite";
+import type { CatalogItem } from "@/types/catalog";
 import WebsiteRenderer from "@/components/editor/WebsiteRenderer";
 import type { WebsiteData } from "@/types/website";
 
@@ -21,11 +25,23 @@ export default async function PreviewPage({ params }: { params: Promise<{ id: st
     );
   }
 
-  if (error || !data) {
+  let rawData = data;
+  if (!rawData) {
+    try {
+      const fs = await import("fs");
+      const path = await import("path");
+      const localFile = path.join(process.cwd(), "scratch/previews", `${resolvedParams.id}.json`);
+      if (fs.existsSync(localFile)) {
+        rawData = JSON.parse(fs.readFileSync(localFile, "utf-8"));
+      }
+    } catch {}
+  }
+
+  if (!rawData && (error || !data)) {
     notFound();
   }
 
-  const previewData = { ...data } as WebsiteData;
+  const previewData = { ...rawData } as WebsiteData;
   const themeConfig = previewData.theme as { colors?: { background?: string } } | undefined;
   const bgColor = themeConfig?.colors?.background || "#ffffff";
 
@@ -41,7 +57,7 @@ export default async function PreviewPage({ params }: { params: Promise<{ id: st
   }
 
   return (
-    <div className="min-h-screen w-full" style={{ backgroundColor: bgColor }}>
+    <div className="min-h-screen w-full overflow-x-hidden" style={{ backgroundColor: bgColor }}>
       <WebsiteRenderer 
         data={previewData} 
         catalogItems={catalogItems} 

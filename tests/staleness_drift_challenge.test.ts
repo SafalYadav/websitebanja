@@ -9,10 +9,7 @@ import {
   canonicalJsonStringify,
   computeSha256,
   computeEntryChecksum,
-  EXPECTED_INDUSTRY_KEYS,
   EXPECTED_WEBSITE_SECTIONS,
-  SUPPORTED_BUTTON_ACTIONS,
-  SUPPORTED_BACKEND_REQUIREMENTS,
 } from "../src/knowledge/staleness/audit";
 import { getGlobalKnowledgeRegistry } from "../src/knowledge/global/index";
 import { CATEGORY_MAP } from "../src/lib/categoryImages";

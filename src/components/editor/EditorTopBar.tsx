@@ -96,12 +96,12 @@ export default function EditorTopBar({ onOpenPublishModal, isSaving = false, isE
   }
 
   return (
-    <header className="h-16 border-b border-zinc-200/80 bg-white/90 px-3 sm:px-6 flex items-center justify-between z-40 backdrop-blur-xl dark:border-white/10 dark:bg-[#09090B]/90 select-none">
+    <header className="h-16 border-b border-zinc-200/80 bg-white/90 px-3 sm:px-6 flex items-center justify-between z-40 backdrop-blur-xl dark:border-white/[0.08] dark:bg-[#0a0d14]/90 select-none">
       {/* Left: Brand Logo & Editable Project Title */}
       <div className="flex items-center gap-2 sm:gap-3 min-w-0">
         <Link
           href={dashboardRoute()}
-          className="flex h-9 w-9 items-center justify-center rounded-xl border border-zinc-200 bg-zinc-50 text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-white transition flex-shrink-0"
+          className="flex h-9 w-9 items-center justify-center rounded-xl border border-zinc-200 bg-zinc-50 text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-zinc-400 dark:hover:bg-white/[0.08] dark:hover:text-white transition flex-shrink-0"
           title="Back to Dashboard"
         >
           <ArrowLeft className="h-4 w-4" />
@@ -120,7 +120,7 @@ export default function EditorTopBar({ onOpenPublishModal, isSaving = false, isE
               onChange={(e) => setTitleValue(e.target.value)}
               onBlur={() => void handleTitleSubmit()}
               onKeyDown={(e) => e.key === "Enter" && void handleTitleSubmit()}
-              className="rounded-md border border-violet-500 bg-zinc-50 px-2 py-0.5 text-xs sm:text-sm font-bold text-zinc-900 outline-none ring-2 ring-violet-500/20 dark:bg-zinc-800 dark:text-white max-w-[130px] sm:max-w-[200px]"
+              className="rounded-lg border border-cyan-500 bg-zinc-50 px-2.5 py-1 text-xs sm:text-sm font-bold text-zinc-900 outline-none ring-2 ring-cyan-500/20 dark:bg-zinc-900 dark:text-white max-w-[130px] sm:max-w-[200px]"
             />
           ) : (
             <button
@@ -129,7 +129,7 @@ export default function EditorTopBar({ onOpenPublishModal, isSaving = false, isE
                 setTitleValue(businessName);
                 setIsEditingTitle(true);
               }}
-              className="group flex items-center gap-1 text-xs sm:text-sm font-bold text-zinc-900 dark:text-white truncate hover:text-violet-600 transition"
+              className="group flex items-center gap-1 text-xs sm:text-sm font-bold text-zinc-900 dark:text-white truncate hover:text-cyan-500 dark:hover:text-cyan-400 transition"
               title="Click to rename project"
             >
               <span className="truncate max-w-[110px] sm:max-w-[220px]">
@@ -147,7 +147,7 @@ export default function EditorTopBar({ onOpenPublishModal, isSaving = false, isE
           )}
 
           {/* Autosave Status Badge */}
-          <div className="hidden xl:flex items-center gap-1 text-[10px] font-semibold text-zinc-400 border-l border-zinc-200 dark:border-white/10 pl-2">
+          <div className="hidden xl:flex items-center gap-1 text-[10px] font-semibold text-zinc-400 border-l border-zinc-200 dark:border-white/[0.08] pl-2">
             {isSaving ? (
               <span className="flex items-center gap-1 text-amber-500">
                 <CloudUpload className="h-3 w-3 animate-bounce" />
@@ -169,7 +169,7 @@ export default function EditorTopBar({ onOpenPublishModal, isSaving = false, isE
       </div>
 
       {/* Center: Viewport Controls */}
-      <div className="hidden md:flex items-center rounded-xl border border-zinc-200 bg-zinc-100/80 p-1 dark:border-white/10 dark:bg-zinc-900">
+      <div className="hidden md:flex items-center rounded-xl border border-zinc-200 bg-zinc-100/80 p-1 dark:border-white/[0.08] dark:bg-[#05070b]">
         {[
           { mode: "desktop" as ViewportMode, icon: Laptop, label: "Desktop" },
           { mode: "tablet" as ViewportMode, icon: Tablet, label: "Tablet (768px)" },
@@ -185,7 +185,7 @@ export default function EditorTopBar({ onOpenPublishModal, isSaving = false, isE
               title={item.label}
               className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
                 isActive
-                  ? "bg-white text-zinc-900 shadow-2xs dark:bg-zinc-800 dark:text-white"
+                  ? "bg-white text-zinc-900 shadow-2xs dark:bg-cyan-500/20 dark:text-cyan-300 dark:border dark:border-cyan-500/40"
                   : "text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white"
               }`}
             >
@@ -199,13 +199,13 @@ export default function EditorTopBar({ onOpenPublishModal, isSaving = false, isE
       {/* Right Action Stack */}
       <div className="flex items-center gap-2 sm:gap-3">
         {/* Undo / Redo with Tooltips */}
-        <div className="hidden sm:flex items-center rounded-xl border border-zinc-200 bg-zinc-50 dark:border-white/10 dark:bg-zinc-900 p-0.5">
+        <div className="hidden sm:flex items-center rounded-xl border border-zinc-200 bg-zinc-50 dark:border-white/[0.08] dark:bg-[#05070b] p-0.5">
           <button
             type="button"
             onClick={undo}
             disabled={historyIndex <= 0}
             title="Undo (Cmd/Ctrl + Z)"
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-zinc-600 hover:bg-zinc-200 hover:text-zinc-900 disabled:opacity-40 disabled:hover:bg-transparent dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-white transition"
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-zinc-600 hover:bg-zinc-200 hover:text-zinc-900 disabled:opacity-30 disabled:hover:bg-transparent dark:text-zinc-400 dark:hover:bg-white/[0.08] dark:hover:text-white transition"
           >
             <Undo2 className="h-4 w-4" />
           </button>
@@ -214,7 +214,7 @@ export default function EditorTopBar({ onOpenPublishModal, isSaving = false, isE
             onClick={redo}
             disabled={historyIndex >= history.length - 1}
             title="Redo (Cmd/Ctrl + Shift + Z)"
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-zinc-600 hover:bg-zinc-200 hover:text-zinc-900 disabled:opacity-40 disabled:hover:bg-transparent dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-white transition"
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-zinc-600 hover:bg-zinc-200 hover:text-zinc-900 disabled:opacity-30 disabled:hover:bg-transparent dark:text-zinc-400 dark:hover:bg-white/[0.08] dark:hover:text-white transition"
           >
             <Redo2 className="h-4 w-4" />
           </button>
@@ -228,8 +228,8 @@ export default function EditorTopBar({ onOpenPublishModal, isSaving = false, isE
           onClick={() => setIsPreviewMode(!isPreviewMode)}
           className={`flex items-center gap-1.5 rounded-xl border px-3.5 py-2 text-xs font-semibold transition ${
             isPreviewMode
-              ? "border-violet-500 bg-violet-50 text-violet-700 dark:bg-violet-950/60 dark:text-violet-300"
-              : "border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-100 dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800"
+              ? "border-cyan-500 bg-cyan-50 text-cyan-700 dark:bg-cyan-950/50 dark:text-cyan-300 dark:border-cyan-500/50"
+              : "border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-100 dark:border-white/[0.08] dark:bg-[#0a0d14] dark:text-zinc-300 dark:hover:bg-white/[0.05]"
           }`}
         >
           {isPreviewMode ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -241,7 +241,7 @@ export default function EditorTopBar({ onOpenPublishModal, isSaving = false, isE
           type="button"
           onClick={handleSharePreview}
           disabled={isSharingPreview}
-          className="flex items-center gap-1.5 rounded-xl border border-zinc-200 bg-white px-3.5 py-2 text-xs font-semibold text-zinc-700 hover:bg-zinc-100 dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800 transition disabled:opacity-50"
+          className="flex items-center gap-1.5 rounded-xl border border-zinc-200 bg-white px-3.5 py-2 text-xs font-semibold text-zinc-700 hover:bg-zinc-100 dark:border-white/[0.08] dark:bg-[#0a0d14] dark:text-zinc-300 dark:hover:bg-white/[0.05] transition disabled:opacity-50"
         >
           {isSharingPreview ? (
             <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-zinc-500 border-t-transparent dark:border-zinc-400" />
@@ -262,11 +262,11 @@ export default function EditorTopBar({ onOpenPublishModal, isSaving = false, isE
             }
           }}
           disabled={isPublishing}
-          className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 via-violet-600 to-indigo-600 px-4 sm:px-5 py-2 text-xs sm:text-sm font-bold text-white shadow-md shadow-violet-600/25 transition hover:opacity-95 active:scale-95 disabled:opacity-50"
+          className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 px-4 sm:px-5 py-2 text-xs sm:text-sm font-bold text-slate-950 shadow-md shadow-cyan-500/20 transition hover:opacity-95 active:scale-95 disabled:opacity-50"
         >
           {isPublishing ? (
             <>
-              <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" />
+              <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-slate-950 border-t-transparent" />
               <span>Publishing...</span>
             </>
           ) : isPublished ? (

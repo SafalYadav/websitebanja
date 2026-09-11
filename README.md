@@ -1,36 +1,82 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# WebsiteBanja AI
 
-## Getting Started
+> Autonomous AI Website Studio for Modern Businesses
 
-First, run the development server:
+WebsiteBanja AI is an intelligent platform that designs, plans, and deploys high-converting, accessible, and responsive websites for Indian and global enterprises. Powered by OpenAI GPT-5.6 Luna with specialized Design Intelligence skills, Azure PostgreSQL, and Azure Blob Storage.
 
+---
+
+## Key Features
+
+- **Autonomous Generation**: Synthesize multi-page, feature-complete websites in seconds from natural conversation or business details.
+- **Master Design Intelligence**: 19 contextual design intelligence skills (UI/UX, CRO, Typography, SEO, Performance, Accessibility, and more) orchestrated dynamically.
+- **Interactive Studio Workspace**: Real-time canvas editing, component customization, and AI Copilot.
+- **Enterprise Infrastructure**: Azure PostgreSQL Flexible Server persistence, Azure Blob Storage workspace state, and containerized deployment on Azure Container Apps.
+- **Dual Build Experience**: Choose between conversational **Talk with AI Agent** or structured **Use Business Details**.
+- **Transparent Pricing**: ₹0 Free Starter and ₹500/month Paid Pro.
+
+---
+
+## Quick Start
+
+### Prerequisites
+- Node.js 20+
+- npm or pnpm
+- Azure PostgreSQL database
+- Azure Blob Storage account
+- Supabase Project (for Authentication)
+- OpenAI API Key
+
+### Installation
+
+1. Clone the repository and install dependencies:
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+git clone https://github.com/websitebanja/websitebanja.git
+cd websitebanja
+npm install
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+2. Configure environment variables:
+```bash
+cp .env.example .env.local
+# Edit .env.local with your credentials
+```
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+3. Run the development server:
+```bash
+npm run dev
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+4. Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-## Learn More
+---
 
-To learn more about Next.js, take a look at the following resources:
+## Verification & Testing
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```bash
+# Type check
+npx tsc --noEmit
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+# Lint check
+npm run lint
 
-## Deploy on Vercel
+# Skills & Design Intelligence test suite
+node tests/openai_skills_migration.test.mjs
+node tests/design_intelligence_skills.test.mjs
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+# Product UI/UX and flow verification
+node tests/product_ui_ux_and_flow.test.mjs
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+---
+
+## Architecture Summary
+
+- **Authentication**: Supabase Auth (JWT & Session verification)
+- **Database**: Azure Database for PostgreSQL Flexible Server
+- **Storage**: Azure Blob Storage (`@azure/storage-blob`)
+- **Hosting**: Azure Container Apps
+- **Primary AI**: OpenAI Responses API with GPT-5.6 Luna (`gpt-5.6-luna`)
+- **Design Engine**: OpenAI Hosted Skills + Master Design Intelligence
+
+For complete architectural details, see [PROJECT.md](./PROJECT.md).

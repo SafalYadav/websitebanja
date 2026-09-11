@@ -1,9 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import type { SiteLead } from "@/types/website";
 import { checkMemoryRateLimit } from "@/lib/rateLimit";
 import { getClientIp } from "@/lib/supabaseServer";
+import {
+  dbGetProjectByPublicSlug,
+  dbGetProjectOwnership,
+  dbAppendLeadToProject,
+  dbInsertAnalyticsEvent,
+} from "@/lib/db/queries";
 
 export const dynamic = "force-dynamic";
 
@@ -47,23 +52,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, message: "Project identifier required." }, { status: 400 });
     }
 
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-    const supabaseKey =
-      process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-    const supabase = createClient(supabaseUrl, supabaseKey, {
-      auth: { persistSession: false, autoRefreshToken: false },
-    });
-
     // 1. Fetch project by slug or ID
-    let projectQuery = supabase.from("projects").select("id, user_id, json_data");
+    let projectData: { id: string; user_id: string } | null = null;
     if (slug) {
-      projectQuery = projectQuery.eq("public_slug", slug);
-    } else {
-      projectQuery = projectQuery.eq("id", projectId);
+      projectData = await dbGetProjectByPublicSlug(slug);
+    } else if (projectId) {
+      projectData = await dbGetProjectOwnership(projectId);
     }
 
-    const { data: projectData, error: projErr } = await projectQuery.single();
-    if (projErr || !projectData) {
+    if (!projectData) {
       return NextResponse.json({ success: false, message: "Website not found." }, { status: 404 });
     }
 
@@ -78,23 +75,22 @@ export async function POST(req: NextRequest) {
       read: false,
     };
 
-    // Atomically append lead to project json_data->'leads' using RPC
-    const { error: updateErr } = await supabase.rpc("append_lead_to_project", {
-      p_project_id: projectData.id,
-      p_lead_data: newLead,
-    });
+    // Atomically append lead to project json_data->'leads' using stored function in Azure PostgreSQL
+    const { error: updateErr } = await dbAppendLeadToProject(
+      projectData.id,
+      newLead as unknown as Record<string, unknown>
+    );
 
     if (updateErr) {
       console.warn("[Submit Lead DB update warning]", updateErr);
     }
 
     // Also record an analytics event for telemetry
-    await supabase.from("analytics_events").insert({
-      project_id: projectData.id,
-      user_id: projectData.user_id,
-      event_type: "lead_submit",
+    await dbInsertAnalyticsEvent({
+      projectId: projectData.id,
+      userId: projectData.user_id,
+      eventType: "lead_submit",
       metadata: { leadId: newLead.id, sourcePage: newLead.sourcePage },
-      created_at: new Date().toISOString(),
     });
 
     return NextResponse.json({

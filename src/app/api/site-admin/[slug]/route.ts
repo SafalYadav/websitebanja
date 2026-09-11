@@ -1,6 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { getAuthClient } from "@/lib/supabaseServer";
 import type { WebsiteData } from "@/types/website";
+import {
+  dbGetProjectBySlugForAdmin,
+  dbGetProjectForAdmin,
+  dbGetWebsiteMembers,
+  dbGetCatalogItems,
+  dbGetAnalyticsEvents,
+  dbGetCatalogItemStatus,
+  dbUpdateCatalogItemStatus,
+  dbInsertCatalogItemSimple,
+  dbUpdateProjectJsonData,
+} from "@/lib/db/queries";
 
 export const dynamic = "force-dynamic";
 
@@ -17,47 +28,27 @@ export async function GET(
     }
 
     const token = authHeader.replace("Bearer ", "").trim();
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-    const authSupabase = createClient(supabaseUrl, supabaseAnonKey);
-
+    const authSupabase = getAuthClient();
     const { data: { user }, error: userErr } = await authSupabase.auth.getUser(token);
     if (userErr || !user) {
       return NextResponse.json({ success: false, message: "Invalid session." }, { status: 401 });
     }
 
-    const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-      auth: { persistSession: false, autoRefreshToken: false },
-      global: {
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
-      }
-    });
+    const project = (await dbGetProjectBySlugForAdmin(slug)) as any;
 
-    const { data: project, error: projErr } = await supabase
-      .from("projects")
-      .select("id, user_id, name, business_name, category, is_published, public_slug, custom_domain, json_data, created_at, updated_at")
-      .eq("public_slug", slug)
-      .single();
-
-    if (projErr || !project) {
+    if (!project) {
       return NextResponse.json({ success: false, message: "Website not found." }, { status: 404 });
     }
 
     // 1. Check if user is Platform Admin or Project Creator
     const rawAdminEmails = process.env.ADMIN_EMAILS || "";
     const adminEmails = rawAdminEmails.split(",").map((e) => e.trim().toLowerCase());
-    const isPlatformAdmin = user.email && adminEmails.includes(user.email.toLowerCase());
+    const isPlatformAdmin = Boolean(user.email && adminEmails.includes(user.email.toLowerCase()));
     const isProjectCreator = project.user_id === user.id;
 
     // 2. Check Website Members
-    const { data: members } = await supabase
-      .from("website_members")
-      .select("*")
-      .eq("project_id", project.id);
-      
-    const memberList = members || [];
+    const members = await dbGetWebsiteMembers(project.id);
+    const memberList = (members || []) as any[];
     const isMember = memberList.some((m) => m.user_id === user.id);
 
     // 3. Needs Claim Logic (if no members exist at all)
@@ -76,26 +67,16 @@ export async function GET(
       );
     }
 
-
     const jsonData = (project.json_data || {}) as WebsiteData;
     const leads = jsonData.leads || [];
 
-    // Fetch products from catalog_items table
-    const { data: catalogItems } = await supabase
-      .from("catalog_items")
-      .select("*")
-      .eq("project_id", project.id);
+    // Fetch products from catalog_items table via Azure PostgreSQL
+    const catalogItems = await dbGetCatalogItems(project.id);
     const products = catalogItems || [];
 
-    // Fetch site-specific analytics events
-    const { data: events } = await supabase
-      .from("analytics_events")
-      .select("event_type, created_at, metadata")
-      .eq("project_id", project.id)
-      .order("created_at", { ascending: false })
-      .limit(200);
-
-    const analyticsList = events || [];
+    // Fetch site-specific analytics events via Azure PostgreSQL
+    const events = await dbGetAnalyticsEvents(project.id, 200);
+    const analyticsList = (events || []) as any[];
     const pageViews = analyticsList.filter((e) => e.event_type === "page_view" || e.event_type === "view").length;
     const ctaClicks = analyticsList.filter((e) => e.event_type === "cta_click").length;
     const whatsappClicks = analyticsList.filter((e) => e.event_type === "whatsapp_click").length;
@@ -120,7 +101,7 @@ export async function GET(
           totalLeads,
           unreadLeads: leads.filter((l) => !l.read).length,
           totalProducts: products.length,
-          activeProducts: products.filter((p) => p.status === "active").length,
+          activeProducts: (products as any[]).filter((p) => p.status === "active").length,
         },
         leads,
         products,
@@ -147,28 +128,13 @@ export async function PATCH(
     }
 
     const token = authHeader.replace("Bearer ", "").trim();
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-    const authSupabase = createClient(supabaseUrl, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
-
+    const authSupabase = getAuthClient();
     const { data: { user }, error: userErr } = await authSupabase.auth.getUser(token);
     if (userErr || !user) {
       return NextResponse.json({ success: false, message: "Invalid session." }, { status: 401 });
     }
 
-    const supabase = createClient(supabaseUrl, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
-      auth: { persistSession: false, autoRefreshToken: false },
-      global: {
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
-      }
-    });
-
-    const { data: project } = await supabase
-      .from("projects")
-      .select("id, user_id, json_data")
-      .eq("public_slug", slug)
-      .single();
+    const project = (await dbGetProjectForAdmin(slug, "id, user_id, json_data")) as any;
 
     if (!project || project.user_id !== user.id) {
       return NextResponse.json({ success: false, message: "Unauthorized." }, { status: 403 });
@@ -187,21 +153,15 @@ export async function PATCH(
     } else if (action === "delete_lead" && leadId) {
       currentJson.leads = (currentJson.leads || []).filter((l) => l.id !== leadId);
     } else if (action === "toggle_product_status" && productId) {
-      // Fetch product first to check current status
-      const { data: existing } = await supabase
-        .from("catalog_items")
-        .select("status")
-        .eq("id", productId)
-        .single();
-      
+      const existing = await dbGetCatalogItemStatus(productId);
       if (existing) {
-        await supabase
-          .from("catalog_items")
-          .update({ status: existing.status === "active" ? "out_of_stock" : "active" })
-          .eq("id", productId);
+        await dbUpdateCatalogItemStatus(
+          productId,
+          existing.status === "active" ? "out_of_stock" : "active"
+        );
       }
     } else if (action === "add_product" && newProduct) {
-      await supabase.from("catalog_items").insert({
+      await dbInsertCatalogItemSimple({
         project_id: project.id,
         name: newProduct.name,
         description: newProduct.description || "",
@@ -216,13 +176,7 @@ export async function PATCH(
       Object.assign(currentJson, updates);
     }
 
-    await supabase
-      .from("projects")
-      .update({
-        json_data: currentJson,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", project.id);
+    await dbUpdateProjectJsonData(project.id, currentJson as unknown as Record<string, unknown>);
 
     return NextResponse.json({ success: true, message: "Site data updated successfully." });
   } catch (err) {

@@ -1,6 +1,6 @@
 // src/lib/storage/types.ts
 
-export type StorageProvider = "supabase" | "azure";
+export type StorageProvider = "azure";
 
 export interface StorageUploadOptions {
   contentType?: string;

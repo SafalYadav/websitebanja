@@ -106,6 +106,7 @@ async function runDirectSupabaseVerification() {
     .eq("project_id", sampleProjectIdA);
 
   assert.equal(errA, null);
+  assert.ok(Array.isArray(itemsA));
 
   const { data: itemsB, error: errB } = await supabase
     .from("catalog_items")

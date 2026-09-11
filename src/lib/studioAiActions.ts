@@ -1,6 +1,6 @@
-import type { WebsiteData, ProductItem, ButtonActionConfig, ButtonActionType, WebsitePage, PageSeoConfig } from "@/types/website";
-import { sanitizeActionUrl } from "@/lib/buttonActions";
-import { setDeepValue as safeSetDeepValue } from "@/lib/deepSet";
+import type { WebsiteData, ProductItem, ButtonActionConfig, ButtonActionType, WebsitePage, PageSeoConfig } from "../types/website";
+import { sanitizeActionUrl } from "./buttonActions";
+import { setDeepValue as safeSetDeepValue } from "./deepSet";
 
 export interface StudioAiAction {
   action:
@@ -136,6 +136,9 @@ export function executeStudioActions(
 
           const basePath = buttonPath.replace(/\.button$/, "");
           current = setDeepValue(current as unknown as Record<string, unknown>, `${basePath}.buttonAction`, actionConfig) as unknown as WebsiteData;
+          if (label) {
+            current = setDeepValue(current as unknown as Record<string, unknown>, buttonPath, label) as unknown as WebsiteData;
+          }
           appliedSummaries.push(act.summary || `Configured button action: ${actionType} -> ${resolvedTarget}`);
           break;
         }
@@ -143,6 +146,7 @@ export function executeStudioActions(
         case "set_button_scroll_target": {
           const buttonPath = String(act.payload.path || "hero.button");
           const rawTarget = String(act.payload.target || "contact");
+          const label = act.payload.label ? String(act.payload.label) : undefined;
           const activeOrder = activePageId && current.pages?.find(p => p.id === activePageId)?.sectionOrder || current.sectionOrder || [];
           const resolvedSection = resolveSemanticSectionTarget(rawTarget, activeOrder);
           const basePath = buttonPath.replace(/\.button$/, "");
@@ -150,9 +154,13 @@ export function executeStudioActions(
           const actionConfig: ButtonActionConfig = {
             type: "scroll",
             target: resolvedSection,
+            label,
           };
 
           current = setDeepValue(current as unknown as Record<string, unknown>, `${basePath}.buttonAction`, actionConfig) as unknown as WebsiteData;
+          if (label) {
+            current = setDeepValue(current as unknown as Record<string, unknown>, buttonPath, label) as unknown as WebsiteData;
+          }
           appliedSummaries.push(act.summary || `Configured button to scroll to ${resolvedSection} section`);
           break;
         }
@@ -160,14 +168,19 @@ export function executeStudioActions(
         case "set_button_page_target": {
           const buttonPath = String(act.payload.path || "hero.button");
           const pageSlug = String(act.payload.slug || act.payload.target || "");
+          const label = act.payload.label ? String(act.payload.label) : undefined;
           const basePath = buttonPath.replace(/\.button$/, "");
 
           const actionConfig: ButtonActionConfig = {
             type: "page",
             target: pageSlug,
+            label,
           };
 
           current = setDeepValue(current as unknown as Record<string, unknown>, `${basePath}.buttonAction`, actionConfig) as unknown as WebsiteData;
+          if (label) {
+            current = setDeepValue(current as unknown as Record<string, unknown>, buttonPath, label) as unknown as WebsiteData;
+          }
           appliedSummaries.push(act.summary || `Configured button to open /${pageSlug} page`);
           break;
         }
@@ -175,14 +188,19 @@ export function executeStudioActions(
         case "set_button_whatsapp": {
           const buttonPath = String(act.payload.path || "hero.button");
           const phone = String(act.payload.phone || current.contact?.phone || "+919876543210");
+          const label = act.payload.label ? String(act.payload.label) : undefined;
           const basePath = buttonPath.replace(/\.button$/, "");
 
           const actionConfig: ButtonActionConfig = {
             type: "whatsapp",
             target: phone,
+            label,
           };
 
           current = setDeepValue(current as unknown as Record<string, unknown>, `${basePath}.buttonAction`, actionConfig) as unknown as WebsiteData;
+          if (label) {
+            current = setDeepValue(current as unknown as Record<string, unknown>, buttonPath, label) as unknown as WebsiteData;
+          }
           appliedSummaries.push(act.summary || `Configured button to open WhatsApp (${phone})`);
           break;
         }
@@ -190,14 +208,19 @@ export function executeStudioActions(
         case "set_button_external_url": {
           const buttonPath = String(act.payload.path || "hero.button");
           const url = sanitizeActionUrl(String(act.payload.url || "#"));
+          const label = act.payload.label ? String(act.payload.label) : undefined;
           const basePath = buttonPath.replace(/\.button$/, "");
 
           const actionConfig: ButtonActionConfig = {
             type: "url",
             target: url,
+            label,
           };
 
           current = setDeepValue(current as unknown as Record<string, unknown>, `${basePath}.buttonAction`, actionConfig) as unknown as WebsiteData;
+          if (label) {
+            current = setDeepValue(current as unknown as Record<string, unknown>, buttonPath, label) as unknown as WebsiteData;
+          }
           appliedSummaries.push(act.summary || `Configured button to navigate to ${url}`);
           break;
         }
@@ -205,14 +228,19 @@ export function executeStudioActions(
         case "set_button_call": {
           const buttonPath = String(act.payload.path || "hero.button");
           const phone = String(act.payload.phone || current.contact?.phone || "+919876543210");
+          const label = act.payload.label ? String(act.payload.label) : undefined;
           const basePath = buttonPath.replace(/\.button$/, "");
 
           const actionConfig: ButtonActionConfig = {
             type: "call",
             target: phone,
+            label,
           };
 
           current = setDeepValue(current as unknown as Record<string, unknown>, `${basePath}.buttonAction`, actionConfig) as unknown as WebsiteData;
+          if (label) {
+            current = setDeepValue(current as unknown as Record<string, unknown>, buttonPath, label) as unknown as WebsiteData;
+          }
           appliedSummaries.push(act.summary || `Configured button to dial ${phone}`);
           break;
         }
@@ -220,14 +248,19 @@ export function executeStudioActions(
         case "set_button_email": {
           const buttonPath = String(act.payload.path || "hero.button");
           const email = String(act.payload.email || current.contact?.email || "hello@example.com");
+          const label = act.payload.label ? String(act.payload.label) : undefined;
           const basePath = buttonPath.replace(/\.button$/, "");
 
           const actionConfig: ButtonActionConfig = {
             type: "email",
             target: email,
+            label,
           };
 
           current = setDeepValue(current as unknown as Record<string, unknown>, `${basePath}.buttonAction`, actionConfig) as unknown as WebsiteData;
+          if (label) {
+            current = setDeepValue(current as unknown as Record<string, unknown>, buttonPath, label) as unknown as WebsiteData;
+          }
           appliedSummaries.push(act.summary || `Configured button to send email to ${email}`);
           break;
         }
@@ -341,7 +374,7 @@ export function executeStudioActions(
         }
 
         case "reorder_sections": {
-          const newOrder = act.payload.newOrder as string[];
+          const newOrder = (act.payload.newOrder || act.payload.sectionOrder) as string[];
           if (Array.isArray(newOrder) && newOrder.length > 0) {
             if (activePageId && current.pages) {
               const pageIndex = current.pages.findIndex(p => p.id === activePageId);
@@ -412,6 +445,25 @@ export function executeStudioActions(
             current.products = (current.products as ProductItem[]).filter((p) => p.id !== productId);
             appliedSummaries.push(act.summary || `Deleted product ${productId}`);
           }
+          break;
+        }
+
+        case "update_theme": {
+          const style = act.payload.style ? String(act.payload.style) : undefined;
+          const primaryColor = act.payload.primaryColor ? String(act.payload.primaryColor) : undefined;
+          const secondaryColor = act.payload.secondaryColor ? String(act.payload.secondaryColor) : undefined;
+
+          if (style) {
+            current.brandStyle = style;
+          }
+          if (primaryColor) {
+            current.primaryColor = primaryColor;
+          }
+          if (secondaryColor) {
+            current.secondaryColor = secondaryColor;
+          }
+
+          appliedSummaries.push(act.summary || `Updated website theme styling`);
           break;
         }
 

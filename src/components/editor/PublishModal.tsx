@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useBuilderStore } from "@/store/builderStore";
 import { useGeneratedWebsiteStore } from "@/store/generatedWebsiteStore";
-import { publishProject, unpublishProject } from "@/lib/projects";
+import { publishProject, unpublishProject, updateProject, getProject } from "@/lib/projects";
 import { toast } from "@/store/toastStore";
 import { detectBackendRequirement } from "@/lib/backendDetection";
 import { getDnsInstructions, normalizeDomain, isValidDomain } from "@/lib/domains";
@@ -60,6 +60,53 @@ export default function PublishModal({ isOpen, onClose, projectId: propProjectId
   // Backend Option State
   const backendAnalysis = detectBackendRequirement(category);
   const [selectedBackendMode, setSelectedBackendMode] = useState<"managed" | "custom">("managed");
+  const [isSavingBackend, setIsSavingBackend] = useState(false);
+
+  useEffect(() => {
+    if (!projectId) return;
+    void getProject(projectId).then(({ data }) => {
+      if (data?.backend_requirement) {
+        if (data.backend_requirement === "custom_api") {
+          setSelectedBackendMode("custom");
+        } else {
+          setSelectedBackendMode("managed");
+        }
+      }
+    });
+  }, [projectId]);
+
+  async function handleApplyBackendConfig() {
+    if (!projectId) return;
+    setIsSavingBackend(true);
+    try {
+      const requirementType = selectedBackendMode === "managed"
+        ? (backendAnalysis.requiresBackend ? backendAnalysis.requirementType : "static")
+        : "custom_api";
+
+      const backendConfig = {
+        mode: selectedBackendMode,
+        title: selectedBackendMode === "managed" ? backendAnalysis.options.managed.title : backendAnalysis.options.custom.title,
+        features: selectedBackendMode === "managed" ? backendAnalysis.options.managed.features : backendAnalysis.options.custom.features,
+        updated_at: new Date().toISOString(),
+      };
+
+      const { error } = await updateProject(projectId, {
+        backend_requirement: requirementType,
+        backend_config: backendConfig,
+      });
+
+      if (error) throw error;
+
+      toast.success(
+        "Backend Architecture Saved",
+        `Configured for ${selectedBackendMode === "managed" ? "WebsiteBanja Managed Pipeline" : "Custom Webhook Endpoint"}`
+      );
+    } catch (err) {
+      toast.error("Failed to save backend", err instanceof Error ? err.message : "Database error.");
+    } finally {
+      setIsSavingBackend(false);
+    }
+  }
 
   if (!isOpen) return null;
 
@@ -512,12 +559,11 @@ export default function PublishModal({ isOpen, onClose, projectId: propProjectId
               <div className="pt-2 flex justify-end">
                 <button
                   type="button"
-                  onClick={() => {
-                    toast.success("Backend Architecture Saved", `Configured for ${selectedBackendMode === "managed" ? "WebsiteBanja Managed Pipeline" : "Custom Webhook Endpoint"}`);
-                  }}
-                  className="flex items-center gap-1.5 rounded-xl bg-zinc-900 dark:bg-white dark:text-zinc-900 text-white px-4 py-2.5 text-xs font-bold transition hover:opacity-90 active:scale-95"
+                  disabled={isSavingBackend}
+                  onClick={handleApplyBackendConfig}
+                  className="flex items-center gap-1.5 rounded-xl bg-zinc-900 dark:bg-white dark:text-zinc-900 text-white px-4 py-2.5 text-xs font-bold transition hover:opacity-90 active:scale-95 disabled:opacity-50"
                 >
-                  <span>Apply Backend Configuration</span>
+                  <span>{isSavingBackend ? "Saving..." : "Apply Backend Configuration"}</span>
                   <ArrowRight className="h-3.5 w-3.5" />
                 </button>
               </div>

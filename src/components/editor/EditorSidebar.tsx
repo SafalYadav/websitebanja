@@ -231,9 +231,9 @@ export default function EditorSidebar() {
   ];
 
   return (
-    <aside className="w-80 border-r border-zinc-200/80 bg-white/95 dark:border-white/10 dark:bg-zinc-950/95 flex flex-col h-full flex-shrink-0 select-none overflow-hidden backdrop-blur-xl">
+    <aside className="w-80 border-r border-zinc-200/80 bg-white/95 dark:border-white/[0.08] dark:bg-[#0a0d14]/95 flex flex-col h-full flex-shrink-0 select-none overflow-hidden backdrop-blur-xl">
       {/* Top Studio Mode Tab Strip */}
-      <div className="grid grid-cols-4 border-b border-zinc-200/80 dark:border-white/10 bg-zinc-50/70 dark:bg-zinc-900/60 p-1 gap-1">
+      <div className="grid grid-cols-4 border-b border-zinc-200/80 dark:border-white/[0.08] bg-zinc-50/70 dark:bg-[#05070b]/60 p-1 gap-1">
         {TABS.map((tab) => {
           const TabIcon = tab.icon;
           const isActive = activeStudioTab === tab.id;
@@ -241,12 +241,13 @@ export default function EditorSidebar() {
             <button
               key={tab.id}
               type="button"
+              data-testid={`studio-tab-${tab.id}`}
               onClick={() => setActiveStudioTab(tab.id)}
               className={cn(
                 "flex flex-col items-center justify-center gap-1 rounded-xl py-1.5 px-0.5 text-[9px] font-bold transition-all",
                 isActive
-                  ? "bg-white text-violet-600 shadow-xs dark:bg-zinc-800 dark:text-white"
-                  : "text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white hover:bg-zinc-100/60 dark:hover:bg-zinc-800/40"
+                  ? "bg-white text-cyan-600 shadow-xs dark:bg-white/[0.08] dark:text-cyan-400 dark:border dark:border-cyan-500/30"
+                  : "text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white hover:bg-zinc-100/60 dark:hover:bg-white/[0.04]"
               )}
             >
               <TabIcon className="h-3.5 w-3.5" />
@@ -405,7 +406,7 @@ export default function EditorSidebar() {
               <button
                 type="button"
                 onClick={() => setActiveStudioTab("elements")}
-                className="flex items-center gap-1 text-xs font-bold text-violet-600 hover:text-violet-700 dark:text-violet-400"
+                className="flex items-center gap-1 text-xs font-bold text-cyan-600 hover:text-cyan-700 dark:text-cyan-400"
               >
                 <Plus className="h-3.5 w-3.5" />
                 Add Block
@@ -429,8 +430,8 @@ export default function EditorSidebar() {
                     className={cn(
                       "group relative flex items-center justify-between rounded-2xl border p-3 transition-all text-xs font-medium",
                       isSelected
-                        ? "border-violet-500/60 bg-violet-50/80 text-violet-950 shadow-xs dark:border-violet-500/50 dark:bg-violet-950/40 dark:text-white"
-                        : "border-transparent text-zinc-700 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-900 dark:hover:text-white"
+                        ? "border-cyan-500/50 bg-cyan-50/70 text-cyan-950 shadow-xs dark:border-cyan-500/40 dark:bg-cyan-950/30 dark:text-white"
+                        : "border-transparent text-zinc-700 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-300 dark:hover:bg-white/[0.03] dark:hover:text-white"
                     )}
                   >
                     <button
@@ -443,8 +444,8 @@ export default function EditorSidebar() {
                         className={cn(
                           "flex h-7 w-7 items-center justify-center rounded-lg flex-shrink-0",
                           isSelected
-                            ? "bg-violet-600 text-white"
-                            : "bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400"
+                            ? "bg-cyan-500 text-slate-950 font-bold"
+                            : "bg-zinc-100 text-zinc-500 dark:bg-white/[0.05] dark:text-zinc-400"
                         )}
                       >
                         <Icon className="h-3.5 w-3.5" />
@@ -502,9 +503,9 @@ export default function EditorSidebar() {
                           addSection(block.type);
                           setActiveStudioTab("layers");
                         }}
-                        className="flex items-start gap-3 rounded-2xl border border-zinc-200 bg-white p-3 text-left transition hover:border-violet-500 hover:bg-violet-50/40 hover:shadow-xs dark:border-white/10 dark:bg-zinc-900 dark:hover:bg-zinc-800"
+                        className="flex items-start gap-3 rounded-2xl border border-zinc-200 bg-white p-3 text-left transition hover:border-cyan-500 hover:bg-cyan-50/40 hover:shadow-xs dark:border-white/[0.08] dark:bg-white/[0.02] dark:hover:bg-white/[0.05] dark:hover:border-cyan-500/40"
                       >
-                        <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-violet-600/10 text-violet-600 dark:bg-violet-500/20 dark:text-violet-400 shrink-0">
+                        <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-cyan-500/10 text-cyan-600 dark:bg-cyan-500/20 dark:text-cyan-400 shrink-0">
                           <BlockIcon className="h-4 w-4" />
                         </div>
                         <div>
@@ -527,9 +528,9 @@ export default function EditorSidebar() {
         {/* 4. Catalog Tab */}
         {activeStudioTab === "catalog" && (
           <div className="space-y-4">
-            <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4 dark:border-white/10 dark:bg-zinc-900/50">
+            <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4 dark:border-white/[0.08] dark:bg-white/[0.02]">
               <div className="flex items-center gap-3 mb-3">
-                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-violet-600 text-white shadow-xs">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-cyan-500 text-slate-950 font-bold shadow-xs">
                   <ShoppingBag className="h-4 w-4" />
                 </div>
                 <div>
@@ -544,7 +545,7 @@ export default function EditorSidebar() {
               <button
                 type="button"
                 onClick={() => setIsCatalogModalOpen(true)}
-                className="w-full flex items-center justify-center gap-2 rounded-xl bg-violet-600 py-2.5 px-4 text-xs font-bold text-white shadow-md shadow-violet-600/20 hover:bg-violet-700 active:scale-98 transition"
+                className="w-full flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 py-2.5 px-4 text-xs font-bold text-slate-950 shadow-md shadow-cyan-500/20 hover:opacity-95 active:scale-98 transition"
               >
                 <ShoppingBag className="h-4 w-4" />
                 <span>Open Catalog Workspace</span>
@@ -613,8 +614,8 @@ export default function EditorSidebar() {
                     className={cn(
                       "rounded-xl border p-2.5 text-xs font-bold transition text-center",
                       style === st
-                        ? "border-violet-600 bg-violet-50 text-violet-700 shadow-xs dark:bg-violet-950/40 dark:text-white"
-                        : "border-zinc-200 text-zinc-600 hover:bg-zinc-50 dark:border-white/10 dark:text-zinc-400 dark:hover:bg-zinc-900"
+                        ? "border-cyan-500 bg-cyan-50 text-cyan-700 shadow-xs dark:bg-cyan-950/40 dark:text-white dark:border-cyan-500/50"
+                        : "border-zinc-200 text-zinc-600 hover:bg-zinc-50 dark:border-white/[0.08] dark:text-zinc-400 dark:hover:bg-white/[0.04]"
                     )}
                   >
                     {st}

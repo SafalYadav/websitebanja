@@ -45,7 +45,7 @@ function test(title, fn) {
   }
 }
 
-async function testAsync(title, fn) {
+async function _testAsync(title, fn) {
   try {
     await fn();
     console.log(`  ✔ [PASS] ${title}`);
@@ -239,10 +239,6 @@ test("Backend Parity: 4 backend requirements match project.ts and backend-capabi
 });
 
 test("Design System Parity: 18 CSS theme tokens match websiteTheme.ts", () => {
-  const themeContent = fs.readFileSync(
-    path.join(ROOT_DIR, "src/lib/websiteTheme.ts"),
-    "utf-8"
-  );
   const designSystemContent = fs.readFileSync(
     path.join(ROOT_DIR, "src/knowledge/global/design-system.ts"),
     "utf-8"
@@ -312,15 +308,15 @@ test("Global Knowledge registry enforces deep freeze immutability in index.ts", 
 // =============================================================================
 // TEST SUITE 4: SUPABASE DATABASE SCHEMA & NON-RECURSIVE RLS POLICIES
 // =============================================================================
-console.log("\n[Suite 4] Supabase Database Schema & Non-Recursive RLS");
+console.log("\n[Suite 4] Azure PostgreSQL Database Schema & Non-Recursive RLS");
 
-test("Migration 20260905000000_create_project_knowledge.sql exists and is valid", () => {
-  const migrationPath = path.join(
+test("Canonical 01_azure_schema_baseline.sql defines project_knowledge schema and non-recursive RLS", () => {
+  const schemaPath = path.join(
     ROOT_DIR,
-    "supabase/migrations/20260905000000_create_project_knowledge.sql"
+    "azure-migration/01_azure_schema_baseline.sql"
   );
-  assert.ok(fs.existsSync(migrationPath), "Migration file must exist");
-  const sql = fs.readFileSync(migrationPath, "utf-8");
+  assert.ok(fs.existsSync(schemaPath), "Azure baseline schema file must exist");
+  const sql = fs.readFileSync(schemaPath, "utf-8");
 
   // Table definitions
   assert.ok(
@@ -346,12 +342,6 @@ test("Migration 20260905000000_create_project_knowledge.sql exists and is valid"
   assert.ok(
     sql.includes("ALTER TABLE public.project_knowledge_revisions ENABLE ROW LEVEL SECURITY"),
     "Must enable RLS on project_knowledge_revisions"
-  );
-
-  // Anon revocation
-  assert.ok(
-    sql.includes("REVOKE ALL ON public.project_knowledge FROM anon"),
-    "Must revoke all permissions from anon role"
   );
 
   // Non-recursive SECURITY DEFINER functions in policies

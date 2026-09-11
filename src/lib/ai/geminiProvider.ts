@@ -53,7 +53,7 @@ export class GeminiProvider implements ModelProvider {
       config: Object.keys(config).length > 0 ? config : undefined,
     });
 
-    let text = response.text ?? '';
+    const text = response.text ?? '';
     let toolCall: any | undefined;
 
     if (response.functionCalls && response.functionCalls.length > 0) {

@@ -4,7 +4,7 @@ process.env.WS_NO_BUFFER_UTIL = '1';
 process.env.WS_NO_UTF_8_VALIDATE = '1';
 
 import { GoogleGenAI, Modality } from '@google/genai';
-import { PRECACHED_PHRASES, getCachedGreetingPcm } from '@/lib/ai/cachedAudio';
+import { getCachedGreetingPcm } from '@/lib/ai/cachedAudio';
 
 // In-memory LRU cache for synthesized speech chunks to provide instant (0ms) response
 export const pcmCache = new Map<string, Buffer>();
@@ -78,9 +78,9 @@ export async function streamGeminiLiveVoice(
   const cleanLower = cleanText.toLowerCase();
   const cacheKey = `${voiceName}:${cleanLower}`;
 
-  // Check cache for instant (0ms) playback of repeated phrases or initial greeting
-  const isGreeting = cleanLower.includes("i'm mitra") && cleanLower.includes("website architect");
-  const cachedBuffer = pcmCache.get(cacheKey) || (isGreeting ? getCachedGreetingPcm() : null);
+  // Check cache for instant (0ms) playback of repeated phrases or exact initial greeting
+  const isExactGreeting = cleanLower === CANONICAL_INITIAL_GREETING.toLowerCase().trim();
+  const cachedBuffer = pcmCache.get(cacheKey) || (isExactGreeting ? getCachedGreetingPcm() : null);
 
   if (cachedBuffer) {
     // Chunk the cached buffer into 8KB slices to simulate smooth streaming

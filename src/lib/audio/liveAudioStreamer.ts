@@ -8,6 +8,7 @@
 export class LiveAudioStreamer {
   private audioContext: AudioContext | null = null;
   private masterGain: GainNode | null = null;
+  private compressor: DynamicsCompressorNode | null = null;
   private scheduledTime: number = 0;
   private activeSources: AudioBufferSourceNode[] = [];
   private endTimeoutId: any = null;
@@ -41,6 +42,7 @@ export class LiveAudioStreamer {
     if (existingContext && existingContext !== this.audioContext) {
       this.audioContext = existingContext;
       this.masterGain = null;
+      this.compressor = null;
     }
 
     if (!this.audioContext) {
@@ -82,15 +84,28 @@ export class LiveAudioStreamer {
           if (this.masterGain) {
             this.masterGain.disconnect();
           }
+          if (this.compressor) {
+            this.compressor.disconnect();
+          }
         } catch {
           // ignore
         }
         try {
           this.masterGain = this.audioContext.createGain();
           this.masterGain.gain.setValueAtTime(1.0, this.audioContext.currentTime);
-          this.masterGain.connect(this.audioContext.destination);
+
+          this.compressor = this.audioContext.createDynamicsCompressor();
+          this.compressor.threshold.setValueAtTime(-20, this.audioContext.currentTime);
+          this.compressor.knee.setValueAtTime(30, this.audioContext.currentTime);
+          this.compressor.ratio.setValueAtTime(3, this.audioContext.currentTime);
+          this.compressor.attack.setValueAtTime(0.003, this.audioContext.currentTime);
+          this.compressor.release.setValueAtTime(0.25, this.audioContext.currentTime);
+
+          this.masterGain.connect(this.compressor);
+          this.compressor.connect(this.audioContext.destination);
         } catch {
           this.masterGain = null;
+          this.compressor = null;
         }
       }
     }
@@ -160,12 +175,27 @@ export class LiveAudioStreamer {
       const dataView = new DataView(alignedBytes.buffer, alignedBytes.byteOffset, alignedBytes.byteLength);
       const float32 = new Float32Array(numSamples);
 
+      let peak = 0;
       for (let i = 0; i < numSamples; i++) {
         const int16Sample = dataView.getInt16(i * 2, true);
-        float32[i] = int16Sample / 32768.0;
+        const sampleVal = int16Sample / 32768.0;
+        float32[i] = sampleVal;
+        const absVal = Math.abs(sampleVal);
+        if (absVal > peak) peak = absVal;
       }
 
-      console.log(`[VoiceDebug] decoded sample count: ${numSamples}`);
+      // Voice Loudness Normalization:
+      // If peak exceeds nominal target threshold (e.g. pre-recorded high-gain greeting at peak 0.81),
+      // scale it down smoothly so it matches dynamic TTS nominal level (~0.25 - 0.32 peak, ~0.036-0.054 RMS).
+      const TARGET_PEAK = 0.32;
+      if (peak > TARGET_PEAK) {
+        const scaleFactor = TARGET_PEAK / peak;
+        for (let i = 0; i < numSamples; i++) {
+          float32[i] *= scaleFactor;
+        }
+      }
+
+      console.log(`[VoiceDebug] decoded sample count: ${numSamples}, original peak: ${peak.toFixed(4)}`);
 
       // 5. Create AudioBuffer using getChannelData (universal Safari support)
       const audioBuffer = ctx.createBuffer(1, numSamples, this.sampleRate);
@@ -173,7 +203,11 @@ export class LiveAudioStreamer {
 
       const source = ctx.createBufferSource();
       source.buffer = audioBuffer;
-      source.connect(ctx.destination);
+      if (this.masterGain) {
+        source.connect(this.masterGain);
+      } else {
+        source.connect(ctx.destination);
+      }
 
       // 6. Seamless gapless scheduling with 30ms lead time for WebKit thread dispatch
       const now = ctx.currentTime;
@@ -221,20 +255,42 @@ export class LiveAudioStreamer {
       return;
     }
 
-    const now = this.audioContext.currentTime;
-    const remainingSeconds = Math.max(0, this.scheduledTime - now);
-    const delayMs = Math.ceil(remainingSeconds * 1000) + 80;
+    const startCompletionTimer = () => {
+      if (!this.audioContext || !this.isPlaying) {
+        this.isPlaying = false;
+        this.scheduledTime = 0;
+        onComplete?.();
+        this.onPlaybackEndCallback?.();
+        return;
+      }
+      const now = this.audioContext.currentTime;
+      const remainingSeconds = Math.max(0, this.scheduledTime - now);
+      const delayMs = Math.ceil(remainingSeconds * 1000) + 80;
 
-    this.endTimeoutId = setTimeout(() => {
-      this.isPlaying = false;
-      this.activeSources = [];
-      this.scheduledTime = 0;
-      this.residueBuffer = null;
-      this.endTimeoutId = null;
-      console.log('[VoiceDebug] playback ended');
-      onComplete?.();
-      this.onPlaybackEndCallback?.();
-    }, delayMs);
+      this.endTimeoutId = setTimeout(() => {
+        this.isPlaying = false;
+        this.activeSources = [];
+        this.scheduledTime = 0;
+        this.residueBuffer = null;
+        this.endTimeoutId = null;
+        console.log('[VoiceDebug] playback ended');
+        onComplete?.();
+        this.onPlaybackEndCallback?.();
+      }, delayMs);
+    };
+
+    if (this.audioContext.state === 'suspended') {
+      console.log('[VoiceDebug] AudioContext is suspended, waiting for user resume to complete playback');
+      const onStateChange = () => {
+        if (this.audioContext?.state === 'running') {
+          this.audioContext.removeEventListener('statechange', onStateChange);
+          startCompletionTimer();
+        }
+      };
+      this.audioContext.addEventListener('statechange', onStateChange);
+    } else {
+      startCompletionTimer();
+    }
   }
 
   /**

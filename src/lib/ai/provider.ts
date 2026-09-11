@@ -16,7 +16,7 @@ export interface GenerateOptions {
   /** Temperature for sampling */
   temperature?: number;
   /** Any provider‑specific configuration */
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 export interface ModelResponse {

@@ -88,13 +88,13 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="antialiased" suppressHydrationWarning>
+    <html lang="en" className="dark antialiased" suppressHydrationWarning>
       <head>
         <JsonLd data={websiteJsonLd} />
         <JsonLd data={organizationJsonLd} />
         <JsonLd data={softwareApplicationJsonLd} />
       </head>
-      <body className="min-h-screen flex flex-col font-sans bg-slate-50 text-slate-900 dark:bg-[#09090B] dark:text-zinc-100 transition-colors duration-200 selection:bg-violet-500/30 selection:text-violet-900 dark:selection:text-white">
+      <body className="min-h-screen flex flex-col font-sans bg-slate-50 text-slate-900 dark:bg-[#040406] dark:text-zinc-100 transition-colors duration-200 selection:bg-cyan-500/30 selection:text-cyan-900 dark:selection:text-white">
         <ThemeProvider>
           <SmoothScroll>
             {children}

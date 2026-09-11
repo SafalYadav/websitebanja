@@ -24,7 +24,7 @@ Create these documents:
 - ai/changelog.md: initial planning entry.
 - ai/prompts.md: record the planning prompt and component-generation prompt intent.
 - ai/roadmap.md: staged roadmap.
-- planning/prd.md, planning/trd.md, planning/app-flow.md, planning/ui-ux.md, planning/backend-schema.md, planning/implementation-plan.md.
+- planning/prd.md, planning/trd.md, planning/app-flow.md, planning/ui-ux.md (grounded in the principles of skills/ui-ux/skill.md: visual hierarchy, 8pt spacing, 60-30-10 color balance, WCAG 2.2 AA contrast, and zero emoji icons), planning/backend-schema.md, planning/implementation-plan.md.
 - tasks/active.md, tasks/completed.md, tasks/bugs.md.
 
 ${existingWorkspace ? `Existing workspace (read every document, preserve valid decisions, and update only what the new project context affects):\n${Object.entries(existingWorkspace).map(([path, content]) => `### ${path}\n${content}`).join("\n\n")}` : "This is a new workspace."}
