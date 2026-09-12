@@ -10,7 +10,7 @@ on:
 
 permissions:
   id-token: write
-  contents: read
+  contents: write
 
 jobs:
   diagnose:
@@ -18,6 +18,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Azure Login via OIDC
         uses: azure/login@v2
@@ -25,25 +27,6 @@ jobs:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-
-      - name: Inspect Azure Resources
-        id: inspect
-        run: |
-          echo "## Azure Diagnostic Report" >> $GITHUB_STEP_SUMMARY
-          echo "### 1. Resources in Resource Group websitebanja-rg" >> $GITHUB_STEP_SUMMARY
-          echo '```json' >> $GITHUB_STEP_SUMMARY
-          az resource list --resource-group websitebanja-rg --output json >> $GITHUB_STEP_SUMMARY 2>&1 || echo "Error listing resources" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-
-          echo "### 2. Azure PostgreSQL Server Details" >> $GITHUB_STEP_SUMMARY
-          echo '```json' >> $GITHUB_STEP_SUMMARY
-          az postgres flexible-server show --resource-group websitebanja-rg --name websitebanja-db --output json >> $GITHUB_STEP_SUMMARY 2>&1 || echo "Error showing server" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-
-          echo "### 3. Azure PostgreSQL Firewall Rules" >> $GITHUB_STEP_SUMMARY
-          echo '```json' >> $GITHUB_STEP_SUMMARY
-          az postgres flexible-server firewall-rule list --resource-group websitebanja-rg --name websitebanja-db --output json >> $GITHUB_STEP_SUMMARY 2>&1 || echo "Error listing firewall rules" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -53,46 +36,100 @@ jobs:
       - name: Install pg
         run: npm install pg
 
-      - name: Query Database Directly
-        continue-on-error: true
+      - name: Run Diagnostics and Save JSON
         env:
           AZURE_DB_HOST: websitebanja-db.postgres.database.azure.com
           AZURE_DB_USER: websitebanjaadmin
           AZURE_DB_PASSWORD: ${{ secrets.AZURE_DB_PASSWORD || 'fizSy8-xaxves-catdos' }}
         run: |
-          echo "### 4. Direct Node.js Query Attempt" >> $GITHUB_STEP_SUMMARY
-          echo '```text' >> $GITHUB_STEP_SUMMARY
           node -e "
+          const { execSync } = require('child_process');
+          const fs = require('fs');
           const { Client } = require('pg');
-          const client = new Client({
-            host: process.env.AZURE_DB_HOST,
-            port: 5432,
-            user: process.env.AZURE_DB_USER,
-            password: process.env.AZURE_DB_PASSWORD,
-            database: 'postgres',
-            ssl: { rejectUnauthorized: false },
-            connectionTimeoutMillis: 8000,
-          });
 
-          async function check() {
+          const report = {
+            timestamp: new Date().toISOString(),
+            resources: null,
+            server: null,
+            firewall: null,
+            dbQuery: null,
+            error: null
+          };
+
+          try {
+            console.log('Fetching Azure resources in websitebanja-rg...');
+            report.resources = JSON.parse(execSync('az resource list --resource-group websitebanja-rg -o json').toString());
+          } catch (e) {
+            report.resourcesError = e.message;
+          }
+
+          try {
+            console.log('Fetching Azure PostgreSQL server details...');
+            report.server = JSON.parse(execSync('az postgres flexible-server show --resource-group websitebanja-rg --name websitebanja-db -o json').toString());
+          } catch (e) {
+            report.serverError = e.message;
+          }
+
+          try {
+            console.log('Fetching firewall rules...');
+            report.firewall = JSON.parse(execSync('az postgres flexible-server firewall-rule list --resource-group websitebanja-rg --name websitebanja-db -o json').toString());
+          } catch (e) {
+            report.firewallError = e.message;
+          }
+
+          async function queryDb() {
+            const client = new Client({
+              host: process.env.AZURE_DB_HOST,
+              port: 5432,
+              user: process.env.AZURE_DB_USER,
+              password: process.env.AZURE_DB_PASSWORD,
+              database: 'postgres',
+              ssl: { rejectUnauthorized: false },
+              connectionTimeoutMillis: 15000,
+            });
+
             try {
-              console.log('Connecting to PostgreSQL...');
+              console.log('Connecting to PostgreSQL from runner...');
               await client.connect();
-              console.log('Connected successfully!');
+              console.log('Connected!');
 
               const count = await client.query('SELECT COUNT(*) FROM public.projects');
-              console.log('Total projects in public.projects:', count.rows[0].count);
+              const sample = await client.query('SELECT id, user_id, name, is_published, created_at, updated_at FROM public.projects ORDER BY updated_at DESC LIMIT 10');
+              const users = await client.query('SELECT COUNT(DISTINCT user_id) as total_users FROM public.projects');
+              const subs = await client.query('SELECT COUNT(*) as total_subs FROM public.subscriptions');
+              const pk = await client.query('SELECT COUNT(*) as total_pk FROM public.project_knowledge');
 
-              const sample = await client.query('SELECT id, user_id, name, is_published, created_at, updated_at FROM public.projects ORDER BY updated_at DESC LIMIT 5');
-              console.log('Sample projects:');
-              console.log(JSON.stringify(sample.rows, null, 2));
+              report.dbQuery = {
+                success: true,
+                projectCount: parseInt(count.rows[0].count, 10),
+                uniqueUsers: parseInt(users.rows[0].total_users, 10),
+                subscriptionsCount: parseInt(subs.rows[0].total_subs, 10),
+                knowledgeCount: parseInt(pk.rows[0].total_pk, 10),
+                sampleProjects: sample.rows,
+              };
             } catch (err) {
-              console.error('Query error:', err.message);
-              if (err.cause) console.error('Cause:', err.cause);
+              console.error('DB query error:', err);
+              report.dbQuery = {
+                success: false,
+                error: err.message,
+                code: err.code,
+                cause: err.cause ? err.cause.message : null,
+              };
             } finally {
               await client.end().catch(() => {});
             }
+
+            fs.writeFileSync('diagnose_result.json', JSON.stringify(report, null, 2));
+            console.log('diagnose_result.json written successfully.');
           }
-          check();
-          " >> $GITHUB_STEP_SUMMARY 2>&1
-          echo '```' >> $GITHUB_STEP_SUMMARY
+
+          queryDb();
+          "
+
+      - name: Commit and Push Report
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add diagnose_result.json
+          git commit -m "chore: save Azure PostgreSQL diagnostic results [skip ci]" || exit 0
+          git push origin main
