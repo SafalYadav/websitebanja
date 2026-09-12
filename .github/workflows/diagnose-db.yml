@@ -50,40 +50,47 @@ jobs:
           const report = {
             timestamp: new Date().toISOString(),
             firewallBefore: null,
-            firewallCreateResult: null,
+            firewallCreateAzureResult: null,
+            firewallCreateAllResult: null,
             firewallAfter: null,
             dbQuery: null
           };
 
-          // 1. List Firewall rules with correct --server-name argument
           try {
-            console.log('Listing existing firewall rules...');
             report.firewallBefore = JSON.parse(execSync('az postgres flexible-server firewall-rule list --resource-group websitebanja-rg --server-name websitebanja-db -o json').toString());
-            console.log('Current firewall rules count:', report.firewallBefore.length);
           } catch (e) {
-            console.error('Error listing firewall rules:', e.message);
             report.firewallBeforeError = e.message;
           }
 
-          // 2. Attempt to create AllowAll firewall rule
+          // 1. Allow all Azure services (0.0.0.0)
           try {
-            console.log('Creating firewall rule AllowAll (0.0.0.0 - 255.255.255.255)...');
-            const out = execSync('az postgres flexible-server firewall-rule create --resource-group websitebanja-rg --server-name websitebanja-db --rule-name AllowAll --start-ip-address 0.0.0.0 --end-ip-address 255.255.255.255 -o json').toString();
-            report.firewallCreateResult = JSON.parse(out);
-            console.log('Firewall rule created successfully!');
+            console.log('Creating firewall rule AllowAllAzureServices (0.0.0.0)...');
+            const out1 = execSync('az postgres flexible-server firewall-rule create --resource-group websitebanja-rg --server-name websitebanja-db --name AllowAllAzureServices --start-ip-address 0.0.0.0 --end-ip-address 0.0.0.0 -o json').toString();
+            report.firewallCreateAzureResult = JSON.parse(out1);
+            console.log('AllowAllAzureServices created successfully!');
           } catch (e) {
-            console.error('Error creating firewall rule:', e.message);
-            report.firewallCreateError = e.message;
+            console.error('Error creating AllowAllAzureServices rule:', e.message);
+            report.firewallCreateAzureError = e.message;
           }
 
-          // 3. List Firewall rules after
+          // 2. Allow all IPs (0.0.0.0 - 255.255.255.255) for container app outbound IPs + dev
+          try {
+            console.log('Creating firewall rule AllowAllIPs (0.0.0.0 - 255.255.255.255)...');
+            const out2 = execSync('az postgres flexible-server firewall-rule create --resource-group websitebanja-rg --server-name websitebanja-db --name AllowAllIPs --start-ip-address 0.0.0.0 --end-ip-address 255.255.255.255 -o json').toString();
+            report.firewallCreateAllResult = JSON.parse(out2);
+            console.log('AllowAllIPs created successfully!');
+          } catch (e) {
+            console.error('Error creating AllowAllIPs rule:', e.message);
+            report.firewallCreateAllError = e.message;
+          }
+
           try {
             report.firewallAfter = JSON.parse(execSync('az postgres flexible-server firewall-rule list --resource-group websitebanja-rg --server-name websitebanja-db -o json').toString());
           } catch (e) {
             report.firewallAfterError = e.message;
           }
 
-          // 4. Query Database
+          // 3. Query Database
           async function queryDb() {
             const client = new Client({
               host: process.env.AZURE_DB_HOST,
@@ -130,7 +137,7 @@ jobs:
             }
 
             fs.writeFileSync('diagnose_result.json', JSON.stringify(report, null, 2));
-            console.log('Updated diagnose_result.json written.');
+            console.log('diagnose_result.json written successfully.');
           }
 
           queryDb();
@@ -141,5 +148,5 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add diagnose_result.json
-          git commit -m "chore: save Azure PostgreSQL firewall and query results [skip ci]" || exit 0
+          git commit -m "chore: apply Azure PostgreSQL firewall rules and query database [skip ci]" || exit 0
           git push origin main
