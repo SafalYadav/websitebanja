@@ -26,42 +26,24 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Check Azure PostgreSQL Server Status
-        id: server-status
+      - name: Inspect Azure Resources
+        id: inspect
         run: |
-          echo "=== Azure PostgreSQL Server Details ==="
-          az postgres flexible-server show \
-            --resource-group websitebanja-rg \
-            --name websitebanja-db \
-            --query "{name:name, state:state, fqdn:fullyQualifiedDomainName, version:version, sku:sku.name}" -o json
+          echo "## Azure Diagnostic Report" >> $GITHUB_STEP_SUMMARY
+          echo "### 1. Resources in Resource Group websitebanja-rg" >> $GITHUB_STEP_SUMMARY
+          echo '```json' >> $GITHUB_STEP_SUMMARY
+          az resource list --resource-group websitebanja-rg --output json >> $GITHUB_STEP_SUMMARY 2>&1 || echo "Error listing resources" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
 
-          SERVER_STATE=$(az postgres flexible-server show \
-            --resource-group websitebanja-rg \
-            --name websitebanja-db \
-            --query "state" -o tsv)
-          echo "CURRENT SERVER STATE: $SERVER_STATE"
-          echo "state=$SERVER_STATE" >> $GITHUB_OUTPUT
+          echo "### 2. Azure PostgreSQL Server Details" >> $GITHUB_STEP_SUMMARY
+          echo '```json' >> $GITHUB_STEP_SUMMARY
+          az postgres flexible-server show --resource-group websitebanja-rg --name websitebanja-db --output json >> $GITHUB_STEP_SUMMARY 2>&1 || echo "Error showing server" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
 
-          echo "=== Firewall Rules ==="
-          az postgres flexible-server firewall-rule list \
-            --resource-group websitebanja-rg \
-            --name websitebanja-db -o table
-
-          if [ "$SERVER_STATE" = "Stopped" ]; then
-            echo "SERVER IS STOPPED! Starting server now..."
-            az postgres flexible-server start \
-              --resource-group websitebanja-rg \
-              --name websitebanja-db
-            echo "Server started successfully."
-          fi
-
-          echo "Ensuring Firewall Rule for Azure Services and Public Access..."
-          az postgres flexible-server firewall-rule create \
-            --resource-group websitebanja-rg \
-            --name websitebanja-db \
-            --rule-name AllowAllAzureAndDev \
-            --start-ip-address 0.0.0.0 \
-            --end-ip-address 255.255.255.255 || echo "Firewall rule already exists or updated"
+          echo "### 3. Azure PostgreSQL Firewall Rules" >> $GITHUB_STEP_SUMMARY
+          echo '```json' >> $GITHUB_STEP_SUMMARY
+          az postgres flexible-server firewall-rule list --resource-group websitebanja-rg --name websitebanja-db --output json >> $GITHUB_STEP_SUMMARY 2>&1 || echo "Error listing firewall rules" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -72,11 +54,14 @@ jobs:
         run: npm install pg
 
       - name: Query Database Directly
+        continue-on-error: true
         env:
           AZURE_DB_HOST: websitebanja-db.postgres.database.azure.com
           AZURE_DB_USER: websitebanjaadmin
           AZURE_DB_PASSWORD: ${{ secrets.AZURE_DB_PASSWORD || 'fizSy8-xaxves-catdos' }}
         run: |
+          echo "### 4. Direct Node.js Query Attempt" >> $GITHUB_STEP_SUMMARY
+          echo '```text' >> $GITHUB_STEP_SUMMARY
           node -e "
           const { Client } = require('pg');
           const client = new Client({
@@ -86,7 +71,7 @@ jobs:
             password: process.env.AZURE_DB_PASSWORD,
             database: 'postgres',
             ssl: { rejectUnauthorized: false },
-            connectionTimeoutMillis: 15000,
+            connectionTimeoutMillis: 8000,
           });
 
           async function check() {
@@ -95,31 +80,19 @@ jobs:
               await client.connect();
               console.log('Connected successfully!');
 
-              const ver = await client.query('SELECT version()');
-              console.log('PostgreSQL version:', ver.rows[0].version);
-
               const count = await client.query('SELECT COUNT(*) FROM public.projects');
               console.log('Total projects in public.projects:', count.rows[0].count);
 
-              const sample = await client.query('SELECT id, user_id, name, is_published, created_at, updated_at FROM public.projects ORDER BY updated_at DESC LIMIT 10');
-              console.log('Recent projects:');
+              const sample = await client.query('SELECT id, user_id, name, is_published, created_at, updated_at FROM public.projects ORDER BY updated_at DESC LIMIT 5');
+              console.log('Sample projects:');
               console.log(JSON.stringify(sample.rows, null, 2));
-
-              const users = await client.query('SELECT COUNT(DISTINCT user_id) as total_users FROM public.projects');
-              console.log('Unique project owners:', users.rows[0].total_users);
-
-              const subs = await client.query('SELECT COUNT(*) as total_subs FROM public.subscriptions');
-              console.log('Subscriptions count:', subs.rows[0].total_subs);
-
-              const knowledge = await client.query('SELECT COUNT(*) as total_pk FROM public.project_knowledge');
-              console.log('Project knowledge count:', knowledge.rows[0].total_pk);
-
             } catch (err) {
-              console.error('Query error:', err);
-              process.exit(1);
+              console.error('Query error:', err.message);
+              if (err.cause) console.error('Cause:', err.cause);
             } finally {
-              await client.end();
+              await client.end().catch(() => {});
             }
           }
           check();
-          "
+          " >> $GITHUB_STEP_SUMMARY 2>&1
+          echo '```' >> $GITHUB_STEP_SUMMARY
