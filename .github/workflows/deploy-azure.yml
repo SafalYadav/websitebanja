@@ -82,6 +82,39 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
+      - name: Configure Razorpay Secrets & Environment Variables in Azure
+        id: configure-razorpay
+        run: |
+          echo "Checking if Razorpay secrets are provided in GitHub Secrets..."
+          if [ -n "${{ secrets.RAZORPAY_KEY_SECRET }}" ]; then
+            echo "Registering encrypted razorpay-key-secret in Azure Container App Secret Store..."
+            az containerapp secret set \
+              --name "$CONTAINER_APP_NAME" \
+              --resource-group "$RESOURCE_GROUP" \
+              --secrets razorpay-key-secret="${{ secrets.RAZORPAY_KEY_SECRET }}" >/dev/null
+
+            echo "Setting Razorpay environment variables in Container App..."
+            az containerapp update \
+              --name "$CONTAINER_APP_NAME" \
+              --resource-group "$RESOURCE_GROUP" \
+              --set-env-vars \
+                "RAZORPAY_KEY_ID=${{ secrets.RAZORPAY_KEY_ID }}" \
+                "NEXT_PUBLIC_RAZORPAY_KEY_ID=${{ secrets.RAZORPAY_KEY_ID }}" \
+                "RAZORPAY_KEY_SECRET=secretref:razorpay-key-secret" >/dev/null
+          fi
+
+          echo "Verifying registered secret names in Azure Container App:"
+          az containerapp secret list \
+            --name "$CONTAINER_APP_NAME" \
+            --resource-group "$RESOURCE_GROUP" \
+            --query "[].name" -o tsv | sed 's/^/  - /'
+
+          echo "Verifying environment variable names in Azure Container App:"
+          az containerapp show \
+            --name "$CONTAINER_APP_NAME" \
+            --resource-group "$RESOURCE_GROUP" \
+            --query "properties.template.containers[0].env[].name" -o tsv | sed 's/^/  - /'
+
       - name: Deploy Immutable Image to Container App
         id: deploy
         run: |

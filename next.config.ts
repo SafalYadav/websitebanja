@@ -2,13 +2,13 @@ import type { NextConfig } from "next";
 
 const cspHeader = `
   default-src 'self';
-  script-src 'self' 'unsafe-eval' 'unsafe-inline';
+  script-src 'self' 'unsafe-eval' 'unsafe-inline' https://checkout.razorpay.com;
   style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
   font-src 'self' https://fonts.gstatic.com;
-  connect-src 'self' https://*.supabase.co https://api.openai.com https://accounts.google.com https://generativelanguage.googleapis.com wss://generativelanguage.googleapis.com https://*.blob.core.windows.net https://*.microsoftonline.com https://*.ciamlogin.com;
-  img-src 'self' blob: data: https: https://*.blob.core.windows.net;
+  connect-src 'self' https://*.supabase.co https://api.openai.com https://accounts.google.com https://generativelanguage.googleapis.com wss://generativelanguage.googleapis.com https://*.blob.core.windows.net https://*.microsoftonline.com https://*.ciamlogin.com https://lumberjack.razorpay.com https://api.razorpay.com;
+  img-src 'self' blob: data: https: https://*.blob.core.windows.net https://*.razorpay.com;
   media-src 'self' blob: data:;
-  frame-src 'self' https://accounts.google.com;
+  frame-src 'self' https://accounts.google.com https://api.razorpay.com;
 `.replace(/\s{2,}/g, ' ').trim();
 
 const nextConfig: NextConfig = {

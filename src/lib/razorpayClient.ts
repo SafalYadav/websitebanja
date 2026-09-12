@@ -21,19 +21,33 @@ export function loadRazorpayScript(): Promise<boolean> {
       return;
     }
 
-    const existingScript = document.getElementById("razorpay-checkout-script");
+    const existingScript = document.getElementById("razorpay-checkout-script") as HTMLScriptElement | null;
     if (existingScript) {
-      existingScript.addEventListener("load", () => resolve(true));
-      existingScript.addEventListener("error", () => resolve(false));
-      return;
+      if (window.Razorpay || existingScript.dataset.loaded === "true") {
+        resolve(true);
+        return;
+      }
+      if (existingScript.dataset.failed === "true") {
+        existingScript.remove();
+      } else {
+        existingScript.addEventListener("load", () => resolve(true), { once: true });
+        existingScript.addEventListener("error", () => resolve(false), { once: true });
+        return;
+      }
     }
 
     const script = document.createElement("script");
     script.id = "razorpay-checkout-script";
     script.src = "https://checkout.razorpay.com/v1/checkout.js";
     script.async = true;
-    script.onload = () => resolve(true);
-    script.onerror = () => resolve(false);
+    script.onload = () => {
+      script.dataset.loaded = "true";
+      resolve(true);
+    };
+    script.onerror = () => {
+      script.dataset.failed = "true";
+      resolve(false);
+    };
     document.body.appendChild(script);
   });
 }
@@ -60,7 +74,9 @@ export async function launchRazorpayProCheckout({
   try {
     const loaded = await loadRazorpayScript();
     if (!loaded) {
-      throw new Error("Unable to load Razorpay payment gateway script. Please check your internet connection.");
+      throw new Error(
+        "Unable to load Razorpay payment gateway script. Please check your internet connection or browser security extensions."
+      );
     }
 
     // Get current authenticated user session
