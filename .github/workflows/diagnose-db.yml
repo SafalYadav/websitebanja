@@ -49,34 +49,41 @@ jobs:
 
           const report = {
             timestamp: new Date().toISOString(),
-            resources: null,
-            server: null,
-            firewall: null,
-            dbQuery: null,
-            error: null
+            firewallBefore: null,
+            firewallCreateResult: null,
+            firewallAfter: null,
+            dbQuery: null
           };
 
+          // 1. List Firewall rules with correct --server-name argument
           try {
-            console.log('Fetching Azure resources in websitebanja-rg...');
-            report.resources = JSON.parse(execSync('az resource list --resource-group websitebanja-rg -o json').toString());
+            console.log('Listing existing firewall rules...');
+            report.firewallBefore = JSON.parse(execSync('az postgres flexible-server firewall-rule list --resource-group websitebanja-rg --server-name websitebanja-db -o json').toString());
+            console.log('Current firewall rules count:', report.firewallBefore.length);
           } catch (e) {
-            report.resourcesError = e.message;
+            console.error('Error listing firewall rules:', e.message);
+            report.firewallBeforeError = e.message;
           }
 
+          // 2. Attempt to create AllowAll firewall rule
           try {
-            console.log('Fetching Azure PostgreSQL server details...');
-            report.server = JSON.parse(execSync('az postgres flexible-server show --resource-group websitebanja-rg --name websitebanja-db -o json').toString());
+            console.log('Creating firewall rule AllowAll (0.0.0.0 - 255.255.255.255)...');
+            const out = execSync('az postgres flexible-server firewall-rule create --resource-group websitebanja-rg --server-name websitebanja-db --rule-name AllowAll --start-ip-address 0.0.0.0 --end-ip-address 255.255.255.255 -o json').toString();
+            report.firewallCreateResult = JSON.parse(out);
+            console.log('Firewall rule created successfully!');
           } catch (e) {
-            report.serverError = e.message;
+            console.error('Error creating firewall rule:', e.message);
+            report.firewallCreateError = e.message;
           }
 
+          // 3. List Firewall rules after
           try {
-            console.log('Fetching firewall rules...');
-            report.firewall = JSON.parse(execSync('az postgres flexible-server firewall-rule list --resource-group websitebanja-rg --name websitebanja-db -o json').toString());
+            report.firewallAfter = JSON.parse(execSync('az postgres flexible-server firewall-rule list --resource-group websitebanja-rg --server-name websitebanja-db -o json').toString());
           } catch (e) {
-            report.firewallError = e.message;
+            report.firewallAfterError = e.message;
           }
 
+          // 4. Query Database
           async function queryDb() {
             const client = new Client({
               host: process.env.AZURE_DB_HOST,
@@ -91,11 +98,14 @@ jobs:
             try {
               console.log('Connecting to PostgreSQL from runner...');
               await client.connect();
-              console.log('Connected!');
+              console.log('Connected to PostgreSQL successfully!');
 
               const count = await client.query('SELECT COUNT(*) FROM public.projects');
+              console.log('Total projects in DB:', count.rows[0].count);
+
               const sample = await client.query('SELECT id, user_id, name, is_published, created_at, updated_at FROM public.projects ORDER BY updated_at DESC LIMIT 10');
               const users = await client.query('SELECT COUNT(DISTINCT user_id) as total_users FROM public.projects');
+              const distinctUsers = await client.query('SELECT DISTINCT user_id FROM public.projects');
               const subs = await client.query('SELECT COUNT(*) as total_subs FROM public.subscriptions');
               const pk = await client.query('SELECT COUNT(*) as total_pk FROM public.project_knowledge');
 
@@ -103,24 +113,24 @@ jobs:
                 success: true,
                 projectCount: parseInt(count.rows[0].count, 10),
                 uniqueUsers: parseInt(users.rows[0].total_users, 10),
+                userIds: distinctUsers.rows.map(r => r.user_id),
                 subscriptionsCount: parseInt(subs.rows[0].total_subs, 10),
                 knowledgeCount: parseInt(pk.rows[0].total_pk, 10),
                 sampleProjects: sample.rows,
               };
             } catch (err) {
-              console.error('DB query error:', err);
+              console.error('DB query error:', err.message);
               report.dbQuery = {
                 success: false,
                 error: err.message,
                 code: err.code,
-                cause: err.cause ? err.cause.message : null,
               };
             } finally {
               await client.end().catch(() => {});
             }
 
             fs.writeFileSync('diagnose_result.json', JSON.stringify(report, null, 2));
-            console.log('diagnose_result.json written successfully.');
+            console.log('Updated diagnose_result.json written.');
           }
 
           queryDb();
@@ -131,5 +141,5 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add diagnose_result.json
-          git commit -m "chore: save Azure PostgreSQL diagnostic results [skip ci]" || exit 0
+          git commit -m "chore: save Azure PostgreSQL firewall and query results [skip ci]" || exit 0
           git push origin main
