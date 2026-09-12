@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-09-12T07:42:04.989Z",
+  "timestamp": "2026-09-12T07:44:23.105Z",
   "firewallBefore": [
     {
       "endIpAddress": "106.215.161.92",
@@ -11,7 +11,8 @@
       "type": "Microsoft.DBforPostgreSQL/flexibleServers/firewallRules"
     }
   ],
-  "firewallCreateResult": null,
+  "firewallCreateAzureResult": null,
+  "firewallCreateAllResult": null,
   "firewallAfter": [
     {
       "endIpAddress": "106.215.161.92",
@@ -27,5 +28,6 @@
     "success": false,
     "error": "timeout expired"
   },
-  "firewallCreateError": "Command failed: az postgres flexible-server firewall-rule create --resource-group websitebanja-rg --server-name websitebanja-db --rule-name AllowAll --start-ip-address 0.0.0.0 --end-ip-address 255.255.255.255 -o json\nERROR: unrecognized arguments: --rule-name AllowAll\n\nhttps://aka.ms/cli_ref\nRead more about the command in reference docs\n"
+  "firewallCreateAzureError": "Command failed: az postgres flexible-server firewall-rule create --resource-group websitebanja-rg --server-name websitebanja-db --name AllowAllAzureServices --start-ip-address 0.0.0.0 --end-ip-address 0.0.0.0 -o json\nERROR: (AuthorizationFailed) The client 'e6f3ed24-fe5d-4323-a3d8-36ea591b96e8' with object id 'ef80e1bd-f818-4214-bef3-52f1b96526cd' does not have authorization to perform action 'Microsoft.DBforPostgreSQL/flexibleServers/firewallRules/write' over scope '/subscriptions/5f99d086-da25-4807-b98b-76c7e114bf38/resourceGroups/websitebanja-rg/providers/Microsoft.DBforPostgreSQL/flexibleServers/websitebanja-db/firewallRules/AllowAllAzureServices' or the scope is invalid. If access was recently granted, please refresh your credentials.\nCode: AuthorizationFailed\nMessage: The client 'e6f3ed24-fe5d-4323-a3d8-36ea591b96e8' with object id 'ef80e1bd-f818-4214-bef3-52f1b96526cd' does not have authorization to perform action 'Microsoft.DBforPostgreSQL/flexibleServers/firewallRules/write' over scope '/subscriptions/5f99d086-da25-4807-b98b-76c7e114bf38/resourceGroups/websitebanja-rg/providers/Microsoft.DBforPostgreSQL/flexibleServers/websitebanja-db/firewallRules/AllowAllAzureServices' or the scope is invalid. If access was recently granted, please refresh your credentials.\n",
+  "firewallCreateAllError": "Command failed: az postgres flexible-server firewall-rule create --resource-group websitebanja-rg --server-name websitebanja-db --name AllowAllIPs --start-ip-address 0.0.0.0 --end-ip-address 255.255.255.255 -o json\nERROR: (AuthorizationFailed) The client 'e6f3ed24-fe5d-4323-a3d8-36ea591b96e8' with object id 'ef80e1bd-f818-4214-bef3-52f1b96526cd' does not have authorization to perform action 'Microsoft.DBforPostgreSQL/flexibleServers/firewallRules/write' over scope '/subscriptions/5f99d086-da25-4807-b98b-76c7e114bf38/resourceGroups/websitebanja-rg/providers/Microsoft.DBforPostgreSQL/flexibleServers/websitebanja-db/firewallRules/AllowAllIPs' or the scope is invalid. If access was recently granted, please refresh your credentials.\nCode: AuthorizationFailed\nMessage: The client 'e6f3ed24-fe5d-4323-a3d8-36ea591b96e8' with object id 'ef80e1bd-f818-4214-bef3-52f1b96526cd' does not have authorization to perform action 'Microsoft.DBforPostgreSQL/flexibleServers/firewallRules/write' over scope '/subscriptions/5f99d086-da25-4807-b98b-76c7e114bf38/resourceGroups/websitebanja-rg/providers/Microsoft.DBforPostgreSQL/flexibleServers/websitebanja-db/firewallRules/AllowAllIPs' or the scope is invalid. If access was recently granted, please refresh your credentials.\n"
 }
