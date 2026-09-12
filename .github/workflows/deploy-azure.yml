@@ -7,6 +7,7 @@ on:
     paths-ignore:
       - '**.md'
       - 'docs/**'
+      - '.github/workflows/diagnose-db.yml'
   workflow_dispatch:
 
 permissions:
