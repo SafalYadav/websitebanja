@@ -12,12 +12,14 @@ interface BuilderLayoutProps {
   title: string;
   description: string;
   children: ReactNode;
+  maxWidthClassName?: string;
 }
 
 export default function BuilderLayout({
   title,
   description,
   children,
+  maxWidthClassName = "max-w-4xl",
 }: BuilderLayoutProps) {
   const shouldReduceMotion = useReducedMotion();
 
@@ -43,12 +45,16 @@ export default function BuilderLayout({
       </header>
 
       {/* Main Flow Form */}
-      <main className="mx-auto max-w-4xl px-6 py-10 sm:py-14">
+      <main className={`mx-auto px-4 sm:px-6 py-8 sm:py-12 transition-all duration-300 ${maxWidthClassName}`}>
         <motion.div
           initial={shouldReduceMotion ? { opacity: 1 } : { opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.25, ease: "easeOut" }}
-          className="rounded-3xl border border-zinc-200 bg-white p-6 sm:p-10 shadow-xl backdrop-blur-xl dark:border-white/10 dark:bg-zinc-900/60"
+          className={`rounded-3xl border border-zinc-200 bg-white shadow-xl backdrop-blur-xl dark:border-white/10 dark:bg-zinc-900/60 ${
+            maxWidthClassName.includes("max-w-6xl") || maxWidthClassName.includes("max-w-7xl")
+              ? "p-4 sm:p-7 lg:p-9"
+              : "p-6 sm:p-10"
+          }`}
         >
           <div className="mb-8">
             <h1 className="text-2xl sm:text-4xl font-extrabold tracking-tight text-zinc-900 dark:text-white">

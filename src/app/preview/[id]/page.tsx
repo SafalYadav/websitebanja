@@ -58,20 +58,19 @@ export default async function PreviewPage({ params }: { params: Promise<{ id: st
 
   return (
     <div className="min-h-screen w-full overflow-x-hidden" style={{ backgroundColor: bgColor }}>
-      <WebsiteRenderer 
-        data={previewData} 
-        catalogItems={catalogItems} 
-        isPublic={true} 
-        activePageSlug=""
+      <WebsiteRenderer
+        data={previewData}
+        catalogItems={catalogItems}
         pColor={project?.primary_color}
         sColor={project?.secondary_color}
         brandStyle={project?.style}
-        category={project?.category}
-        businessName={project?.business_name || project?.name}
-        whatsappNumber={project?.whatsapp_number}
-        phone={project?.phone}
-        whatsappMessage={project?.whatsapp_message}
-        whatsappEnabled={project?.whatsapp_enabled}
+        category={project?.category || (previewData as any)?.category || previewData?.brand?.industry}
+        businessName={project?.business_name || project?.name || (previewData as any)?.businessName || previewData?.brand?.name}
+        isPublic={true}
+        whatsappNumber={project?.whatsapp_number || undefined}
+        phone={project?.phone || undefined}
+        whatsappMessage={project?.whatsapp_message || undefined}
+        whatsappEnabled={project?.whatsapp_enabled ?? undefined}
       />
     </div>
   );

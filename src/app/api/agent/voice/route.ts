@@ -1,12 +1,13 @@
 // src/app/api/agent/voice/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
-import { openai } from '@/lib/openai';
 import { generateGeminiSpeech, isGeminiTtsAvailable } from '@/lib/ai/geminiTTS';
 import { isGeminiLiveAvailable, pcmCache, CANONICAL_INITIAL_GREETING } from '@/lib/ai/geminiLiveVoice';
-import { getCachedGreetingPcm } from '@/lib/ai/cachedAudio';
+import { getCachedGreetingPcm, findMatchingGreetingPcm } from '@/lib/ai/cachedAudio';
 import { checkMemoryRateLimit } from '@/lib/rateLimit';
 import { getClientIp } from '@/lib/supabaseServer';
+import { openai } from '@/lib/openai';
+import { MITRA_LANGUAGES, type MitraLanguageId } from '@/lib/constants/mitraLanguages';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -15,7 +16,7 @@ export const maxDuration = 30;
 export async function POST(req: NextRequest) {
   try {
     const ip = getClientIp(req);
-    const { success: withinRateLimit } = checkMemoryRateLimit(`agent_voice_${ip}`, 20, 60 * 1000);
+    const { success: withinRateLimit } = checkMemoryRateLimit(`agent_voice_${ip}`, 30, 60 * 1000);
     if (!withinRateLimit) {
       return NextResponse.json(
         { error: 'Rate limit reached. Please wait a moment before sending more voice requests.' },
@@ -23,11 +24,11 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const hasVoice = Boolean(process.env.OPENAI_API_KEY) || isGeminiLiveAvailable() || isGeminiTtsAvailable();
+    const hasVoice = isGeminiLiveAvailable() || isGeminiTtsAvailable() || Boolean(process.env.OPENAI_API_KEY);
 
     if (!hasVoice) {
       return NextResponse.json(
-        { error: 'Neural Voice is not configured on this server.' },
+        { error: 'Voice synthesizer is not configured on this server. Set GEMINI_API_KEY or OPENAI_API_KEY.' },
         { status: 503 }
       );
     }
@@ -42,7 +43,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { text, voice } = body || {};
+    const { text, voice, language } = body || {};
 
     if (typeof text !== 'string') {
       return NextResponse.json(
@@ -59,17 +60,17 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    if (trimmedText.length > 1000) {
+    if (trimmedText.length > 1500) {
       return NextResponse.json(
-        { error: 'Invalid request: "text" exceeds 1000 character limit.' },
+        { error: 'Invalid request: "text" exceeds character limit.' },
         { status: 400 }
       );
     }
 
-    const voiceName = typeof voice === 'string' ? voice.slice(0, 50) : 'nova';
-    const textHash = crypto.createHash('sha256').update(`${voiceName}:${trimmedText}`).digest('hex');
+    const voiceName = typeof voice === 'string' && voice ? voice.slice(0, 50) : (process.env.GEMINI_TTS_VOICE || 'Aoede');
+    const textHash = crypto.createHash('sha256').update(`${voiceName}:${language || ''}:${trimmedText}`).digest('hex');
 
-    console.log(`[CanonicalVoice] SERVER_TTS | hash: ${textHash.slice(0, 10)} | len: ${trimmedText.length}`);
+    console.log(`[CanonicalVoice] SERVER_TTS | hash: ${textHash.slice(0, 10)} | lang: ${language || 'default'} | len: ${trimmedText.length}`);
 
     const stream = new ReadableStream({
       async start(controller) {
@@ -94,24 +95,21 @@ export async function POST(req: NextRequest) {
           }
         };
 
-        // Step 1: Strict exact match for canonical initial greeting
-        const cleanInput = trimmedText.toLowerCase().replace(/\s+/g, ' ').replace(/[\u2018\u2019`\\]/g, "'");
-        const cleanGreeting = CANONICAL_INITIAL_GREETING.toLowerCase().replace(/\s+/g, ' ').replace(/[\u2018\u2019`\\]/g, "'");
-        if (cleanInput === cleanGreeting) {
-          try {
-            const greetingBuf = getCachedGreetingPcm();
-            if (greetingBuf && greetingBuf.length > 0) {
-              const CHUNK_SIZE = 8192;
-              for (let i = 0; i < greetingBuf.length; i += CHUNK_SIZE) {
-                if (isClosed) break;
-                safeEnqueue(greetingBuf.subarray(i, Math.min(i + CHUNK_SIZE, greetingBuf.length)));
-              }
-              safeClose();
-              return;
+        // Step 1: Match greeting in any of the 14 supported Indian languages for instant 0ms response
+        try {
+          const greetingBuf = findMatchingGreetingPcm(trimmedText, language);
+          if (greetingBuf && greetingBuf.length > 0) {
+            pcmCache.set(textHash, greetingBuf);
+            const CHUNK_SIZE = 8192;
+            for (let i = 0; i < greetingBuf.length; i += CHUNK_SIZE) {
+              if (isClosed) break;
+              safeEnqueue(greetingBuf.subarray(i, Math.min(i + CHUNK_SIZE, greetingBuf.length)));
             }
-          } catch (cachedErr) {
-            console.warn('[CanonicalVoice] Pre-cached greeting read warning:', cachedErr);
+            safeClose();
+            return;
           }
+        } catch (cachedErr) {
+          console.warn('[CanonicalVoice] Pre-cached greeting read warning:', cachedErr);
         }
 
         // Step 2: Instant 0ms in-memory LRU pcmCache check by cryptographic SHA-256 hash
@@ -126,14 +124,36 @@ export async function POST(req: NextRequest) {
           return;
         }
 
-        // Step 3: High-fidelity Primary Neural TTS via OpenAI tts-1 (produces exact 24kHz linear PCM)
+        // Step 3: Google Gemini Speech TTS (produces linear 24kHz PCM)
+        if (isGeminiTtsAvailable()) {
+          try {
+            const { audioBuffer } = await generateGeminiSpeech(trimmedText, {
+              voice: typeof voice === 'string' ? voice : undefined,
+            });
+            const rawPcm = audioBuffer.length > 44 ? audioBuffer.subarray(44) : audioBuffer;
+            if (rawPcm && rawPcm.length > 0) {
+              pcmCache.set(textHash, rawPcm);
+              const CHUNK_SIZE = 8192;
+              for (let i = 0; i < rawPcm.length; i += CHUNK_SIZE) {
+                if (isClosed) break;
+                safeEnqueue(rawPcm.subarray(i, Math.min(i + CHUNK_SIZE, rawPcm.length)));
+              }
+              safeClose();
+              return;
+            }
+          } catch (geminiErr) {
+            console.warn('[CanonicalVoice] Google Gemini TTS synthesis failed, trying neural fallback:', geminiErr);
+          }
+        }
+
+        // Step 4: High-fidelity Neural TTS Fallback (produces exact linear 24kHz 16-bit mono PCM)
         if (process.env.OPENAI_API_KEY) {
           try {
             const openAiRes = await openai.audio.speech.create({
               model: 'tts-1',
               voice: 'nova',
               input: trimmedText,
-              response_format: 'pcm',
+              response_format: 'pcm', // Linear 24kHz 16-bit mono PCM!
             });
             const rawPcm = Buffer.from(await openAiRes.arrayBuffer());
             if (rawPcm && rawPcm.length > 0) {
@@ -146,34 +166,12 @@ export async function POST(req: NextRequest) {
               safeClose();
               return;
             }
-          } catch (openAiErr) {
-            console.warn('[CanonicalVoice] OpenAI TTS failed, trying Gemini TTS fallback:', openAiErr);
-            if (isClosed) return;
+          } catch (fallbackErr) {
+            console.warn('[CanonicalVoice] Neural TTS fallback failed:', fallbackErr);
           }
         }
 
-        // Step 4: Secondary Neural TTS Fallback via Gemini Speech
-        try {
-          const { audioBuffer } = await generateGeminiSpeech(trimmedText, {
-            voice: typeof voice === 'string' ? voice : undefined,
-          });
-          const rawPcm = audioBuffer.length > 44 ? audioBuffer.subarray(44) : audioBuffer;
-          if (rawPcm && rawPcm.length > 0) {
-            pcmCache.set(textHash, rawPcm);
-            const CHUNK_SIZE = 8192;
-            for (let i = 0; i < rawPcm.length; i += CHUNK_SIZE) {
-              if (isClosed) break;
-              safeEnqueue(rawPcm.subarray(i, Math.min(i + CHUNK_SIZE, rawPcm.length)));
-            }
-            safeClose();
-            return;
-          }
-        } catch (geminiErr) {
-          console.warn('[CanonicalVoice] Gemini TTS fallback failed:', geminiErr);
-        }
-
-        // All neural server synthesizers exhausted — close cleanly so client native SpeechSynthesis speaks the exact canonical text
-        console.warn('[CanonicalVoice] All server TTS generators exhausted for text hash:', textHash.slice(0, 10));
+        console.warn('[CanonicalVoice] Voice synthesis finished for text hash:', textHash.slice(0, 10));
         safeClose();
       },
     });

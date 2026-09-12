@@ -16,7 +16,14 @@ import { useBuilderStore } from "@/store/builderStore";
 import { useGeneratedWebsiteStore } from "@/store/generatedWebsiteStore";
 import { useProjectAutosave } from "@/hooks/useProjectAutosave";
 import { getProject } from "@/lib/projects";
+import { normalizeWebsiteData } from "@/lib/normalizeWebsite";
+import { ImageEditorProvider, useImageEditor } from "@/contexts/ImageEditorContext";
+import ImageMediaModal from "@/components/editor/ImageMediaModal";
+import ProUpgradeModal from "@/components/billing/ProUpgradeModal";
+import { toast } from "@/store/toastStore";
 import type { WebsiteData } from "@/types/website";
+import type { StudioQuotaStatus } from "@/types/plans";
+
 import {
   EyeOff,
   Laptop,
@@ -27,7 +34,81 @@ import {
   Sliders,
   Eye,
   Globe,
+  AlertTriangle,
+  RefreshCw,
 } from "lucide-react";
+
+function StudioImageEditorOverlay({ projectId }: { projectId: string }) {
+  const imageEditor = useImageEditor();
+  const activeTarget = imageEditor?.activeTarget;
+
+  const handleSelectImage = useCallback(
+    (url: string, metadata?: { fit?: "cover" | "contain" | "natural"; focalPoint?: string }) => {
+      if (!activeTarget) return;
+
+      const fit = metadata?.fit || "cover";
+      const focalPoint = metadata?.focalPoint || "50% 50%";
+
+      const currentWs = useGeneratedWebsiteStore.getState().website;
+      if (!currentWs) return;
+
+      const copy = JSON.parse(JSON.stringify(currentWs)) as WebsiteData;
+
+      // 1. Deep replace exact matching URL across all properties
+      const deepReplace = (obj: any) => {
+        if (!obj || typeof obj !== "object") return;
+        for (const key of Object.keys(obj)) {
+          if (typeof obj[key] === "string" && activeTarget.currentUrl && obj[key] === activeTarget.currentUrl) {
+            obj[key] = url;
+          } else if (typeof obj[key] === "object") {
+            deepReplace(obj[key]);
+          }
+        }
+      };
+      deepReplace(copy);
+
+      // 2. Targeted element path update if available
+      if (activeTarget.elementPath && activeTarget.elementPath.includes(".")) {
+        const parts = activeTarget.elementPath.split(".");
+        let curr: any = copy;
+        for (let i = 0; i < parts.length - 1; i++) {
+          if (!curr[parts[i]]) curr[parts[i]] = {};
+          curr = curr[parts[i]];
+        }
+        const lastKey = parts[parts.length - 1];
+        if (curr && typeof curr === "object") {
+          curr[lastKey] = url;
+          curr[`${lastKey}Fit`] = fit;
+          curr[`${lastKey}FocalPoint`] = focalPoint;
+          curr.imageFit = fit;
+          curr.imageFocalPoint = focalPoint;
+        }
+      }
+
+      if (projectId) {
+        useGeneratedWebsiteStore.getState().setWebsiteForProject(projectId, copy);
+      }
+      imageEditor?.closeImageModal();
+      toast.success("Image Updated", "Image customized and saved to website.");
+    },
+    [activeTarget, projectId, imageEditor]
+  );
+
+  if (!activeTarget) return null;
+
+  return (
+    <ImageMediaModal
+      isOpen={Boolean(activeTarget)}
+      currentUrl={activeTarget.currentUrl}
+      originalUrl={activeTarget.originalUrl || activeTarget.currentUrl}
+      initialFit={activeTarget.fit || "cover"}
+      initialFocalPoint={activeTarget.focalPoint || "50% 50%"}
+      title={activeTarget.title || "Customize Image"}
+      onClose={() => imageEditor?.closeImageModal()}
+      onSelectImage={handleSelectImage}
+    />
+  );
+}
 
 export default function WorkspacePage() {
   const router = useRouter();
@@ -55,19 +136,36 @@ export default function WorkspacePage() {
   } = useGeneratedWebsiteStore();
 
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [retryTrigger, setRetryTrigger] = useState(0);
   const [isPublishModalOpen, setIsPublishModalOpen] = useState(false);
+  const [isProUpgradeModalOpen, setIsProUpgradeModalOpen] = useState(false);
+  const [quotaStatus, setQuotaStatus] = useState<StudioQuotaStatus | null>(null);
+  const [quotaRefreshTrigger, setQuotaRefreshTrigger] = useState(0);
   const [mobileTab, setMobileTab] = useState<"canvas" | "layers" | "edit">("canvas");
   const [isResizing, setIsResizing] = useState(false);
 
   // Auto-save only when workspace is fully loaded and matches the active project ID
-  const isAutosaveEnabled = !isLoading && currentProjectId === effectiveProjectId && Boolean(website);
-  const { isSaving, isError } = useProjectAutosave(
+  const isAutosaveEnabled = !isLoading && !loadError && currentProjectId === effectiveProjectId && Boolean(website);
+  const { isSaving, isError, saveNow } = useProjectAutosave(
     effectiveProjectId,
     {
       json_data: website || undefined,
     },
-    isAutosaveEnabled
+    isAutosaveEnabled,
+    {
+      onQuotaUpdated: (q) => setQuotaStatus(q),
+      onQuotaExceeded: (err) => {
+        setIsProUpgradeModalOpen(true);
+        if (err.quota) setQuotaStatus(err.quota);
+        toast.error(
+          err.message || "Studio change limit reached.",
+          err.subMessage || "Upgrade to Pro to continue editing your website."
+        );
+      },
+    }
   );
+
 
   // Global Keyboard Shortcuts for Undo & Redo
   useEffect(() => {
@@ -145,35 +243,54 @@ export default function WorkspacePage() {
       // If store already has this exact project loaded, we are ready
       if (currentProjectId === effectiveProjectId && website) {
         setIsLoading(false);
+        setLoadError(null);
         return;
       }
 
       if (effectiveProjectId.startsWith("demo") || effectiveProjectId === "preview" || effectiveProjectId.startsWith("test")) {
         setIsLoading(false);
+        setLoadError(null);
         return;
       }
 
       setIsLoading(true);
+      setLoadError(null);
 
-      const { data, error } = await getProject(effectiveProjectId);
-      if (isCancelled) return;
+      try {
+        const { data, error } = await getProject(effectiveProjectId);
+        if (isCancelled) return;
 
-      if (error || !data) {
-        router.push("/dashboard");
-        return;
+        if (error || !data) {
+          setLoadError(
+            error?.message || "Unable to load website workspace. The project could not be found or network timed out."
+          );
+          setIsLoading(false);
+          return;
+        }
+
+        // Atomically hydrate all project metadata into builder store
+        useBuilderStore.getState().hydrateFromProject(data);
+
+        if (data.json_data && Object.keys(data.json_data).length > 0) {
+          setWebsiteForProject(effectiveProjectId, data.json_data as WebsiteData);
+        } else {
+          // If project exists in DB but json_data is not yet generated, synthesize baseline layout
+          // so user stays right inside Studio and can customize immediately without being kicked out.
+          const baseline = normalizeWebsiteData(
+            {},
+            data.category || "General Business",
+            data.business_name || data.name || "My Website"
+          );
+          setWebsiteForProject(effectiveProjectId, baseline);
+        }
+
+        setIsLoading(false);
+      } catch (caughtErr: any) {
+        if (!isCancelled) {
+          setLoadError(caughtErr?.message || "Connection error while loading website workspace.");
+          setIsLoading(false);
+        }
       }
-
-      // Atomically hydrate all project metadata into builder store
-      useBuilderStore.getState().hydrateFromProject(data);
-
-      if (data.json_data && Object.keys(data.json_data).length > 0) {
-        setWebsiteForProject(effectiveProjectId, data.json_data as WebsiteData);
-      } else {
-        router.push(`/editor/${effectiveProjectId}`);
-        return;
-      }
-
-      setIsLoading(false);
     }
 
     void loadWorkspace();
@@ -186,8 +303,44 @@ export default function WorkspacePage() {
     currentProjectId,
     website,
     setWebsiteForProject,
-    router,
+    retryTrigger,
   ]);
+
+  if (loadError) {
+    return (
+      <div className="flex h-screen w-full flex-col items-center justify-center bg-slate-50 p-6 text-center dark:bg-[#09090B]">
+        <div className="mx-auto max-w-md space-y-4 rounded-3xl border border-red-200/80 bg-white p-6 shadow-xl dark:border-red-900/30 dark:bg-zinc-900">
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-red-100 text-red-600 dark:bg-red-950/50 dark:text-red-400">
+            <AlertTriangle className="h-6 w-6" />
+          </div>
+          <div>
+            <h2 className="text-lg font-bold text-zinc-900 dark:text-white">Workspace Load Error</h2>
+            <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">{loadError}</p>
+          </div>
+          <div className="flex items-center justify-center gap-3 pt-2">
+            <button
+              type="button"
+              onClick={() => {
+                setLoadError(null);
+                setRetryTrigger((p) => p + 1);
+              }}
+              className="inline-flex items-center gap-2 rounded-xl bg-violet-600 px-4 py-2.5 text-xs font-bold text-white shadow-md transition hover:bg-violet-700 active:scale-95 cursor-pointer"
+            >
+              <RefreshCw className="h-3.5 w-3.5" />
+              <span>Retry</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => router.push("/dashboard")}
+              className="inline-flex items-center gap-2 rounded-xl border border-zinc-200 bg-zinc-100 px-4 py-2.5 text-xs font-bold text-zinc-700 transition hover:bg-zinc-200 dark:border-white/10 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700 cursor-pointer"
+            >
+              <span>Back to Dashboard</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (isLoading) {
     return (
@@ -211,14 +364,19 @@ export default function WorkspacePage() {
       : "w-full min-h-full";
 
   return (
-    <div className="flex h-screen w-full flex-col bg-slate-100 dark:bg-[#07090e] overflow-hidden">
-      {/* Top Studio Toolbar */}
+    <ImageEditorProvider initialInteractive={!isPreviewMode}>
+      <div className="flex h-screen w-full flex-col bg-slate-100 dark:bg-[#07090e] overflow-hidden">
+        {/* Top Studio Toolbar */}
       {!isPreviewMode && (
         <EditorTopBar
           onOpenPublishModal={() => setIsPublishModalOpen(true)}
+          onOpenUpgradeModal={() => setIsProUpgradeModalOpen(true)}
+          quota={quotaStatus}
+          refreshTrigger={quotaRefreshTrigger}
           isSaving={isSaving}
           isError={isError}
         />
+
       )}
 
       {/* Main Studio Body */}
@@ -411,6 +569,22 @@ export default function WorkspacePage() {
         onClose={() => setIsPublishModalOpen(false)}
         projectId={effectiveProjectId}
       />
-    </div>
+
+      {/* Pro Upgrade Modal */}
+      <ProUpgradeModal
+        isOpen={isProUpgradeModalOpen}
+        onClose={() => setIsProUpgradeModalOpen(false)}
+        onUpgradeSuccess={() => {
+          setQuotaRefreshTrigger((prev) => prev + 1);
+          // Retry pending save now that user is on Pro
+          void saveNow();
+        }}
+      />
+
+      {/* Studio-Only Image Editor Overlay */}
+      <StudioImageEditorOverlay projectId={effectiveProjectId} />
+      </div>
+    </ImageEditorProvider>
   );
 }
+

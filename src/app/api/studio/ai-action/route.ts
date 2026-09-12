@@ -3,6 +3,7 @@ import { openai } from "@/lib/openai";
 import { checkMemoryRateLimit } from "@/lib/rateLimit";
 import { verifyAdminAuth } from "@/lib/adminAuth";
 import { authenticateRequest, getClientIp } from "@/lib/supabaseServer";
+import { getStudioQuota } from "@/lib/studioQuota";
 import type { StudioAiAction } from "@/lib/studioAiActions";
 
 export const dynamic = "force-dynamic";
@@ -31,6 +32,25 @@ export async function POST(req: NextRequest) {
       const authResult = await verifyAdminAuth(req);
       isAdmin = authResult.isAdmin;
       if (!isAdmin) {
+        // Enforce Studio Change Quota
+        const quota = await getStudioQuota(user.id);
+        if (quota.isBlocked) {
+          return NextResponse.json(
+            {
+              error: quota.isPro
+                ? "You've reached your current Studio change limit."
+                : "You've reached your Free Plan Studio change limit.",
+              subMessage: quota.isPro
+                ? "Please contact support for high-volume enterprise quota."
+                : "Upgrade to Pro to continue editing your website.",
+              cta: quota.isPro ? undefined : "Upgrade to Pro — ₹500/month",
+              code: "STUDIO_CHANGE_LIMIT_REACHED",
+              quota,
+            },
+            { status: 403 }
+          );
+        }
+
         const { success } = checkMemoryRateLimit(`ai_action_${user.id}`, 30, 60 * 1000);
         if (!success) {
           return NextResponse.json(
@@ -40,6 +60,7 @@ export async function POST(req: NextRequest) {
         }
       }
     } else {
+
       // Allow guest / preview studio editor sessions with strict IP rate limiting (10 requests / minute)
       const clientIp = getClientIp(req);
       const { success } = checkMemoryRateLimit(`ai_action_ip_${clientIp}`, 10, 60 * 1000);

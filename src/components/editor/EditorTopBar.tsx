@@ -25,14 +25,27 @@ import { publishProject, updateProject, generatePreviewLink } from "@/lib/projec
 import { toast } from "@/store/toastStore";
 import ThemeToggle from "@/components/theme/ThemeToggle";
 import Logo from "@/components/brand/Logo";
+import StudioQuotaBadge from "@/components/editor/StudioQuotaBadge";
+import type { StudioQuotaStatus } from "@/types/plans";
 
 interface EditorTopBarProps {
   onOpenPublishModal: () => void;
+  onOpenUpgradeModal?: () => void;
+  quota?: StudioQuotaStatus | null;
+  refreshTrigger?: number;
   isSaving?: boolean;
   isError?: boolean;
 }
 
-export default function EditorTopBar({ onOpenPublishModal, isSaving = false, isError = false }: EditorTopBarProps) {
+export default function EditorTopBar({
+  onOpenPublishModal,
+  onOpenUpgradeModal,
+  quota,
+  refreshTrigger = 0,
+  isSaving = false,
+  isError = false,
+}: EditorTopBarProps) {
+
   const { website, isPreviewMode, setIsPreviewMode, viewportMode, setViewportMode, undo, redo, history, historyIndex } =
     useGeneratedWebsiteStore();
   const { projectId, businessName, setBusinessName, isPublished, setIsPublished, publicSlug, setPublicSlug } =
@@ -165,8 +178,16 @@ export default function EditorTopBar({ onOpenPublishModal, isSaving = false, isE
               </span>
             )}
           </div>
+
+          {/* Studio Change Quota Pill */}
+          <StudioQuotaBadge
+            onOpenUpgradeModal={onOpenUpgradeModal || (() => {})}
+            overrideQuota={quota}
+            refreshTrigger={refreshTrigger}
+          />
         </div>
       </div>
+
 
       {/* Center: Viewport Controls */}
       <div className="hidden md:flex items-center rounded-xl border border-zinc-200 bg-zinc-100/80 p-1 dark:border-white/[0.08] dark:bg-[#05070b]">
@@ -254,13 +275,7 @@ export default function EditorTopBar({ onOpenPublishModal, isSaving = false, isE
         {/* Primary CTA: Publish */}
         <button
           type="button"
-          onClick={() => {
-            if (isPublished) {
-              onOpenPublishModal();
-            } else {
-              void handleQuickPublish();
-            }
-          }}
+          onClick={onOpenPublishModal}
           disabled={isPublishing}
           className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 px-4 sm:px-5 py-2 text-xs sm:text-sm font-bold text-slate-950 shadow-md shadow-cyan-500/20 transition hover:opacity-95 active:scale-95 disabled:opacity-50"
         >

@@ -21,7 +21,12 @@ import type {
   DesignStrategyData,
   ImageIntentConfig,
   Spatial3dConfig,
+  CardFamily,
+  SkillExecutionPlan,
+  SkillExecutionSectionPlan,
+  HeroBackgroundConfig,
 } from "@/types/website";
+import { getHeroAtmosphereImage } from "@/lib/categoryImages";
 
 export interface StrategyInputContext {
   category?: string;
@@ -49,6 +54,7 @@ export type VisualArchetype =
 export interface ComputedDesignStrategy extends DesignStrategyData {
   sectionSequence: string[];
   imageIntents: Record<string, ImageIntentConfig>;
+  skillExecutionPlan: SkillExecutionPlan;
   typographyTokens: {
     headingFont: string;
     bodyFont: string;
@@ -96,23 +102,8 @@ export function deriveVisualArchetype(context: StrategyInputContext): VisualArch
   ) {
     return "bold_brutalist";
   }
-  if (
-    combined.includes("luxury") ||
-    combined.includes("bespoke") ||
-    combined.includes("high-end") ||
-    combined.includes("couture") ||
-    combined.includes("fashion")
-  ) {
-    return "luxury_bespoke";
-  }
-  if (combined.includes("editorial") || combined.includes("magazine") || combined.includes("vogue")) {
-    return "minimal_editorial";
-  }
-  if (combined.includes("dark mode") || combined.includes("cyber") || combined.includes("matrix") || combined.includes("technical")) {
-    return "dark_technical";
-  }
 
-  // 2. Industry-driven archetypes
+  // 2. Industry-driven archetypes (must precede generic marketing adjectives like "bespoke" or "high-end")
   if (
     combined.includes("dental") ||
     combined.includes("dentist") ||
@@ -126,6 +117,17 @@ export function deriveVisualArchetype(context: StrategyInputContext): VisualArch
   }
 
   if (
+    combined.includes("agency") ||
+    combined.includes("creative studio") ||
+    combined.includes("branding studio") ||
+    combined.includes("design agency") ||
+    combined.includes("advertising") ||
+    combined.includes("portfolio")
+  ) {
+    return "expressive_creative";
+  }
+
+  if (
     combined.includes("restaurant") ||
     combined.includes("cafe") ||
     combined.includes("coffee") ||
@@ -134,6 +136,28 @@ export function deriveVisualArchetype(context: StrategyInputContext): VisualArch
     combined.includes("dining") ||
     combined.includes("culinary") ||
     combined.includes("food")
+  ) {
+    return "warm_artisanal";
+  }
+
+  if (
+    combined.includes("couture") ||
+    combined.includes("fashion") ||
+    combined.includes("apparel") ||
+    combined.includes("jewelry") ||
+    combined.includes("perfume") ||
+    combined.includes("luxury boutique")
+  ) {
+    return "luxury_bespoke";
+  }
+
+  if (
+    combined.includes("ceramic") ||
+    combined.includes("pottery") ||
+    combined.includes("tableware") ||
+    combined.includes("stoneware") ||
+    (combined.includes("craft") && !combined.includes("software") && !combined.includes("fashion")) ||
+    combined.includes("artisanal")
   ) {
     return "warm_artisanal";
   }
@@ -160,26 +184,6 @@ export function deriveVisualArchetype(context: StrategyInputContext): VisualArch
   }
 
   if (
-    combined.includes("fashion") ||
-    combined.includes("jewelry") ||
-    combined.includes("perfume") ||
-    combined.includes("apparel") ||
-    combined.includes("boutique")
-  ) {
-    return "luxury_bespoke";
-  }
-
-  if (
-    combined.includes("agency") ||
-    combined.includes("creative studio") ||
-    combined.includes("designer") ||
-    combined.includes("photograph") ||
-    combined.includes("portfolio")
-  ) {
-    return "expressive_creative";
-  }
-
-  if (
     combined.includes("plumber") ||
     combined.includes("electrician") ||
     combined.includes("locksmith") ||
@@ -189,6 +193,21 @@ export function deriveVisualArchetype(context: StrategyInputContext): VisualArch
     combined.includes("contractor")
   ) {
     return "high_trust_service";
+  }
+
+  // 3. Fallback style descriptors
+  if (
+    combined.includes("luxury") ||
+    combined.includes("bespoke") ||
+    combined.includes("high-end")
+  ) {
+    return "luxury_bespoke";
+  }
+  if (combined.includes("editorial") || combined.includes("magazine") || combined.includes("vogue")) {
+    return "minimal_editorial";
+  }
+  if (combined.includes("dark mode") || combined.includes("cyber") || combined.includes("matrix") || combined.includes("technical")) {
+    return "dark_technical";
   }
 
   return "minimal_editorial";
@@ -202,42 +221,149 @@ export function deriveSectionSequence(archetype: VisualArchetype, context: Strat
     context.category || "",
     context.prompt || "",
     context.requirements || "",
+    context.description || "",
+    context.businessName || "",
     ...(context.requestedFeatures || []),
   ].join(" ").toLowerCase();
 
   const hasCustomPricing = combined.includes("pricing") || combined.includes("plans");
 
+  // 1. Dental Clinic / Healthcare / Orthodontics (must precede ceramic check to prevent "ceramic braces" matching pottery)
+  if (
+    combined.includes("dental") ||
+    combined.includes("dentist") ||
+    combined.includes("clinic") ||
+    combined.includes("doctor") ||
+    combined.includes("medical") ||
+    combined.includes("healthcare") ||
+    combined.includes("orthodont") ||
+    combined.includes("teeth")
+  ) {
+    return ["hero", "trust_proof", "services", "doctor_clinic", "treatment_process", "reviews", "faq", "contact", "footer"];
+  }
+
+  // 2. Ceramics / E-Commerce / Stoneware
+  const isDentalOrMedical =
+    combined.includes("dental") ||
+    combined.includes("dentist") ||
+    combined.includes("orthodont") ||
+    combined.includes("teeth") ||
+    combined.includes("clinic") ||
+    combined.includes("braces") ||
+    combined.includes("aligner");
+
+  if (
+    !isDentalOrMedical &&
+    (combined.includes("ceramic") ||
+      combined.includes("pottery") ||
+      combined.includes("tableware") ||
+      combined.includes("stoneware") ||
+      combined.includes("e-commerce") ||
+      combined.includes("ecommerce"))
+  ) {
+    return ["hero", "curated_collection", "about", "craft_heritage", "features", "reviews", "faq", "contact", "footer"];
+  }
+
+  if (
+    combined.includes("restaurant") ||
+    combined.includes("cafe") ||
+    combined.includes("coffee") ||
+    combined.includes("bakery") ||
+    combined.includes("bistro") ||
+    combined.includes("dining") ||
+    combined.includes("culinary") ||
+    combined.includes("food")
+  ) {
+    return ["hero", "signature_dishes", "atmosphere_story", "menu", "gallery", "reviews", "contact", "footer"];
+  }
+
+  if (
+    combined.includes("saas") ||
+    combined.includes("software") ||
+    combined.includes("ai platform") ||
+    combined.includes("ai tool") ||
+    combined.includes("developer") ||
+    combined.includes("tech platform") ||
+    combined.includes("fintech") ||
+    combined.includes("cloud")
+  ) {
+    const seq = ["hero", "social_proof", "features", "workflow_steps", "services", "faq", "contact", "footer"];
+    if (hasCustomPricing) seq.splice(seq.indexOf("faq"), 0, "pricing");
+    return seq;
+  }
+
+  if (
+    combined.includes("architect") ||
+    combined.includes("interior design") ||
+    combined.includes("spatial") ||
+    combined.includes("landscape design")
+  ) {
+    return ["hero", "selected_works", "project_details", "about", "services", "contact", "footer"];
+  }
+
+  if (
+    combined.includes("fashion") ||
+    combined.includes("couture") ||
+    combined.includes("apparel") ||
+    combined.includes("boutique") ||
+    combined.includes("jewelry")
+  ) {
+    return ["hero", "curated_collection", "craft_heritage", "lookbook", "services", "reviews", "contact", "footer"];
+  }
+
+  if (
+    combined.includes("agency") ||
+    combined.includes("creative studio") ||
+    combined.includes("branding") ||
+    combined.includes("design studio")
+  ) {
+    return ["hero", "selected_cases", "creative_capabilities", "about", "awards_metrics", "contact", "footer"];
+  }
+
+  if (
+    combined.includes("electric") ||
+    combined.includes("plumb") ||
+    combined.includes("locksmith") ||
+    combined.includes("hvac") ||
+    combined.includes("roofing") ||
+    combined.includes("mechanic") ||
+    combined.includes("trades") ||
+    combined.includes("contractor")
+  ) {
+    return ["hero", "emergency_services", "trust_guarantees", "services", "reviews", "service_area", "contact", "footer"];
+  }
+
   let sequence: string[];
 
   switch (archetype) {
-    case "warm_artisanal": // Restaurant / Cafe / Bakery
-      sequence = ["hero", "signature_dishes", "atmosphere_story", "menu", "gallery", "reviews", "contact", "footer"];
+    case "warm_artisanal":
+      sequence = ["hero", "curated_collection", "about", "craft_heritage", "reviews", "contact", "footer"];
       break;
 
-    case "clean_clinical": // Dental / Medical Clinic
+    case "clean_clinical":
       sequence = ["hero", "trust_proof", "services", "doctor_clinic", "treatment_process", "reviews", "faq", "contact", "footer"];
       break;
 
-    case "dark_technical": // SaaS / AI Platform
+    case "dark_technical":
       sequence = ["hero", "social_proof", "features", "workflow_steps", "services", "faq", "contact", "footer"];
       if (hasCustomPricing) {
         sequence.splice(sequence.indexOf("faq"), 0, "pricing");
       }
       break;
 
-    case "minimal_editorial": // Architecture / Design
+    case "minimal_editorial":
       sequence = ["hero", "selected_works", "project_details", "about", "services", "contact", "footer"];
       break;
 
-    case "luxury_bespoke": // Luxury Fashion / Boutique
+    case "luxury_bespoke":
       sequence = ["hero", "curated_collection", "craft_heritage", "lookbook", "services", "reviews", "contact", "footer"];
       break;
 
-    case "high_trust_service": // Plumber / Electrician / Trades
+    case "high_trust_service":
       sequence = ["hero", "emergency_services", "trust_guarantees", "services", "reviews", "service_area", "contact", "footer"];
       break;
 
-    case "expressive_creative": // Creative Agency / Portfolio
+    case "expressive_creative":
       sequence = ["hero", "selected_cases", "creative_capabilities", "about", "awards_metrics", "contact", "footer"];
       break;
 
@@ -249,7 +375,6 @@ export function deriveSectionSequence(archetype: VisualArchetype, context: Strat
       sequence = ["hero", "about", "services", "features", "reviews", "faq", "contact", "footer"];
   }
 
-  // Ensure contact and footer exist at end
   if (!sequence.includes("footer")) sequence.push("footer");
   return sequence;
 }
@@ -333,65 +458,323 @@ export function deriveSpatial3dConfig(archetype: VisualArchetype, context: Strat
 }
 
 /**
- * Computes Background Strategy (Textures, dot-grids, technical grids, noise, tonal fields).
+ * Computes Background Strategy (Textures, dot-grids, technical grids, noise, tonal fields, warm glow, clinical calm, luxury noir).
  */
 export function deriveBackgroundStrategy(archetype: VisualArchetype, isDark: boolean): BackgroundStyleConfig {
   switch (archetype) {
-    case "dark_technical":
+    case "warm_artisanal": // Cafe, Restaurant, Bakery
+      return {
+        type: "warm_glow",
+        color: isDark ? "#140E0A" : "#FBF7F0",
+        accentColor: "rgba(217, 119, 6, 0.12)",
+        patternOpacity: 0.15,
+      };
+
+    case "clean_clinical": // Dental, Medical Clinic
+      return {
+        type: "clinical_calm",
+        color: isDark ? "#0A131F" : "#F8FAFC",
+        accentColor: "rgba(2, 132, 199, 0.08)",
+        patternOpacity: 0.06,
+      };
+
+    case "luxury_bespoke": // Luxury Fashion, High-End DTC
+      return {
+        type: isDark ? "luxury_noir" : "editorial_whitespace",
+        color: isDark ? "#0B0A09" : "#FAF9F6",
+        accentColor: "rgba(212, 175, 55, 0.08)",
+        patternOpacity: 0.05,
+      };
+
+    case "dark_technical": // SaaS, AI Platform
       return {
         type: "tech_grid",
-        color: isDark ? "#090D16" : "#0F172A",
+        color: isDark ? "#080C14" : "#0F172A",
         accentColor: "rgba(56, 189, 248, 0.08)",
-        patternOpacity: 0.12,
-      };
-
-    case "minimal_editorial":
-      return {
-        type: "editorial_whitespace",
-        color: isDark ? "#121214" : "#FDFCFA",
-        patternOpacity: 0,
-      };
-
-    case "warm_artisanal":
-      return {
-        type: "tonal_field",
-        color: isDark ? "#181411" : "#FAF6F0",
-        accentColor: "rgba(217, 119, 6, 0.06)",
-        patternOpacity: 0.08,
-      };
-
-    case "clean_clinical":
-      return {
-        type: "solid",
-        color: isDark ? "#0A111E" : "#F8FAFC",
-        accentColor: "rgba(2, 132, 199, 0.04)",
-        patternOpacity: 0.04,
-      };
-
-    case "luxury_bespoke":
-      return {
-        type: "editorial_whitespace",
-        color: isDark ? "#0C0A09" : "#FAFAF9",
-        accentColor: "rgba(212, 175, 55, 0.05)",
-        patternOpacity: 0.03,
-      };
-
-    case "expressive_creative":
-    case "bold_brutalist":
-      return {
-        type: "dot_grid",
-        color: isDark ? "#0F0F12" : "#F8F8FA",
-        accentColor: "rgba(168, 85, 247, 0.1)",
         patternOpacity: 0.14,
       };
 
-    case "high_trust_service":
+    case "minimal_editorial": // Architecture, Fine Art
+      return {
+        type: "editorial_whitespace",
+        color: isDark ? "#101012" : "#FDFCFA",
+        patternOpacity: 0,
+      };
+
+    case "expressive_creative": // Creative Agency, Studio
+    case "bold_brutalist":
+      return {
+        type: "dot_grid",
+        color: isDark ? "#0D0D11" : "#F8F8FA",
+        accentColor: "rgba(168, 85, 247, 0.12)",
+        patternOpacity: 0.15,
+      };
+
+    case "high_trust_service": // Trades, Plumber, Electrician
     default:
       return {
         type: "solid",
         color: isDark ? "#0F172A" : "#FFFFFF",
-        patternOpacity: 0.02,
+        patternOpacity: 0.03,
       };
+  }
+}
+
+/**
+ * Derives contextual Hero background atmosphere matching the business domain and visual archetype.
+ * Enforces the core rule: "visible when you look for it, invisible when you read the headline."
+ */
+export function deriveHeroBackground(
+  archetype: VisualArchetype,
+  context: StrategyInputContext,
+  isDark: boolean
+): HeroBackgroundConfig {
+  const imageUrl = getHeroAtmosphereImage(context.category, archetype);
+
+  switch (archetype) {
+    case "warm_artisanal": // Restaurant, Cafe, Bakery, Bistro, Ceramics
+      return {
+        mode: "contextual-image",
+        semanticIntent: "Warm artisanal coffee crema swirl with soft morning steam and botanical terracotta glow, low contrast watermark atmosphere",
+        imageUrl,
+        negativeTerms: ["giant cup stock photo", "busy cafe people", "harsh flash", "distracting elements", "clinical"],
+        opacity: 0.16,
+        blur: 16,
+        position: "right-edge",
+        scale: 1.15,
+        overlay: "radial-vignette",
+        fadeDirection: "to-left",
+      };
+
+    case "clean_clinical": // Dental Clinic, Doctors, Medical
+      return {
+        mode: "abstract",
+        semanticIntent: "Translucent clean dental clinical instruments soft cyan glow, comforting spa-like serene medical geometry",
+        imageUrl,
+        negativeTerms: ["open mouth", "drills", "bloody", "surgery", "pottery", "ceramics", "food", "dark"],
+        opacity: 0.12,
+        blur: 24,
+        position: "top-right",
+        scale: 1.1,
+        overlay: "linear-fade-left",
+        fadeDirection: "to-left",
+      };
+
+    case "dark_technical": // SaaS, AI, Distributed Database
+      return {
+        mode: "abstract",
+        semanticIntent: "Deep obsidian telemetry lines, glowing vector cluster mesh, sub-millisecond retrieval node graph",
+        imageUrl,
+        negativeTerms: ["office workers", "cafe", "food", "beach", "happy corporate team", "bright lights"],
+        opacity: 0.18,
+        blur: 20,
+        position: "right-edge",
+        scale: 1.2,
+        overlay: "linear-fade-left",
+        fadeDirection: "to-left",
+      };
+
+    case "minimal_editorial": // Architecture Studio
+      return {
+        mode: "architectural",
+        semanticIntent: "Concrete facade shadow play, minimalist spatial linework, modern cantilever architectural perspective",
+        imageUrl,
+        negativeTerms: ["crowded city", "colorful stock image", "random construction workers", "busy textures"],
+        opacity: 0.14,
+        blur: 14,
+        position: "floating-offset",
+        scale: 1.15,
+        overlay: "radial-vignette",
+        fadeDirection: "to-left",
+      };
+
+    case "luxury_bespoke": // Luxury Fashion Maison
+      return {
+        mode: "material",
+        semanticIntent: "Hand-woven double-faced silk fabric folds, tactile atelier textile drape, ethereal cashmere texture",
+        imageUrl,
+        negativeTerms: ["bright runway lights", "cheap clothing", "busy shopping mall", "distracting logos"],
+        opacity: 0.15,
+        blur: 18,
+        position: "right-edge",
+        scale: 1.15,
+        overlay: "linear-fade-left",
+        fadeDirection: "to-left",
+      };
+
+    case "high_trust_service": // Electrician, Emergency Trades
+      return {
+        mode: "texture",
+        semanticIntent: "Subtle electrical blueprint schematic lines, copper wiring geometry, precision technical diagram",
+        imageUrl,
+        negativeTerms: ["kitchen", "bathroom", "random living room", "unrelated home interior"],
+        opacity: 0.12,
+        blur: 20,
+        position: "right-edge",
+        scale: 1.15,
+        overlay: "linear-fade-left",
+        fadeDirection: "to-left",
+      };
+
+    case "expressive_creative": // Creative Agency, Branding Studio
+      return {
+        mode: "atmospheric",
+        semanticIntent: "Kinetic typographic distortion, layered visual gradients, monochromatic brand monolith atmosphere",
+        imageUrl,
+        negativeTerms: ["generic corporate office", "handshakes", "stock charts", "cluttered stock photos"],
+        opacity: 0.16,
+        blur: 22,
+        position: "center",
+        scale: 1.2,
+        overlay: "radial-vignette",
+        fadeDirection: "radial-out",
+      };
+
+    case "bold_brutalist":
+    default:
+      return {
+        mode: "gradient",
+        semanticIntent: "Subtle architectural tonal field with restrained edge highlight",
+        imageUrl,
+        opacity: 0.10,
+        blur: 24,
+        position: "center",
+        scale: 1.1,
+        overlay: "radial-vignette",
+        fadeDirection: "center-soft",
+      };
+  }
+}
+
+/**
+ * Derives bespoke Hero composition matching the business domain and customer psychology.
+ */
+export function deriveHeroLayout(
+  archetype: VisualArchetype,
+  context: StrategyInputContext,
+  spatial3d: Spatial3dConfig
+): "split_showcase" | "fullscreen_visual" | "minimal_editorial" | "spatial_depth_hero" | "bento_grid_hero" | "action_focused" {
+  const combined = [
+    context.category || "",
+    context.prompt || "",
+    context.description || "",
+    context.style || "",
+  ].join(" ").toLowerCase();
+
+  // Explicit user override wins
+  if (combined.includes("fullscreen") || combined.includes("cinematic hero")) return "fullscreen_visual";
+  if (combined.includes("minimal hero") || combined.includes("editorial hero")) return "minimal_editorial";
+  if (combined.includes("bento hero") || combined.includes("bento grid")) return "bento_grid_hero";
+  if (combined.includes("split hero") || combined.includes("split showcase")) return "split_showcase";
+
+  if (spatial3d.enabled && spatial3d.level === "ADVANCED_CSS_3D") {
+    return "spatial_depth_hero";
+  }
+
+  switch (archetype) {
+    case "warm_artisanal": // Restaurant / Cafe: cinematic atmosphere, sensory immersion
+      return "fullscreen_visual";
+
+    case "clean_clinical": // Dental / Healthcare: reassurance, appointment CTA, doctor trust
+      return "action_focused";
+
+    case "minimal_editorial": // Architecture: spatial grandeur, gallery photography
+      return "fullscreen_visual";
+
+    case "luxury_bespoke": // Fashion: high-fashion editorial typography, refined framing
+      return "minimal_editorial";
+
+    case "high_trust_service": // Plumber / Emergency: rapid call CTA, trust badges
+      return "action_focused";
+
+    case "expressive_creative": // Agency: creative showcase, bold hierarchy
+      return "bento_grid_hero";
+
+    case "dark_technical": // SaaS / AI: interactive software preview, feature depth
+      return "spatial_depth_hero";
+
+    case "bold_brutalist":
+      return "minimal_editorial";
+
+    default:
+      return "split_showcase";
+  }
+}
+
+/**
+ * Generates an evocative visual art direction concept for the business.
+ */
+export function deriveVisualConcept(archetype: VisualArchetype, context: StrategyInputContext): { concept: string; summary: string } {
+  const name = context.businessName || "The Brand";
+  switch (archetype) {
+    case "warm_artisanal":
+      return {
+        concept: "Sensory Warmth & Artisanal Hospitality",
+        summary: `Crafted for ${name} with rich coffee/culinary textures, amber ambient lighting, and an inviting, tactile dining atmosphere.`,
+      };
+    case "clean_clinical":
+      return {
+        concept: "Tranquil Clinical Excellence & Reassuring Care",
+        summary: `Tailored for ${name} with soothing cyan/sky tones, spacious clinical cleanliness, and immediate trust-building cues that ease patient anxiety.`,
+      };
+    case "dark_technical":
+      return {
+        concept: "High-Velocity Obsidian Infrastructure",
+        summary: `Architected for ${name} with deep slate backgrounds, illuminated technical grids, glowing interface cards, and precise developer-grade typography.`,
+      };
+    case "minimal_editorial":
+      return {
+        concept: "Monolithic Geometry & Sculpted Natural Light",
+        summary: `Curated for ${name} with generous gallery whitespace, architectural framing, refined serif typography, and full-bleed spatial imagery.`,
+      };
+    case "luxury_bespoke":
+      return {
+        concept: "Tactile Haute Couture & High-Contrast Elegance",
+        summary: `Styled for ${name} with editorial typography, rich noir/champagne accents, and museum-grade collection showcases.`,
+      };
+    case "high_trust_service":
+      return {
+        concept: "Neighborhood Reliability & Instant Proof",
+        summary: `Focused for ${name} on rapid-response availability, transparent guarantees, licensed credentials, and immediate phone/booking conversion.`,
+      };
+    case "expressive_creative":
+      return {
+        concept: "Boundary-Pushing Experimental Studio",
+        summary: `Designed for ${name} with asymmetric bento layouts, bold kinetic typography, and immersive case study storytelling.`,
+      };
+    case "bold_brutalist":
+      return {
+        concept: "High-Impact Neo-Brutalism",
+        summary: `Engineered for ${name} with raw stark contrast, heavy structured borders, and unapologetic typographic conviction.`,
+      };
+    default:
+      return {
+        concept: "Bespoke Modern Distinction",
+        summary: `Engineered specifically for ${name} with tailored typography, thoughtful color harmony, and purposeful narrative hierarchy.`,
+      };
+  }
+}
+
+/**
+ * Derives Motion Strategy level with device and reduced-motion awareness.
+ */
+export function deriveMotionStrategy(archetype: VisualArchetype, context: StrategyInputContext): "NONE" | "SUBTLE" | "MODERATE" | "CINEMATIC" {
+  const prompt = (context.prompt || "").toLowerCase();
+  if (/no\s+motion|no\s+animat\w*|static\s+only/i.test(prompt)) return "NONE";
+  if (/cinematic|heavy\s+motion|dynamic/i.test(prompt)) return "CINEMATIC";
+
+  switch (archetype) {
+    case "luxury_bespoke":
+    case "expressive_creative":
+      return "CINEMATIC";
+    case "warm_artisanal":
+    case "dark_technical":
+      return "MODERATE";
+    case "clean_clinical":
+    case "minimal_editorial":
+    case "high_trust_service":
+    default:
+      return "SUBTLE";
   }
 }
 
@@ -523,8 +906,288 @@ export function deriveImageIntents(
 }
 
 /**
+ * Derives a deterministic, traceable skill execution plan connecting selected skills,
+ * section layout archetypes, compositional card families, interaction patterns, and negative image guards.
+ */
+export function deriveSkillExecutionPlan(
+  archetype: VisualArchetype,
+  context: StrategyInputContext,
+  sectionSequence: string[]
+): SkillExecutionPlan {
+  const cat = (context.category || "").toLowerCase();
+  const desc = (context.description || "").toLowerCase();
+  const prompt = (context.prompt || "").toLowerCase();
+  const combined = `${cat} ${desc} ${prompt}`;
+
+  // 1. Relevant Skills selection (5-8 skills)
+  const selectedSkills: Array<{ skillId: string; reason: string; instructionsApplied: string[] }> = [
+    {
+      skillId: "ui-ux",
+      reason: "Visual hierarchy, clear scan paths, and high-conversion above-the-fold value proposition",
+      instructionsApplied: ["3-second clarity test", "CTA contrast dominance", "WCAG readability"],
+    },
+    {
+      skillId: "design-systems",
+      reason: "8pt spatial rhythm and tokens tailored to " + archetype,
+      instructionsApplied: ["Spacing tokens", "Surface elevations", "Consistent border radii"],
+    },
+    {
+      skillId: "typography",
+      reason: "Optimal optical hierarchy and typographic pairing for " + archetype,
+      instructionsApplied: ["Display font pairing", "Line measure <= 65ch", "Fluid type scaling"],
+    },
+    {
+      skillId: "responsive-design",
+      reason: "Mobile-first reflow, 44x44px touch targets, zero horizontal overflow",
+      instructionsApplied: ["Touch targets", "Fluid flex/grid reflow", "0px horizontal overflow guard"],
+    },
+    {
+      skillId: "accessibility",
+      reason: "WCAG 2.2 AA contrast adherence and keyboard navigation",
+      instructionsApplied: ["Contrast verification", "Semantic landmarks", "Focus rings"],
+    },
+  ];
+
+  // Add contextual industry/technical skills
+  if (archetype === "dark_technical" || combined.includes("saas") || combined.includes("tech")) {
+    selectedSkills.push(
+      {
+        skillId: "saas-ux",
+        reason: "Time-to-value acceleration, high-density telemetry, and technical workflow clarity",
+        instructionsApplied: ["Bento information density", "Interactive telemetry preview", "Direct friction-free CTA"],
+      },
+      {
+        skillId: "21st-dev",
+        reason: "Dark technical aesthetics with spotlight glows, subtle glass borders, and tech-grids",
+        instructionsApplied: ["Spotlight glow cards", "Bento layout structure", "Micro-glow accents"],
+      },
+      {
+        skillId: "framer-motion",
+        reason: "Spring-physics hover states and staggered entrance choreography",
+        instructionsApplied: ["Spring transitions", "Reduced-motion media query fallback"],
+      }
+    );
+  } else if (archetype === "clean_clinical" || combined.includes("dental") || combined.includes("clinic")) {
+    selectedSkills.push(
+      {
+        skillId: "clean-clinical",
+        reason: "High-trust clinical calm palette, patient anxiety reduction, and diagnostic proof",
+        instructionsApplied: ["Sterile calm color system", "Trust badge hierarchy", "Clear booking touchpoints"],
+      },
+      {
+        skillId: "cro",
+        reason: "Urgent care & booking appointment velocity with prominent contact actions",
+        instructionsApplied: ["Primary appointment action", "Emergency contact visibility", "Social proof placement"],
+      },
+      {
+        skillId: "ux-psychology",
+        reason: "Social proof, authoritative reassurance, and reduced cognitive friction for anxious patients",
+        instructionsApplied: ["Social proof clustering", "Authority credential signals", "Clarity over complexity"],
+      }
+    );
+  } else if (archetype === "warm_artisanal" || combined.includes("restaurant") || combined.includes("cafe")) {
+    selectedSkills.push(
+      {
+        skillId: "creative-art-direction",
+        reason: "Rich sensory storytelling, warm hearth tones, and artisanal culinary ambiance",
+        instructionsApplied: ["Warm glow ambient lighting", "Artisanal food photography layout", "Editorial typography"],
+      },
+      {
+        skillId: "cro",
+        reason: "Reservation conversion optimization and easy menu discovery",
+        instructionsApplied: ["Reserve table CTA prominence", "Signature dish showcases", "Location and hours clarity"],
+      }
+    );
+  } else if (archetype === "minimal_editorial" || combined.includes("architect")) {
+    selectedSkills.push(
+      {
+        skillId: "creative-art-direction",
+        reason: "Disciplined negative space, refined serif hierarchy, and spatial project framing",
+        instructionsApplied: ["Generous editorial whitespace", "Architectural blueprint layout", "Curated work showcase"],
+      },
+      {
+        skillId: "spatial-interaction",
+        reason: "Perspective depth and spatial layering honoring architectural physical space",
+        instructionsApplied: ["Subtle CSS 3D tilt", "Multi-plane project cards", "Tactile hover inspection"],
+      }
+    );
+  } else if (archetype === "luxury_bespoke" || combined.includes("fashion") || combined.includes("couture")) {
+    selectedSkills.push(
+      {
+        skillId: "luxury-noir",
+        reason: "High-contrast editorial framing, bespoke atelier heritage, and tactile curtain reveals",
+        instructionsApplied: ["Luxury noir contrast scrim", "Atelier collection showcase", "Curtain reveal transitions"],
+      },
+      {
+        skillId: "creative-art-direction",
+        reason: "Haute couture typography, poetic copy cadence, and heirloom materiality",
+        instructionsApplied: ["Serif display titles", "Muted gold accents", "Lookbook layout structure"],
+      }
+    );
+  } else if (archetype === "high_trust_service" || combined.includes("electric") || combined.includes("plumb")) {
+    selectedSkills.push(
+      {
+        skillId: "high-trust-service",
+        reason: "Immediate emergency dispatch, certified master tradespeople verification, and upfront pricing",
+        instructionsApplied: ["24/7 Emergency call bar", "License & bonding trust badges", "Transparent pricing guarantees"],
+      },
+      {
+        skillId: "cro",
+        reason: "Click-to-call direct conversion and 30-minute rapid arrival guarantees",
+        instructionsApplied: ["Sticky phone contact", "Emergency dispatch banner", "Verified homeowner reviews"],
+      }
+    );
+  } else if (combined.includes("ceramic") || combined.includes("pottery") || combined.includes("ecommerce")) {
+    selectedSkills.push(
+      {
+        skillId: "ecommerce-ux",
+        reason: "Faceted product curation, tactile ceramic texture zoom, and streamlined checkout",
+        instructionsApplied: ["Product catalog cards", "Wabi-sabi earth tone palette", "Quick purchase CTAs"],
+      },
+      {
+        skillId: "creative-art-direction",
+        reason: "Tactile artisanal materiality highlighting kiln-fired textures and organic forms",
+        instructionsApplied: ["Warm studio photography", "Artisanal collection framing", "Muted terracotta tones"],
+      }
+    );
+  } else if (archetype === "expressive_creative" || combined.includes("agency")) {
+    selectedSkills.push(
+      {
+        skillId: "creative-art-direction",
+        reason: "Bold visual personality, kinetic type reveals, and boundary-pushing portfolio layouts",
+        instructionsApplied: ["Kinetic headline reveal", "Interactive portfolio grid", "Deep dark canvas"],
+      },
+      {
+        skillId: "21st-dev",
+        reason: "High-polish modern design components and tactile interactive states",
+        instructionsApplied: ["Magnetic buttons", "Interactive cursor states", "Physics gravity containers"],
+      }
+    );
+  }
+
+  // Determine negative image keywords per industry to eliminate cross-industry image contamination
+  const negativeImageTerms: string[] = ["blurry", "watermark", "low-res", "stock artifact"];
+  if (cat.includes("restaurant") || cat.includes("cafe") || cat.includes("food")) {
+    negativeImageTerms.push("medical", "dentistry", "doctor", "clinic", "circuit", "code", "motherboard", "software", "warehouse", "wire", "wrench", "industrial", "blueprint");
+  } else if (cat.includes("dental") || cat.includes("clinic") || cat.includes("medical")) {
+    negativeImageTerms.push("food", "restaurant", "burger", "pizza", "coffee", "fashion", "runway", "fabric", "circuit", "dark mode", "wrench", "cocktail", "bar", "nightclub");
+  } else if (cat.includes("tech") || cat.includes("saas") || cat.includes("software") || cat.includes("ai")) {
+    negativeImageTerms.push("food", "restaurant", "clinic", "dentist", "pottery", "clay", "ceramics", "dress", "runway", "wrench", "pipes", "plumbing", "dentistry");
+  } else if (cat.includes("architect") || cat.includes("interior")) {
+    negativeImageTerms.push("fast food", "dentistry", "tooth", "clinic", "neon", "server room", "coding", "retail rack", "plumbing", "wrench", "cocktail");
+  } else if (cat.includes("fashion") || cat.includes("couture")) {
+    negativeImageTerms.push("food", "dental", "tech", "server", "wire", "screwdriver", "wrench", "pipes", "code", "clinical", "hospital", "dentist");
+  } else if (cat.includes("electric") || cat.includes("plumb") || cat.includes("repair") || cat.includes("trade")) {
+    negativeImageTerms.push("fashion", "haute couture", "runway", "cocktail", "pizza", "ceramics", "pottery", "luxury jewelry", "model", "dentist");
+  } else if (cat.includes("ceramic") || cat.includes("pottery") || cat.includes("tableware")) {
+    negativeImageTerms.push("dental", "clinic", "electrician", "circuit board", "server rack", "cyber", "surgery", "wrench", "motherboard", "code");
+  } else if (cat.includes("agency") || cat.includes("creative")) {
+    negativeImageTerms.push("dental", "medical", "clinic", "fast food", "plumbing", "wrench", "cheap clipart", "tools", "teeth", "hospital");
+  }
+
+  // Section-by-section plan
+  const sections: SkillExecutionSectionPlan[] = sectionSequence.map((secKey) => {
+    let cardFamily: CardFamily = "bento";
+    let interactionPattern = "MagneticButton";
+    const motionPattern = "spring_reveal";
+
+    if (secKey === "features" || secKey === "trust_proof" || secKey === "trust_guarantees") {
+      if (archetype === "dark_technical") {
+        cardFamily = "bento";
+        interactionPattern = "CommandPalette";
+      } else if (archetype === "clean_clinical") {
+        cardFamily = "comparison";
+        interactionPattern = "MagneticButton";
+      } else if (archetype === "warm_artisanal") {
+        cardFamily = "editorial";
+        interactionPattern = "MagneticButton";
+      } else if (archetype === "minimal_editorial") {
+        cardFamily = "project-showcase";
+        interactionPattern = "PerspectiveCarousel";
+      } else if (archetype === "luxury_bespoke") {
+        cardFamily = "image-reveal";
+        interactionPattern = "VerseCard";
+      } else if (archetype === "high_trust_service") {
+        cardFamily = "comparison";
+        interactionPattern = "MagneticButton";
+      } else if (archetype === "expressive_creative") {
+        cardFamily = "feature-reveal";
+        interactionPattern = "PhysicsGravityContainer";
+      } else {
+        cardFamily = "bento";
+      }
+    } else if (
+      secKey === "services" ||
+      secKey === "menu" ||
+      secKey === "signature_dishes" ||
+      secKey === "emergency_services" ||
+      secKey === "creative_capabilities"
+    ) {
+      if (archetype === "clean_clinical") {
+        cardFamily = "perspective";
+      } else if (archetype === "warm_artisanal") {
+        cardFamily = "service";
+      } else if (archetype === "dark_technical") {
+        cardFamily = "spotlight";
+      } else if (archetype === "minimal_editorial") {
+        cardFamily = "horizontal-media";
+      } else if (archetype === "luxury_bespoke") {
+        cardFamily = "horizontal-media";
+      } else if (archetype === "high_trust_service") {
+        cardFamily = "service";
+      } else if (archetype === "expressive_creative") {
+        cardFamily = "spotlight";
+      } else {
+        cardFamily = "service";
+      }
+    } else if (secKey === "products" || secKey === "catalog" || secKey === "curated_collection") {
+      if (archetype === "luxury_bespoke") {
+        cardFamily = "image-reveal";
+      } else {
+        cardFamily = "expandable";
+      }
+    } else if (secKey === "reviews" || secKey === "testimonials" || secKey === "patient_reviews" || secKey === "guest_reviews") {
+      if (archetype === "minimal_editorial" || archetype === "luxury_bespoke") {
+        cardFamily = "stacked";
+      } else {
+        cardFamily = "testimonial-stack";
+      }
+    } else if (secKey === "workflow_steps" || secKey === "process" || secKey === "treatment_process" || secKey === "methodology") {
+      if (archetype === "dark_technical") {
+        cardFamily = "expandable";
+      } else if (archetype === "clean_clinical") {
+        cardFamily = "stacked";
+      } else {
+        cardFamily = "service";
+      }
+    } else if (secKey === "awards_metrics" || secKey === "service_area") {
+      cardFamily = "stat";
+    } else if (secKey === "about" || secKey === "craft_heritage" || secKey === "atmosphere_story" || secKey === "doctor_clinic") {
+      cardFamily = "editorial";
+    } else if (secKey === "contact" || secKey === "reservation" || secKey === "booking") {
+      cardFamily = "floating";
+    }
+
+    return {
+      sectionType: secKey,
+      cardFamily,
+      interactionPattern,
+      motionPattern,
+      imageNegativeTerms: negativeImageTerms,
+    };
+  });
+
+  return {
+    selectedSkills,
+    layoutFamily: `${archetype}_grid_system`,
+    sectionOrder: sectionSequence,
+    sections,
+  };
+}
+
+/**
  * Master Design Strategy generator.
- * Harmonizes archetype, section sequence, spatial 3D, background, image intent, and typography.
+ * Harmonizes archetype, section sequence, spatial 3D, background, image intent, typography, and skill execution plan.
  */
 export function generateDesignStrategy(context: StrategyInputContext): ComputedDesignStrategy {
   const archetype = deriveVisualArchetype(context);
@@ -536,19 +1199,14 @@ export function generateDesignStrategy(context: StrategyInputContext): ComputedD
   const sectionSequence = deriveSectionSequence(archetype, context);
   const spatial3d = deriveSpatial3dConfig(archetype, context);
   const backgroundStrategy = deriveBackgroundStrategy(archetype, isDark);
+  const heroBackground = deriveHeroBackground(archetype, context, isDark);
   const imageIntents = deriveImageIntents(archetype, context);
+  const skillExecutionPlan = deriveSkillExecutionPlan(archetype, context, sectionSequence);
 
-  // Hero layout variant matching archetype
-  const heroType =
-    spatial3d.enabled && spatial3d.level === "ADVANCED_CSS_3D"
-      ? "spatial_depth_hero"
-      : archetype === "minimal_editorial"
-      ? "fullscreen_visual"
-      : archetype === "luxury_bespoke"
-      ? "minimal_editorial"
-      : archetype === "high_trust_service"
-      ? "action_focused"
-      : "split_showcase";
+  // Hero layout variant matching archetype and business domain
+  const heroType = deriveHeroLayout(archetype, context, spatial3d);
+  const visualConceptData = deriveVisualConcept(archetype, context);
+  const motionStrategy = deriveMotionStrategy(archetype, context);
 
   const cardTreatment =
     archetype === "dark_technical"
@@ -588,6 +1246,8 @@ export function generateDesignStrategy(context: StrategyInputContext): ComputedD
     mood: archetype,
   };
 
+  const antiRepetitionFingerprint = `${archetype}_${heroType}_${backgroundStrategy.type}_${typographyTokens.headingFont.split(",")[0].trim().replace(/\s+/g, "")}_${colorSystem.primary.replace("#", "")}`;
+
   return {
     visualArchetype: archetype,
     heroType,
@@ -596,9 +1256,15 @@ export function generateDesignStrategy(context: StrategyInputContext): ComputedD
     cardTreatment,
     backgroundStrategy,
     spatial3d,
+    heroBackground,
     sectionSequence,
     imageIntents,
+    skillExecutionPlan,
     typographyTokens,
     colorSystem,
+    visualConcept: visualConceptData.concept,
+    artDirectionSummary: visualConceptData.summary,
+    antiRepetitionFingerprint,
+    motionStrategy,
   };
 }

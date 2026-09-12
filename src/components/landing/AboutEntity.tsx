@@ -106,24 +106,32 @@ export default function AboutEntity() {
         </div>
 
         {/* Identity & Canonical Statement Banner */}
-        <div className="mt-10 rounded-2xl border border-cyan-500/30 bg-gradient-to-r from-cyan-950/30 via-[#0A0B10] to-indigo-950/30 p-6 flex flex-col sm:flex-row items-center justify-between gap-4 surface-tactile">
-          <div className="flex items-center gap-3">
-            <div className="h-9 w-9 rounded-xl bg-cyan-600 text-white flex items-center justify-center flex-shrink-0 shadow-xs">
-              <Sparkles className="h-4 w-4" />
+        <div className="mt-10 rounded-2xl border border-cyan-500/40 bg-gradient-to-r from-zinc-950 via-[#0A0B10] to-zinc-950 p-5 sm:p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xl shadow-cyan-950/20">
+          <div className="flex items-start sm:items-center gap-3.5">
+            <div className="h-10 w-10 rounded-xl bg-cyan-500/20 border border-cyan-400/40 text-cyan-300 flex items-center justify-center flex-shrink-0 shadow-sm mt-0.5 sm:mt-0">
+              <Sparkles className="h-5 w-5" />
             </div>
             <div>
-              <p className="text-xs font-bold uppercase tracking-wider text-cyan-600 dark:text-cyan-400">
+              <p className="text-xs font-bold uppercase tracking-wider text-cyan-400">
                 Authoritative Web Identity
               </p>
-              <p className="text-sm text-zinc-700 dark:text-zinc-300">
+              <p className="text-sm text-zinc-200 leading-relaxed mt-0.5">
                 The official website and cloud deployment for WebsiteBanja AI is strictly hosted at{" "}
-                <strong className="text-zinc-900 dark:text-white">https://websitebanja.com</strong>.
+                <a
+                  href="https://websitebanja.com"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-semibold text-white underline decoration-cyan-400/60 decoration-2 underline-offset-4 hover:decoration-cyan-300 hover:text-cyan-200 transition"
+                >
+                  https://websitebanja.com
+                </a>
+                .
               </p>
             </div>
           </div>
           <Link
             href="/agent"
-            className="btn-primary-luminous inline-flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold text-white shadow-xs transition flex-shrink-0"
+            className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-bold text-xs px-5 py-2.5 shadow-lg shadow-cyan-500/25 transition active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 flex-shrink-0 w-full sm:w-auto justify-center"
           >
             <span>Try Mitra AI Architect</span>
             <ArrowRight className="h-3.5 w-3.5" />

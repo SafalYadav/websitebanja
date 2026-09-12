@@ -14,7 +14,13 @@ import {
 import { hydrateProjectMetadata } from "@/lib/projectHydration";
 import { getStorageClient } from "@/lib/storage";
 import { AI_WORKSPACE_FILES } from "@/types/aiWorkspace";
+import {
+  isMeaningfulStudioMutation,
+  getStudioQuota,
+  consumeStudioQuota,
+} from "@/lib/studioQuota";
 import type { Project, ProjectUpdates } from "@/types/project";
+
 
 const VALID_PROJECT_COLUMNS = new Set([
   "name",
@@ -115,6 +121,40 @@ export async function PATCH(request: Request, context: RouteContext) {
       return NextResponse.json({ success: true, data: hydrateProjectMetadata(existing as unknown as Project) });
     }
 
+    const existing = await dbGetProject(id, auth.user.id);
+    if (!existing) {
+      return NextResponse.json({ success: false, error: "Project not found or unauthorized" }, { status: 404 });
+    }
+
+
+    // Server-side Studio Change Quota Enforcement
+    const { isMeaningful, mutationHash } = isMeaningfulStudioMutation(
+      existing as unknown as Record<string, unknown>,
+      cleanUpdates
+    );
+
+    if (isMeaningful) {
+      const quota = await getStudioQuota(auth.user.id);
+      if (quota.isBlocked) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "QUOTA_EXCEEDED",
+            code: "STUDIO_CHANGE_LIMIT_REACHED",
+            message: quota.isPro
+              ? "You've reached your current Studio change limit."
+              : "You've reached your Free Plan Studio change limit.",
+            subMessage: quota.isPro
+              ? "Please contact support for high-volume enterprise quota."
+              : "Upgrade to Pro to continue editing your website.",
+            cta: quota.isPro ? undefined : "Upgrade to Pro — ₹500/month",
+            quota,
+          },
+          { status: 403 }
+        );
+      }
+    }
+
     // Ensure json_data holds backend metadata for 100% resilience across all environments
     let currentJsonData = (cleanUpdates.json_data || updates.json_data) as Record<string, unknown> | undefined;
     if (currentJsonData && typeof currentJsonData === "object") {
@@ -151,13 +191,29 @@ export async function PATCH(request: Request, context: RouteContext) {
       row = await dbUpdateProject(id, auth.user.id, cleanUpdates);
     }
 
+    if (!row) {
+      return NextResponse.json(
+        { success: false, error: "Failed to persist project updates to database." },
+        { status: 500 }
+      );
+    }
+
+    // Quota Accounting: Only increment after successful database persistence of meaningful mutations
+    let latestQuota;
+    if (isMeaningful) {
+      const quotaResult = await consumeStudioQuota(auth.user.id, mutationHash);
+      latestQuota = quotaResult.quota;
+    } else {
+      latestQuota = await getStudioQuota(auth.user.id);
+    }
+
     const project = hydrateProjectMetadata(row as unknown as Project);
     if (project) {
       if (updates.backend_config !== undefined) project.backend_config = updates.backend_config;
       if (updates.backend_requirement !== undefined) project.backend_requirement = updates.backend_requirement;
     }
 
-    return NextResponse.json({ success: true, data: project });
+    return NextResponse.json({ success: true, data: project, quota: latestQuota });
   } catch (err) {
     console.error("[PATCH /api/projects/[id]] Error:", err);
     return NextResponse.json(

@@ -135,7 +135,6 @@ export function useVoiceAgent() {
           onPlaybackEnd: () => {
             setIsSpeaking(false);
             setIsLoadingVoice(false);
-            onPlaybackFinishedCallbackRef.current?.();
           },
           onError: (err) => {
             console.warn("[VoiceAgent] LiveAudioStreamer warning:", err);
@@ -170,42 +169,48 @@ export function useVoiceAgent() {
       streamerRef.current.stopAndClear();
     }
 
-    if (typeof window !== "undefined" && "speechSynthesis" in window) {
-      try {
-        window.speechSynthesis.cancel();
-      } catch {
-        // ignore
-      }
-    }
-
     setIsSpeaking(false);
     setIsLoadingVoice(false);
   }, []);
 
   /**
    * Plays canonical Agent speechText by streaming real-time 24kHz PCM chunks
-   * from the server-authoritative Gemini Live voice pipeline into Web Audio API.
+   * from the server-authoritative Google Gemini voice pipeline into Web Audio API.
+   * Strictly Google-only neural audio. Zero browser speechSynthesis or OpenAI fallbacks.
    */
   const speak = useCallback(
     async (
       text: string,
-      timing?: { tSubmit?: number; tTextVisible?: number },
+      timingOrOptions?: { tSubmit?: number; tTextVisible?: number } | string | { language?: string; timing?: any; onPlaybackEnd?: () => void; onPlaybackStart?: () => void },
       onPlaybackEnd?: () => void,
-      onPlaybackStart?: () => void
+      onPlaybackStart?: () => void,
+      language?: string
     ) => {
-      onPlaybackStartCallbackRef.current = onPlaybackStart || null;
-      onPlaybackFinishedCallbackRef.current = onPlaybackEnd || null;
+      let resolvedLang = language;
+      let resolvedOnEnd = onPlaybackEnd;
+      let resolvedOnStart = onPlaybackStart;
+
+      if (typeof timingOrOptions === "string") {
+        resolvedLang = timingOrOptions;
+      } else if (timingOrOptions && typeof timingOrOptions === "object" && "language" in timingOrOptions) {
+        resolvedLang = (timingOrOptions as any).language;
+        if ((timingOrOptions as any).onPlaybackEnd) resolvedOnEnd = (timingOrOptions as any).onPlaybackEnd;
+        if ((timingOrOptions as any).onPlaybackStart) resolvedOnStart = (timingOrOptions as any).onPlaybackStart;
+      }
+
+      onPlaybackStartCallbackRef.current = resolvedOnStart || null;
+      onPlaybackFinishedCallbackRef.current = resolvedOnEnd || null;
 
       if (isVoiceMuted) {
-        onPlaybackStart?.();
-        onPlaybackEnd?.();
+        resolvedOnStart?.();
+        resolvedOnEnd?.();
         return;
       }
 
       const trimmedText = text.trim();
       if (!trimmedText) {
-        onPlaybackStart?.();
-        onPlaybackEnd?.();
+        resolvedOnStart?.();
+        resolvedOnEnd?.();
         return;
       }
 
@@ -218,8 +223,9 @@ export function useVoiceAgent() {
       setVoiceState("loading");
       setVoiceError(null);
 
+      const targetLanguage = resolvedLang || voiceLanguage || "en-IN";
       const tTtsStart = performance.now();
-      console.log(`[CanonicalVoice] Event: SPEAK | len: ${trimmedText.length} | text: "${trimmedText.slice(0, 70)}..."`);
+      console.log(`[CanonicalVoice] Event: SPEAK | lang: ${targetLanguage} | len: ${trimmedText.length} | text: "${trimmedText.slice(0, 70)}..."`);
 
       const cleanLower = trimmedText.toLowerCase().replace(/\s+/g, " ");
       const canonicalGreetingClean = "hey there! i'm mitra, your ai website architect. what kind of business or website are you building today? tell me your vision, or tap the mic and let's chat!";
@@ -241,49 +247,6 @@ export function useVoiceAgent() {
         return;
       }
 
-      const fallbackToSpeechSynthesis = (): boolean => {
-        if (typeof window !== "undefined" && "speechSynthesis" in window) {
-          console.log(`[VoiceAgent] Speaking exact canonical text via native window.speechSynthesis: "${trimmedText.slice(0, 50)}..."`);
-          try {
-            window.speechSynthesis.cancel();
-            const utterance = new SpeechSynthesisUtterance(trimmedText);
-            utterance.rate = 1.0;
-            utterance.pitch = 1.0;
-            utterance.onstart = () => {
-              if (playId === activePlayIdRef.current) {
-                setIsSpeaking(true);
-                setIsLoadingVoice(false);
-                setVoiceState("speaking");
-                onPlaybackStartCallbackRef.current?.();
-              }
-            };
-            utterance.onend = () => {
-              if (playId === activePlayIdRef.current) {
-                setIsSpeaking(false);
-                setIsLoadingVoice(false);
-                setVoiceState("idle");
-                onPlaybackFinishedCallbackRef.current?.();
-              }
-            };
-            utterance.onerror = (e) => {
-              console.warn("[VoiceAgent] Native SpeechSynthesis error:", e);
-              if (playId === activePlayIdRef.current) {
-                setIsSpeaking(false);
-                setIsLoadingVoice(false);
-                setVoiceState("idle");
-                onPlaybackFinishedCallbackRef.current?.();
-              }
-            };
-            muteMic();
-            window.speechSynthesis.speak(utterance);
-            return true;
-          } catch (synthErr) {
-            console.warn("[VoiceAgent] SpeechSynthesis launch failed:", synthErr);
-          }
-        }
-        return false;
-      };
-
       const abortController = new AbortController();
       const abortTimeout = setTimeout(() => abortController.abort(), 18000);
 
@@ -291,7 +254,10 @@ export function useVoiceAgent() {
         const res = await fetch("/api/agent/voice", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text: trimmedText }),
+          body: JSON.stringify({
+            text: trimmedText,
+            language: targetLanguage,
+          }),
           signal: abortController.signal,
         });
         clearTimeout(abortTimeout);
@@ -352,17 +318,16 @@ export function useVoiceAgent() {
                 setIsSpeaking(false);
                 setIsLoadingVoice(false);
                 setVoiceState("idle");
-                onPlaybackEnd?.();
+                resolvedOnEnd?.();
               }
             });
           } else {
-            console.warn("[VoiceAgent] No audio bytes received from voice endpoint. Attempting native speech synthesis fallback.");
-            if (fallbackToSpeechSynthesis()) return;
+            console.warn("[VoiceAgent] Google Voice returned zero audio bytes. Text mode active; zero browser synthesis fallback.");
             setIsSpeaking(false);
             setIsLoadingVoice(false);
             setVoiceState("idle");
-            onPlaybackStart?.();
-            onPlaybackEnd?.();
+            resolvedOnStart?.();
+            resolvedOnEnd?.();
           }
           return;
         }
@@ -403,7 +368,7 @@ export function useVoiceAgent() {
             setIsSpeaking(false);
             setIsLoadingVoice(false);
             setVoiceState("idle");
-            onPlaybackEnd?.();
+            resolvedOnEnd?.();
           }
         };
 
@@ -412,20 +377,19 @@ export function useVoiceAgent() {
         setIsLoadingVoice(false);
         setIsSpeaking(true);
         setVoiceState("speaking");
-        onPlaybackStart?.();
+        resolvedOnStart?.();
       } catch (err) {
         if (playId === activePlayIdRef.current) {
-          console.warn("[VoiceAgent] Voice playback error:", err);
-          if (fallbackToSpeechSynthesis()) return;
+          console.warn("[VoiceAgent] Google Voice playback error (zero browser synthesis fallback):", err);
           setIsSpeaking(false);
           setIsLoadingVoice(false);
-          setVoiceState("error");
-          onPlaybackStart?.();
-          onPlaybackEnd?.();
+          setVoiceState("idle");
+          resolvedOnStart?.();
+          resolvedOnEnd?.();
         }
       }
     },
-    [isVoiceMuted, muteMic, stopSpeaking, unlockAudio]
+    [isVoiceMuted, voiceLanguage, muteMic, stopSpeaking, unlockAudio]
   );
 
   const toggleMute = useCallback(() => {
@@ -488,13 +452,13 @@ export function useVoiceAgent() {
         // 'en-IN' is natively supported on macOS/iOS Safari and Chrome.
         // It recognizes all Indian accents, Hinglish, Gujarati, Tamil, Marathi, etc.
         // without triggering Apple Speech server 'aborted' or 'service-not-allowed' errors.
-        recognition.lang = "en-IN";
+        recognition.lang = voiceLanguage || "en-IN";
 
         recognition.onstart = () => {
           setIsListening(true);
           setVoiceState("listening");
           setVoiceError(null);
-          console.log(`[VoiceTurn] 🎙️ Mic automatically UNMUTED (en-IN) - User turn`);
+          console.log(`[VoiceTurn] 🎙️ Mic automatically UNMUTED (${recognition.lang}) - User turn`);
         };
 
         recognition.onresult = (event: SpeechRecognitionEvent) => {

@@ -33,3 +33,15 @@ export interface UserSubscription {
   currentPeriodEnd?: string | null;
   cancelAtPeriodEnd: boolean;
 }
+
+export interface StudioQuotaStatus {
+  planId: PlanId;
+  isPro: boolean;
+  changesUsed: number;
+  limit: number;
+  remainingChanges: number;
+  isBlocked: boolean;
+  periodStart: string;
+  periodEnd: string;
+}
+

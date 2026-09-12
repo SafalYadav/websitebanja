@@ -16,17 +16,36 @@ export async function GET(request: Request) {
   try {
     const auth = await validateUserAuth(request);
     if (!auth.user) {
-      return NextResponse.json({ success: false, error: auth.error || "Unauthorized" }, { status: auth.status });
+      return NextResponse.json(
+        {
+          success: false,
+          error: auth.error || "Unauthorized",
+          errorType: auth.errorType || "API_AUTH_ERROR",
+        },
+        { status: auth.status }
+      );
     }
 
     const rows = await dbGetProjects(auth.user.id);
     const projects = rows.map((p) => hydrateProjectMetadata(p as unknown as Project)!);
 
-    return NextResponse.json({ success: true, data: projects });
+    const total = projects.length;
+    const published = projects.filter((p) => Boolean(p.is_published)).length;
+    const drafts = total - published;
+
+    return NextResponse.json({
+      success: true,
+      data: projects,
+      counts: { total, published, drafts },
+    });
   } catch (err) {
     console.error("[GET /api/projects] Error:", err);
     return NextResponse.json(
-      { success: false, error: err instanceof Error ? err.message : "Failed to fetch projects" },
+      {
+        success: false,
+        error: err instanceof Error ? err.message : "Failed to fetch projects",
+        errorType: "DATABASE_ERROR",
+      },
       { status: 500 }
     );
   }
@@ -40,7 +59,14 @@ export async function POST(request: Request) {
   try {
     const auth = await validateUserAuth(request);
     if (!auth.user) {
-      return NextResponse.json({ success: false, error: auth.error || "Unauthorized" }, { status: auth.status });
+      return NextResponse.json(
+        {
+          success: false,
+          error: auth.error || "Unauthorized",
+          errorType: auth.errorType || "API_AUTH_ERROR",
+        },
+        { status: auth.status }
+      );
     }
 
     const body = await request.json().catch(() => ({}));
@@ -53,7 +79,11 @@ export async function POST(request: Request) {
   } catch (err) {
     console.error("[POST /api/projects] Error:", err);
     return NextResponse.json(
-      { success: false, error: err instanceof Error ? err.message : "Failed to create project" },
+      {
+        success: false,
+        error: err instanceof Error ? err.message : "Failed to create project",
+        errorType: "DATABASE_ERROR",
+      },
       { status: 500 }
     );
   }

@@ -25,6 +25,17 @@ interface ResolveThemeInput {
   secondaryColor?: string | null;
   category?: string | null;
   businessName?: string | null;
+  archetype?: string | null;
+  colorMode?: "dark" | "light" | null;
+}
+
+// Calculate relative luminance [0, 1] per WCAG 2.1
+export function getLuminance(r: number, g: number, b: number): number {
+  const [rs, gs, bs] = [r, g, b].map((c) => {
+    const s = c / 255;
+    return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+  });
+  return 0.2126 * rs + 0.7152 * gs + 0.0722 * bs;
 }
 
 // Convert hex to rgb components
@@ -55,6 +66,8 @@ export function resolveWebsiteTheme({
   secondaryColor,
   category,
   businessName,
+  archetype,
+  colorMode,
 }: ResolveThemeInput): WebsiteThemeTokens {
   const combinedContext = `${category || ""} ${businessName || ""}`.toLowerCase();
   const normalizedStyle = (style || "modern").toLowerCase();
@@ -113,8 +126,10 @@ export function resolveWebsiteTheme({
   const sRgb = hexToRgb(secondary);
 
   // 2. Determine if the theme should be DARK or LIGHT
-  // Rule: Default is LIGHT PREMIUM. Dark is used ONLY when style explicitly specifies "dark", "night", or "dark luxury".
+  // Checks archetype, explicit colorMode, and style descriptors
   const isDark =
+    colorMode === "dark" ||
+    archetype === "dark_technical" ||
     normalizedStyle.includes("dark") ||
     normalizedStyle.includes("night") ||
     normalizedStyle.includes("black");
@@ -141,9 +156,9 @@ export function resolveWebsiteTheme({
 
     surface = "rgba(255, 255, 255, 0.05)";
     surfaceHover = "rgba(255, 255, 255, 0.09)";
-    fg = "#F8FAFC";
-    muted = "#94A3B8";
-    border = "rgba(255, 255, 255, 0.1)";
+    fg = "#F8FAFC"; // 16:1 contrast ratio against dark bg
+    muted = "#94A3B8"; // > 7:1 contrast ratio (exceeds WCAG AAA)
+    border = "rgba(255, 255, 255, 0.12)";
   } else {
     // Premium Luminous Light Palette (Soft brand-tinted luminous canvas)
     // Blend primary RGB gently into clean white (5-8% tint for luxurious atmosphere)
@@ -159,12 +174,32 @@ export function resolveWebsiteTheme({
 
     surface = "rgba(255, 255, 255, 0.88)";
     surfaceHover = "#FFFFFF";
-    fg = "#0F172A"; // Crisp slate 900
-    muted = "#475569"; // Slate 600 for high legibility
+    fg = "#0F172A"; // Crisp slate 900 (> 15:1 contrast ratio)
+    muted = "#475569"; // Slate 600 (> 7:1 contrast ratio, WCAG AAA)
     border = "rgba(0, 0, 0, 0.08)";
   }
 
-  const accent = "#38BDF8";
+  // Context-aware accent color matching brand personality
+  let accent = secondary;
+  if (combinedContext.includes("cafe") || combinedContext.includes("restaurant") || combinedContext.includes("dining") || combinedContext.includes("food")) {
+    accent = "#F59E0B"; // Warm amber / saffron
+  } else if (combinedContext.includes("clinic") || combinedContext.includes("dental") || combinedContext.includes("medical") || archetype === "clean_clinical") {
+    accent = "#0284C7"; // Crisp ocean medical blue
+  } else if (combinedContext.includes("fashion") || combinedContext.includes("couture") || archetype === "luxury_bespoke") {
+    accent = "#D4AF37"; // Champagne gold
+  } else if (combinedContext.includes("architect") || combinedContext.includes("interior") || archetype === "minimal_editorial") {
+    accent = "#3B82F6"; // Architectural cobalt / stone
+  } else if (combinedContext.includes("ceramic") || combinedContext.includes("pottery") || combinedContext.includes("stoneware")) {
+    accent = "#EA580C"; // Terracotta glaze
+  } else if (combinedContext.includes("electric") || combinedContext.includes("plumb") || combinedContext.includes("service") || combinedContext.includes("repair")) {
+    accent = "#F59E0B"; // Safety amber
+  } else if (combinedContext.includes("agency") || combinedContext.includes("creative") || archetype === "expressive_creative") {
+    accent = "#EC4899"; // Electric rose
+  } else if (combinedContext.includes("tech") || combinedContext.includes("saas") || archetype === "dark_technical") {
+    accent = "#06B6D4"; // Cyber cyan
+  } else if (!accent) {
+    accent = "#38BDF8";
+  }
   const glowPrimary = hexToRgba(primary, isDark ? 0.3 : 0.18);
   const glowSecondary = hexToRgba(secondary, isDark ? 0.22 : 0.14);
   const gradientPrimary = `linear-gradient(135deg, ${primary} 0%, ${secondary} 100%)`;

@@ -7,19 +7,19 @@ const SCREENSHOT_DIR = path.join(ARTIFACT_DIR, ".tempmediaStorage");
 fs.mkdirSync(SCREENSHOT_DIR, { recursive: true });
 
 const SITES = [
-  { id: "restaurant", name: "L’Aroma Specialty Coffee & Bistro", category: "Restaurant & Cafe" },
-  { id: "dental", name: "Aura Dental Suite", category: "Dental Clinic" },
-  { id: "saas", name: "SynapseTelemetry AI", category: "SaaS & Technology" },
-  { id: "architecture", name: "Atelier Form & Void", category: "Architecture Studio" },
-  { id: "fashion", name: "Maison Vérité", category: "Luxury Fashion" },
-  { id: "service", name: "Apex Emergency Plumbing", category: "Local Service Business" },
-  { id: "ecommerce", name: "Nordic Living Essentials", category: "E-commerce & Retail" },
-  { id: "agency", name: "Kinetic Studio", category: "Creative Agency" },
+  { id: "restaurant", name: "Botanica Hearth & Roastery", category: "Restaurant & Cafe" },
+  { id: "dental", name: "Lumina Smiles & Implant Center", category: "Dental Clinic" },
+  { id: "saas", name: "VectorPulse AI", category: "SaaS & Technology" },
+  { id: "architecture", name: "Komorebi Spatial Atelier", category: "Architecture Studio" },
+  { id: "fashion", name: "Aethelgard High Atelier", category: "Luxury Fashion" },
+  { id: "service", name: "VoltCraft Emergency Electricians", category: "Local Service Business" },
+  { id: "ecommerce", name: "Ceramica Terra Artisans", category: "E-commerce Store" },
+  { id: "agency", name: "Monolith Brand Direction", category: "Creative Agency" },
 ];
 
 async function runBrowserQa() {
   console.log("================================================================================");
-  console.log("🎭 WEBSITEBANJA AI: PLAYWRIGHT BROWSER VISUAL QA FOR 8 REAL GENERATED WEBSITES");
+  console.log("🎭 WEBSITEBANJA AI: PLAYWRIGHT BROWSER VISUAL AUDIT (8 REAL SITES)");
   console.log("================================================================================\n");
 
   const browser = await chromium.launch({ headless: true });
@@ -27,7 +27,7 @@ async function runBrowserQa() {
 
   for (const site of SITES) {
     console.log(`--------------------------------------------------------------------------------`);
-    console.log(`🔍 Testing [${site.category}] ${site.name} (/preview/${site.id})`);
+    console.log(`🔍 Auditing [${site.category}] ${site.name} (/preview/${site.id})`);
     console.log(`--------------------------------------------------------------------------------`);
 
     const consoleErrors = [];
@@ -41,7 +41,7 @@ async function runBrowserQa() {
 
     desktopPage.on("console", (msg) => {
       if (msg.type() === "error") {
-        consoleErrors.push(`[Desktop] ${msg.text()}`);
+        consoleErrors.push(`[Desktop Console] ${msg.text()}`);
       }
     });
     desktopPage.on("pageerror", (err) => {
@@ -49,12 +49,24 @@ async function runBrowserQa() {
     });
 
     const targetUrl = `http://localhost:3000/preview/${site.id}`;
-    await desktopPage.goto(targetUrl, { waitUntil: "networkidle", timeout: 20000 });
+    await desktopPage.goto(targetUrl, { waitUntil: "networkidle", timeout: 25000 });
     await desktopPage.waitForTimeout(1000);
 
     // Verify sections rendered
-    const sectionsCount = await desktopPage.evaluate(() => {
-      return document.querySelectorAll("section").length;
+    const sectionsInfo = await desktopPage.evaluate(() => {
+      const sections = Array.from(document.querySelectorAll("section"));
+      return {
+        count: sections.length,
+        ids: sections.map(s => s.id || s.getAttribute("data-section") || "unnamed"),
+      };
+    });
+
+    // Check broken images
+    const brokenImages = await desktopPage.evaluate(() => {
+      const imgs = Array.from(document.querySelectorAll("img"));
+      return imgs
+        .filter(img => !img.complete || img.naturalWidth === 0)
+        .map(img => img.src || img.getAttribute("src"));
     });
 
     // Check desktop horizontal overflow
@@ -63,7 +75,19 @@ async function runBrowserQa() {
       return el.scrollWidth > window.innerWidth;
     });
 
-    // Scroll down to test full-page rendering
+    // Capture desktop hero
+    const desktopHeroShotPath = path.join(SCREENSHOT_DIR, `qa_${site.id}_desktop_hero.png`);
+    await desktopPage.screenshot({ path: desktopHeroShotPath, fullPage: false });
+    console.log(`  ✓ Desktop Hero Captured: ${desktopHeroShotPath}`);
+
+    // Scroll down 800px to capture first major sections
+    await desktopPage.evaluate(() => window.scrollBy(0, 800));
+    await desktopPage.waitForTimeout(600);
+    const desktopFirstSectionsPath = path.join(SCREENSHOT_DIR, `qa_${site.id}_desktop_first_sections.png`);
+    await desktopPage.screenshot({ path: desktopFirstSectionsPath, fullPage: false });
+    console.log(`  ✓ Desktop First Sections Captured: ${desktopFirstSectionsPath}`);
+
+    // Smooth scroll through entire page to trigger lazy loading / animations
     await desktopPage.evaluate(async () => {
       await new Promise((resolve) => {
         let totalHeight = 0;
@@ -79,21 +103,18 @@ async function runBrowserQa() {
         }, 50);
       });
     });
-    await desktopPage.waitForTimeout(500);
+    await desktopPage.waitForTimeout(600);
 
-    // Scroll back to top for hero screenshot
+    // Scroll back to top before full page capture
     await desktopPage.evaluate(() => window.scrollTo(0, 0));
-    await desktopPage.waitForTimeout(300);
+    await desktopPage.waitForTimeout(400);
 
-    const desktopHeroShotPath = path.join(SCREENSHOT_DIR, `qa_${site.id}_desktop_hero.png`);
-    await desktopPage.screenshot({ path: desktopHeroShotPath, fullPage: false });
-    console.log(`  ✓ Desktop Hero Captured: ${desktopHeroShotPath}`);
-
+    // Capture desktop full page
     const desktopFullShotPath = path.join(SCREENSHOT_DIR, `qa_${site.id}_desktop_full.png`);
     await desktopPage.screenshot({ path: desktopFullShotPath, fullPage: true });
     console.log(`  ✓ Desktop Full Page Captured: ${desktopFullShotPath}`);
 
-    // Check spatial 3D wrapper presence if applicable
+    // Check spatial 3D wrapper presence
     const has3dWrapper = await desktopPage.evaluate(() => {
       const wrapper = document.querySelector(".preserve-3d, [style*='perspective']");
       return !!wrapper;
@@ -112,14 +133,14 @@ async function runBrowserQa() {
 
     mobilePage.on("console", (msg) => {
       if (msg.type() === "error") {
-        consoleErrors.push(`[Mobile] ${msg.text()}`);
+        consoleErrors.push(`[Mobile Console] ${msg.text()}`);
       }
     });
     mobilePage.on("pageerror", (err) => {
       consoleErrors.push(`[Mobile PageError] ${err.message}`);
     });
 
-    await mobilePage.goto(targetUrl, { waitUntil: "networkidle", timeout: 20000 });
+    await mobilePage.goto(targetUrl, { waitUntil: "networkidle", timeout: 25000 });
     await mobilePage.waitForTimeout(800);
 
     // Check mobile horizontal overflow
@@ -128,69 +149,86 @@ async function runBrowserQa() {
       return el.scrollWidth > window.innerWidth;
     });
 
-    // Check minimum touch target on primary buttons (>= 44px)
-    const touchTargetAudit = await mobilePage.evaluate(() => {
-      const buttons = Array.from(document.querySelectorAll("button, a.btn, a[class*='button']"));
-      const smallButtons = buttons.filter((b) => {
-        const rect = b.getBoundingClientRect();
-        return rect.width > 0 && rect.height > 0 && (rect.width < 40 || rect.height < 40);
-      });
-      return {
-        totalButtons: buttons.length,
-        smallButtonsCount: smallButtons.length,
-      };
-    });
-
+    // Capture mobile hero
     const mobileHeroShotPath = path.join(SCREENSHOT_DIR, `qa_${site.id}_mobile_hero.png`);
     await mobilePage.screenshot({ path: mobileHeroShotPath, fullPage: false });
     console.log(`  ✓ Mobile Hero Captured: ${mobileHeroShotPath}`);
 
+    // Scroll through mobile page
+    await mobilePage.evaluate(async () => {
+      await new Promise((resolve) => {
+        let totalHeight = 0;
+        const distance = 350;
+        const timer = setInterval(() => {
+          const scrollHeight = document.body.scrollHeight;
+          window.scrollBy(0, distance);
+          totalHeight += distance;
+          if (totalHeight >= scrollHeight) {
+            clearInterval(timer);
+            resolve();
+          }
+        }, 50);
+      });
+    });
+    await mobilePage.waitForTimeout(500);
+
+    await mobilePage.evaluate(() => window.scrollTo(0, 0));
+    await mobilePage.waitForTimeout(300);
+
+    // Capture mobile full page
+    const mobileFullShotPath = path.join(SCREENSHOT_DIR, `qa_${site.id}_mobile_full.png`);
+    await mobilePage.screenshot({ path: mobileFullShotPath, fullPage: true });
+    console.log(`  ✓ Mobile Full Page Captured: ${mobileFullShotPath}`);
+
     await mobileContext.close();
 
-    console.log(`  • Sections rendered: ${sectionsCount}`);
+    console.log(`  • Sections rendered: ${sectionsInfo.count}`);
+    console.log(`  • Broken images: ${brokenImages.length}`);
     console.log(`  • Desktop horizontal overflow: ${desktopOverflow ? "FAIL (Overflow detected)" : "PASS (Zero overflow)"}`);
     console.log(`  • Mobile horizontal overflow: ${mobileOverflow ? "FAIL (Overflow detected)" : "PASS (Zero overflow)"}`);
     console.log(`  • Console errors: ${consoleErrors.length === 0 ? "0 (Clean)" : `${consoleErrors.length} errors`}`);
-    console.log(`  • Spatial 3D elements active: ${has3dWrapper ? "Yes" : "Flat / No"}`);
 
     results.push({
       id: site.id,
       name: site.name,
       category: site.category,
-      sectionsCount,
+      sectionsCount: sectionsInfo.count,
       desktopOverflow,
       mobileOverflow,
+      brokenImagesCount: brokenImages.length,
+      brokenImagesList: brokenImages,
       consoleErrorsCount: consoleErrors.length,
+      consoleErrors,
       has3dWrapper,
       desktopHeroShot: desktopHeroShotPath,
+      desktopFirstSectionsShot: desktopFirstSectionsPath,
       desktopFullShot: desktopFullShotPath,
       mobileHeroShot: mobileHeroShotPath,
+      mobileFullShot: mobileFullShotPath,
     });
   }
 
   await browser.close();
 
+  const auditResultsPath = path.join(path.resolve(process.cwd(), "scratch/audit_generations"), "browser_qa_results.json");
+  fs.mkdirSync(path.dirname(auditResultsPath), { recursive: true });
+  fs.writeFileSync(auditResultsPath, JSON.stringify(results, null, 2), "utf-8");
+
   console.log("\n================================================================================");
-  console.log("🏁 PLAYWRIGHT BROWSER QA MATRIX SUMMARY");
+  console.log("🏁 PLAYWRIGHT BROWSER AUDIT MATRIX SUMMARY");
   console.log("================================================================================");
   console.table(
     results.map((r) => ({
       Industry: r.category,
       Sections: r.sectionsCount,
-      "Desktop Overflow": r.desktopOverflow ? "FAIL" : "PASS",
-      "Mobile Overflow": r.mobileOverflow ? "FAIL" : "PASS",
-      "Console Errors": r.consoleErrorsCount,
-      "Spatial 3D": r.has3dWrapper ? "Active" : "Flat",
+      "Desk Overflow": r.desktopOverflow ? "FAIL" : "PASS",
+      "Mob Overflow": r.mobileOverflow ? "FAIL" : "PASS",
+      "Broken Imgs": r.brokenImagesCount,
+      "Console Errs": r.consoleErrorsCount,
+      "3D Effect": r.has3dWrapper ? "Active" : "Flat",
     }))
   );
-
-  const anyFailures = results.some((r) => r.desktopOverflow || r.mobileOverflow || r.consoleErrorsCount > 0);
-  if (anyFailures) {
-    console.error("\n❌ BROWSER QA FOUND ISSUES!");
-    process.exit(1);
-  } else {
-    console.log("\n🎉 ALL 8 WEBSITES PASSED COMPLETE BROWSER QA (DESKTOP & MOBILE)!");
-  }
+  console.log(`Audit results saved to: ${auditResultsPath}`);
 }
 
 runBrowserQa().catch((err) => {

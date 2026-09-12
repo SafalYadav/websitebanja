@@ -13,6 +13,15 @@ export interface ButtonActionConfig {
   label?: string;
 }
 
+export interface BrandIdentity {
+  name: string;
+  shortName?: string;
+  tagline?: string;
+  industry: string;
+  location?: string;
+  description?: string;
+}
+
 export interface BrandLogo {
   type: "text" | "image";
   text?: string;
@@ -48,7 +57,12 @@ export type BackgroundType =
   | "tech_grid"
   | "noise"
   | "full_bleed"
-  | "editorial_whitespace";
+  | "editorial_whitespace"
+  | "atmospheric_gradient"
+  | "subtle_grain"
+  | "warm_glow"
+  | "clinical_calm"
+  | "luxury_noir";
 
 export interface BackgroundStyleConfig {
   type: BackgroundType;
@@ -81,6 +95,64 @@ export interface ImageIntentConfig {
   fallbackType?: "svg_geometric" | "abstract_mesh" | "tonal_composition";
 }
 
+export type CardFamily =
+  | "bento"
+  | "expandable"
+  | "stacked"
+  | "spotlight"
+  | "image-reveal"
+  | "perspective"
+  | "editorial"
+  | "horizontal-media"
+  | "project-showcase"
+  | "testimonial-stack"
+  | "comparison"
+  | "stat"
+  | "service"
+  | "feature-reveal"
+  | "floating";
+
+export interface SkillExecutionSectionPlan {
+  sectionType: string;
+  cardFamily: CardFamily;
+  interactionPattern?: string;
+  motionPattern?: string;
+  spatialPattern?: string;
+  backgroundPattern?: string;
+  imageIntent?: string;
+  imageNegativeTerms?: string[];
+}
+
+export interface SkillExecutionPlan {
+  selectedSkills: Array<{ skillId: string; reason: string; instructionsApplied: string[] }>;
+  layoutFamily: string;
+  sectionOrder: string[];
+  sections: SkillExecutionSectionPlan[];
+}
+
+export type HeroBackgroundMode =
+  | "contextual-image"
+  | "texture"
+  | "gradient"
+  | "abstract"
+  | "architectural"
+  | "material"
+  | "atmospheric"
+  | "none";
+
+export interface HeroBackgroundConfig {
+  mode: HeroBackgroundMode;
+  semanticIntent?: string;
+  imageUrl?: string;
+  negativeTerms?: string[];
+  opacity?: number; // 0.08 to 0.25 (watermark principle)
+  blur?: number; // 8 to 36px optical depth
+  position?: "center" | "right-edge" | "left-edge" | "top-right" | "bottom-right" | "floating-offset";
+  scale?: number; // 1.05 to 1.25
+  overlay?: "radial-vignette" | "linear-fade-left" | "linear-fade-right" | "subtle-mesh" | "tonal-screen";
+  fadeDirection?: "to-left" | "to-right" | "to-bottom" | "radial-out" | "center-soft";
+}
+
 export interface DesignStrategyData {
   visualArchetype:
     | "minimal_editorial"
@@ -103,7 +175,13 @@ export interface DesignStrategyData {
   cardTreatment: "bordered" | "glassmorphic" | "elevated" | "flat_minimal" | "subtle_gradient";
   backgroundStrategy: BackgroundStyleConfig;
   spatial3d: Spatial3dConfig;
+  heroBackground?: HeroBackgroundConfig;
   sectionSequence?: string[];
+  visualConcept?: string;
+  artDirectionSummary?: string;
+  antiRepetitionFingerprint?: string;
+  motionStrategy?: "NONE" | "SUBTLE" | "MODERATE" | "CINEMATIC";
+  skillExecutionPlan?: SkillExecutionPlan;
 }
 
 export interface Hero {
@@ -116,13 +194,18 @@ export interface Hero {
   imageIntent?: ImageIntentConfig;
   backgroundStyle?: BackgroundStyleConfig;
   spatial3d?: Spatial3dConfig;
+  heroBackground?: HeroBackgroundConfig;
   badges?: string[];
+  trustBadges?: string[];
+  eyebrow?: string;
 }
 
 export interface About {
   title: string;
   content: string;
   image?: string;
+  badge?: string;
+  highlights?: string[];
   imageIntent?: ImageIntentConfig;
   backgroundStyle?: BackgroundStyleConfig;
 }
@@ -133,12 +216,21 @@ export interface Service {
   icon?: string;
   image?: string;
   buttonAction?: ButtonActionConfig;
+  cardFamily?: CardFamily;
+  badge?: string;
+  tag?: string;
+  metric?: string;
 }
 
 export interface Feature {
   title: string;
   description: string;
   icon?: string;
+  cardFamily?: CardFamily;
+  badge?: string;
+  tag?: string;
+  metric?: string;
+  image?: string;
 }
 
 export interface FAQ {
@@ -185,6 +277,7 @@ export interface ProductItem {
   
   display_order?: number;
   badge?: string;
+  cardFamily?: CardFamily;
 }
 
 export interface ProductsSectionData {
@@ -243,6 +336,8 @@ export interface ElementSelection {
 }
 
 export interface WebsiteData {
+  businessName?: string;
+  brand?: BrandIdentity;
   hero: Hero;
   about: About;
   services: Service[];
@@ -267,6 +362,7 @@ export interface WebsiteData {
 
   // Design Intelligence Strategy & Spatial Configuration
   designStrategy?: DesignStrategyData;
+  skillExecutionPlan?: SkillExecutionPlan;
 
   sectionOrder?: string[];
   [key: string]: unknown;

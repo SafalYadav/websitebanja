@@ -6,7 +6,7 @@ export default function GeneratedFooterSection() {
   return (
     <FooterSection
       footer={{
-        copyright: "© 2026 HyperScale Cloud. All rights reserved.",
+        copyright: "© 2026 Prime Gym. All rights reserved.",
       }}
     />
   );

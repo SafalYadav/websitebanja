@@ -14,9 +14,9 @@ export default function GeneratedHeroSection() {
       animate="visible"
     >
       <HeroSection
-        title="HyperScale Cloud - Premium Quality & Service"
-        subtitle="Experience industry-leading excellence with HyperScale Cloud. Crafted for discerning clients."
-        button="Deploy in 60 Seconds"
+        title="Prime Gym - Premium Quality & Service"
+        subtitle="Experience industry-leading excellence with Prime Gym. Crafted for discerning clients."
+        button="Get Started"
         buttonAction={{
           type: "scroll",
           target: "contact"

@@ -82,7 +82,13 @@ export async function POST(request: Request, context: RouteContext) {
       custom_domain_status: currentProject.custom_domain_status,
     };
 
-    const { error: rpcError } = await dbPublishProjectAtomic(auth.user.id, id, cleanSlug, snapshotToSave);
+    const { error: rpcError } = await dbPublishProjectAtomic(
+      auth.user.id,
+      id,
+      cleanSlug,
+      snapshotToSave,
+      auth.user.token
+    );
     if (rpcError) {
       return NextResponse.json({ success: false, error: `Atomic publish failed: ${rpcError.message}` }, { status: 500 });
     }

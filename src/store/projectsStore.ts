@@ -19,6 +19,8 @@ interface ProjectsState {
 
 const CACHE_TTL_MS = 30000; // 30 seconds stale-while-revalidate window
 
+let inFlightLoadPromise: Promise<void> | null = null;
+
 export const useProjectsStore = create<ProjectsState>((set, get) => ({
   projects: [],
   isLoading: false,
@@ -46,34 +48,45 @@ export const useProjectsStore = create<ProjectsState>((set, get) => ({
       return;
     }
 
-    // If we have existing data, keep displaying it (SWR pattern) and only revalidate silently
-    if (!hasData) {
-      set({ isLoading: true, error: null });
+    // Deduplicate concurrent in-flight requests
+    if (inFlightLoadPromise) {
+      return inFlightLoadPromise;
     }
 
-    try {
-      const { data, error } = await getProjects();
-      if (error) {
-        // If we already had cached data, preserve it and record error without blowing away UI
-        set({
-          error: error.message,
-          isLoading: false,
-        });
-      } else {
-        set({
-          projects: data ?? [],
-          isInitialLoaded: true,
-          isLoading: false,
-          error: null,
-          lastFetchedAt: Date.now(),
-        });
+    inFlightLoadPromise = (async () => {
+      // If we don't have existing data, show loading state
+      if (!hasData) {
+        set({ isLoading: true, error: null });
       }
-    } catch (err) {
-      set({
-        error: err instanceof Error ? err.message : "Failed to load projects",
-        isLoading: false,
-      });
-    }
+
+      try {
+        const { data, error } = await getProjects();
+        if (error) {
+          // If we already had cached data, preserve it and record error
+          set({
+            error: error.message,
+            isLoading: false,
+          });
+        } else {
+          set({
+            projects: data ?? [],
+            isInitialLoaded: true,
+            isLoading: false,
+            error: null,
+            lastFetchedAt: Date.now(),
+          });
+        }
+      } catch (err) {
+        set({
+          error: err instanceof Error ? err.message : "Failed to load projects",
+          isLoading: false,
+        });
+      } finally {
+        inFlightLoadPromise = null;
+      }
+    })();
+
+    return inFlightLoadPromise;
   },
 
   addProject: (project) =>

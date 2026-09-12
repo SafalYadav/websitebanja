@@ -113,6 +113,7 @@ export default function OnboardingStartPage() {
     <BuilderLayout
       title="How do you want to build your website?"
       description="Choose your preferred creation method. Talk with our AI Architect through live conversation, or enter structured business details."
+      maxWidthClassName={onboardingMode === "agent" ? "max-w-6xl xl:max-w-7xl" : "max-w-4xl"}
     >
       {/* Choice Mode Toggle Cards: Exactly 2 Neutral Choices */}
       <div

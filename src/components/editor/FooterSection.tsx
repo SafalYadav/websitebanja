@@ -8,10 +8,23 @@ import { useGeneratedWebsiteStore } from "@/store/generatedWebsiteStore";
 
 interface FooterSectionProps {
   sectionKey?: string;
-  footer?: Footer | null;
+  footer?: (Footer & { businessName?: string }) | null;
+  businessName?: string | null;
+  brand?: { name?: string; shortName?: string; tagline?: string; description?: string } | null;
+  navbarLogoText?: string | null;
+  heroTitle?: string | null;
+  heroSubtitle?: string | null;
 }
 
-export default function FooterSection({ sectionKey = "footer", footer }: FooterSectionProps) {
+export default function FooterSection({
+  sectionKey = "footer",
+  footer,
+  businessName,
+  brand,
+  navbarLogoText,
+  heroTitle,
+  heroSubtitle,
+}: FooterSectionProps) {
   const currentYear = new Date().getFullYear();
   const website = useGeneratedWebsiteStore((state) => state.website);
   
@@ -19,6 +32,25 @@ export default function FooterSection({ sectionKey = "footer", footer }: FooterS
     typeof footer?.copyright === "string" && footer.copyright.trim()
       ? footer.copyright
       : `© ${currentYear} All Rights Reserved.`;
+
+  const brandName =
+    (typeof footer?.businessName === "string" && footer.businessName.trim() ? footer.businessName.trim() : null) ||
+    (typeof businessName === "string" && businessName.trim() ? businessName.trim() : null) ||
+    (typeof brand?.name === "string" && brand.name.trim() ? brand.name.trim() : null) ||
+    (typeof navbarLogoText === "string" && navbarLogoText.trim() ? navbarLogoText.trim() : null) ||
+    (typeof website?.navbar?.logo?.text === "string" && website.navbar.logo.text.trim()) ||
+    (typeof (website as any)?.businessName === "string" && (website as any).businessName.trim()) ||
+    (typeof heroTitle === "string" && heroTitle.trim() ? heroTitle.split("&")[0].trim() : null) ||
+    (typeof website?.hero?.title === "string" ? website.hero.title.split("&")[0].trim() : "Brand");
+
+  const brandDescription =
+    (typeof brand?.description === "string" && brand.description.trim() ? brand.description.trim() : null) ||
+    (typeof heroSubtitle === "string" && heroSubtitle.trim()
+      ? (heroSubtitle.length > 120 ? `${heroSubtitle.slice(0, 117)}...` : heroSubtitle)
+      : null) ||
+    (typeof website?.hero?.subtitle === "string" && website.hero.subtitle.trim()
+      ? (website.hero.subtitle.length > 120 ? `${website.hero.subtitle.slice(0, 117)}...` : website.hero.subtitle)
+      : "Dedicated to superior craftsmanship, uncompromising quality, and client-first excellence.");
 
   return (
     <footer
@@ -51,12 +83,12 @@ export default function FooterSection({ sectionKey = "footer", footer }: FooterS
                   ✦
                 </div>
                 <span className="text-lg font-bold tracking-tight" style={{ color: "var(--wb-fg)" }}>
-                  {website?.navbar?.logo?.text || "Digital Excellence"}
+                  {brandName}
                 </span>
               </div>
             )}
-            <p className="text-xs max-w-xs" style={{ color: "var(--wb-muted)" }}>
-              Empowering ambitious brands with state-of-the-art digital experiences and lasting impact.
+            <p className="text-xs max-w-sm leading-relaxed" style={{ color: "var(--wb-muted)" }}>
+              {brandDescription}
             </p>
           </div>
 

@@ -8,38 +8,34 @@ import GeneratedFeaturesSection from "./FeaturesSection";
 import GeneratedFAQSection from "./FAQSection";
 import GeneratedContactSection from "./ContactSection";
 import GeneratedFooterSection from "./FooterSection";
-import GeneratedHeroGlow21st from "./HeroGlow21st";
-import GeneratedBentoGrid21st from "./BentoGrid21st";
-import GeneratedPricingTable21st from "./PricingTable21st";
-import GeneratedAnimatedCta21st from "./AnimatedCta21st";
 
 export default function GeneratedWebsite() {
   return (
     <main
       className="min-h-screen w-full transition-colors duration-300 relative"
       style={{
-        backgroundColor: "#F8FAFC",
-        color: "#1E293B",
-        fontFamily: "Open Sans",
-        "--wb-primary": "#6366F1",
-        "--wb-secondary": "#38BDF8",
+        backgroundColor: "#EEF2FF",
+        color: "#1E1B4B",
+        fontFamily: "Inter",
+        "--wb-primary": "#DC2626",
+        "--wb-secondary": "#EA580C",
         "--wb-accent": "#EA580C",
-        "--wb-bg": "#F8FAFC",
+        "--wb-bg": "#EEF2FF",
         "--wb-bg-alt": "#F1F5F9",
         "--wb-surface": "#FFFFFF",
         "--wb-surface-hover": "#FFFFFF",
         "--wb-card": "#FFFFFF",
-        "--wb-card-fg": "#1E293B",
-        "--wb-fg": "#1E293B",
+        "--wb-card-fg": "#1E1B4B",
+        "--wb-fg": "#1E1B4B",
         "--wb-muted": "#475569",
-        "--wb-border": "#E2E8F0",
-        "--wb-ring": "#2563EB",
+        "--wb-border": "#C7D2FE",
+        "--wb-ring": "#4F46E5",
         "--wb-destructive": "#DC2626",
-        "--wb-glow-primary": "rgba(99, 102, 241, 0.18)",
-        "--wb-glow-secondary": "rgba(56, 189, 248, 0.14)",
-        "--wb-gradient-primary": "linear-gradient(135deg, #6366F1 0%, #38BDF8 100%)",
-        "--wb-font-heading": "Poppins",
-        "--wb-font-body": "Open Sans",
+        "--wb-glow-primary": "rgba(220, 38, 38, 0.18)",
+        "--wb-glow-secondary": "rgba(234, 88, 12, 0.14)",
+        "--wb-gradient-primary": "linear-gradient(135deg, #DC2626 0%, #EA580C 100%)",
+        "--wb-font-heading": "Calistoga",
+        "--wb-font-body": "Inter",
         "--wb-radius-default": "0.5rem",
         "--wb-radius-button": "0.5rem",
         "--wb-radius-card": "0.75rem",
@@ -56,10 +52,6 @@ export default function GeneratedWebsite() {
       <GeneratedFAQSection />
       <GeneratedContactSection />
       <GeneratedFooterSection />
-      <GeneratedHeroGlow21st />
-      <GeneratedBentoGrid21st />
-      <GeneratedPricingTable21st />
-      <GeneratedAnimatedCta21st />
     </main>
   );
 }

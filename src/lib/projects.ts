@@ -95,11 +95,6 @@ export async function createProject(name: string): Promise<{ data: Project | nul
 }
 
 export async function getProjects(): Promise<{ data: Project[]; error: Error | null }> {
-  const user = await getAuthenticatedUser();
-  if (!user) {
-    return { data: [], error: null };
-  }
-
   try {
     const headers = await getAuthHeaders();
     const res = await fetch("/api/projects", {
@@ -147,7 +142,7 @@ export async function getProject(projectId: string): Promise<{ data: Project | n
 export async function updateProject(
   projectId: string,
   updates: ProjectUpdates
-): Promise<{ data: Project | null; error: Error | null }> {
+): Promise<{ data: Project | null; quota?: any; error: Error | null }> {
   if (!projectId) {
     return { data: null, error: new Error("Project ID is missing.") };
   }
@@ -162,10 +157,16 @@ export async function updateProject(
 
     const json = await res.json();
     if (!res.ok || !json.success) {
-      return { data: null, error: new Error(json.error || "Failed to update project") };
+      const err = new Error(json.message || json.error || "Failed to update project") as any;
+      err.code = json.code;
+      err.status = res.status;
+      err.quota = json.quota;
+      err.subMessage = json.subMessage;
+      err.cta = json.cta;
+      return { data: null, quota: json.quota, error: err };
     }
 
-    return { data: hydrateProjectMetadata(json.data as Project), error: null };
+    return { data: hydrateProjectMetadata(json.data as Project), quota: json.quota, error: null };
   } catch (err) {
     return { data: null, error: err instanceof Error ? err : new Error(String(err)) };
   }

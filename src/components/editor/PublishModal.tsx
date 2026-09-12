@@ -210,6 +210,7 @@ export default function PublishModal({ isOpen, onClose, projectId: propProjectId
     <AnimatePresence>
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
         <motion.div
+          data-testid="publish-modal"
           initial={{ opacity: 0, scale: 0.95, y: 10 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.95, y: 10 }}
@@ -232,8 +233,10 @@ export default function PublishModal({ isOpen, onClose, projectId: propProjectId
             </div>
             <button
               type="button"
+              data-testid="close-publish-modal-btn"
               onClick={onClose}
               className="rounded-lg p-1.5 text-zinc-400 hover:text-zinc-700 dark:hover:text-white transition"
+              aria-label="Close publish modal"
             >
               <X className="h-5 w-5" />
             </button>
@@ -321,14 +324,24 @@ export default function PublishModal({ isOpen, onClose, projectId: propProjectId
                     </div>
                   </div>
 
-                  <div className="pt-2 flex flex-col sm:flex-row gap-3">
+                  <div className="pt-2 flex flex-col sm:flex-row gap-2.5">
+                    <button
+                      type="button"
+                      data-testid="confirm-publish-btn"
+                      onClick={() => void handlePublish()}
+                      disabled={isPublishing}
+                      className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 via-violet-600 to-indigo-600 py-3 px-4 text-xs font-bold text-white shadow-md shadow-violet-600/25 transition hover:opacity-95 active:scale-95 disabled:opacity-50"
+                    >
+                      <RefreshCw className={cn("h-4 w-4", isPublishing && "animate-spin")} />
+                      <span>{isPublishing ? "Publishing..." : "Publish Updates"}</span>
+                    </button>
                     <a
                       href={`/p/${publicSlug}`}
                       target="_blank"
                       rel="noreferrer"
-                      className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 via-violet-600 to-indigo-600 py-3 px-4 text-xs font-bold text-white shadow-md shadow-violet-600/25 transition hover:opacity-95 active:scale-95"
+                      className="flex items-center justify-center gap-2 rounded-xl border border-zinc-200 bg-white py-3 px-4 text-xs font-bold text-zinc-800 shadow-2xs hover:bg-zinc-100 dark:border-white/10 dark:bg-zinc-800 dark:text-white transition"
                     >
-                      <span>Visit Live Website</span>
+                      <span>Visit Live</span>
                       <ExternalLink className="h-4 w-4" />
                     </a>
                     <button
@@ -357,6 +370,7 @@ export default function PublishModal({ isOpen, onClose, projectId: propProjectId
 
                   <button
                     type="button"
+                    data-testid="confirm-publish-btn"
                     onClick={() => void handlePublish()}
                     disabled={isPublishing}
                     className="w-full flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 via-violet-600 to-indigo-600 py-3.5 px-4 text-sm font-bold text-white shadow-lg shadow-violet-600/25 transition hover:opacity-95 active:scale-95 disabled:opacity-50"

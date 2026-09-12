@@ -9,6 +9,8 @@ import type { About } from "@/types/website";
 interface AboutSectionProps extends Partial<About> {
   sectionKey?: string;
   image?: string;
+  imageFit?: "cover" | "contain" | "natural";
+  imageFocalPoint?: string;
 }
 
 export default function AboutSection({
@@ -16,14 +18,22 @@ export default function AboutSection({
   title,
   content,
   image,
+  badge,
+  highlights,
+  imageFit,
+  imageFocalPoint,
 }: AboutSectionProps) {
   const shouldReduceMotion = useReducedMotion();
 
-  const safeTitle = typeof title === "string" && title.trim() ? title : "Driven by Passion, Built for Impact";
+  const safeTitle = typeof title === "string" && title.trim() ? title : "Our Heritage & Vision";
   const safeContent =
     typeof content === "string" && content.trim()
       ? content
-      : "We are a dedicated team of innovators, craftsmen, and problem solvers committed to delivering exceptional experiences that empower our clients to stand out and thrive in competitive markets.";
+      : "We are dedicated craftsmen and innovators committed to delivering exceptional experiences that empower our clients to thrive.";
+  const safeBadge = typeof badge === "string" && badge.trim() ? badge : "Our Story";
+  const effectiveHighlights = Array.isArray(highlights) && highlights.length > 0
+    ? highlights
+    : ["Artisanal Craftsmanship", "Transparent Standards", "Sustainable Integrity", "Uncompromising Quality"];
 
   return (
     <section
@@ -68,6 +78,10 @@ export default function AboutSection({
                   <ImageWithFallback
                     src={image}
                     alt={safeTitle}
+                    fit={imageFit || "cover"}
+                    focalPoint={imageFocalPoint}
+                    role="portrait"
+                    wrapperClassName="w-full h-full"
                     className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
                   />
                 </EditableElement>
@@ -107,7 +121,7 @@ export default function AboutSection({
               }}
             >
               <Compass className="h-3.5 w-3.5" />
-              <span>About Our Mission</span>
+              <span>{safeBadge}</span>
             </div>
 
             <EditableElement
@@ -142,12 +156,7 @@ export default function AboutSection({
 
             {/* Core Value Checklist */}
             <div className="pt-4 grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-              {[
-                "Client-First Focus",
-                "Uncompromising Precision",
-                "Transparent Communication",
-                "Continuous Innovation",
-              ].map((point, idx) => (
+              {effectiveHighlights.map((point, idx) => (
                 <div
                   key={idx}
                   className="flex items-center gap-3 p-3 rounded-xl border backdrop-blur-sm"
@@ -171,7 +180,7 @@ export default function AboutSection({
 
             <div className="flex items-center gap-3 pt-2 text-xs font-semibold" style={{ color: "var(--wb-muted)" }}>
               <HeartHandshake className="h-4 w-4 text-[var(--wb-primary)]" />
-              <span>Committed to long-term partnerships and client success</span>
+              <span>{effectiveHighlights[0] ? `Centered on ${effectiveHighlights[0].toLowerCase()}` : "Committed to long-term client success"}</span>
             </div>
           </motion.div>
         </div>

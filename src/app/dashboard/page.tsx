@@ -77,37 +77,26 @@ export default function Dashboard() {
   const [isPlanModalOpen, setIsPlanModalOpen] = useState(false);
   const [isUpgrading, setIsUpgrading] = useState(false);
 
-  // Show full loading skeleton only on true initial cold-start with no cache
-  const isInitialLoading = storeLoading && !isInitialLoaded;
+  // Show full loading skeleton on true initial cold-start before initial load completes
+  const isInitialLoading = !isInitialLoaded || (storeLoading && projects.length === 0);
 
   useEffect(() => {
-    async function initialize() {
-      // Fallback: If code is present in query parameters, forward to dedicated auth callback
-      if (typeof window !== "undefined" && window.location.search.includes("code=")) {
-        router.replace(`${authCallbackRoute()}${window.location.search}`);
-        return;
-      }
+    // Fallback: If code is present in query parameters, forward to dedicated auth callback
+    if (typeof window !== "undefined" && window.location.search.includes("code=")) {
+      router.replace(`${authCallbackRoute()}${window.location.search}`);
+      return;
+    }
 
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      if (!session) {
-        router.replace(loginRoute());
-        return;
-      }
+    let isMounted = true;
 
-      // Revalidate in background or load if cache empty (SWR)
-      void loadProjects();
-
-      // Load subscription status from Azure PostgreSQL
+    async function loadUserSubscription(token: string) {
       try {
-        const token = session.access_token;
         const subRes = await fetch("/api/subscription", {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (subRes.ok) {
           const subJson = await subRes.json();
-          if (subJson.success && subJson.data) {
+          if (isMounted && subJson.success && subJson.data) {
             setSubscription({
               planId: subJson.data.planId,
               isPro: subJson.data.isPro,
@@ -119,7 +108,35 @@ export default function Dashboard() {
         console.warn("Failed to load subscription status:", subErr);
       }
     }
-    void initialize();
+
+    // 1. Check existing session immediately
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!isMounted) return;
+      if (!session) {
+        router.replace(loginRoute());
+        return;
+      }
+      void loadProjects();
+      void loadUserSubscription(session.access_token);
+    });
+
+    // 2. Listen to ongoing auth state transitions (login, logout, token refresh)
+    const {
+      data: { subscription: authListener },
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      if (!isMounted) return;
+      if (event === "SIGNED_OUT") {
+        router.replace(loginRoute());
+      } else if (session?.user) {
+        void loadProjects();
+        void loadUserSubscription(session.access_token);
+      }
+    });
+
+    return () => {
+      isMounted = false;
+      authListener?.unsubscribe();
+    };
   }, [loadProjects, router]);
 
   async function handleTogglePlan(targetPlan: "paid_pro" | "free") {
@@ -530,7 +547,7 @@ export default function Dashboard() {
                 Clear Search
               </button>
             </div>
-          ) : projects.length === 0 ? (
+          ) : isInitialLoaded && projects.length === 0 ? (
             /* Empty State */
             <div className="rounded-3xl border border-dashed border-zinc-300 bg-white/50 p-16 text-center dark:border-white/10 dark:bg-zinc-900/20">
               <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-violet-100 text-violet-600 dark:bg-violet-950/60 dark:text-violet-400 mb-4">
@@ -556,10 +573,7 @@ export default function Dashboard() {
             /* Studio Project Cards Grid with Viewport Thumbnails */
             <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
               {filteredProjects.map((project, index) => {
-                const hasData = project.json_data && Object.keys(project.json_data).length > 0;
-                const route = hasData
-                  ? editorRoute(project.id, "workspace")
-                  : editorRoute(project.id);
+                const route = editorRoute(project.id, "workspace");
                 const isOperating = isOperatingId === project.id;
                 const isLive = project.is_published && project.public_slug;
                 const displayName = getProjectDisplayName(project);

@@ -246,29 +246,41 @@ Always prioritize explicit user requirements over general skill rules. Return va
 
     // Fallback: Local skill prompt injection via standard Chat Completions
     if (!parsedResult) {
-      generationModelUsed = "gpt-4.1-mini";
+      generationModelUsed = OPENAI_GENERATION_MODEL || "gpt-5.6-luna";
       const fallbackStart = Date.now();
-      console.log("[GEN] openai:start model=gpt-4.1-mini (fallback)");
-      const fallbackResponse = await openai.chat.completions.create({
-        model: "gpt-4.1-mini",
-        response_format: {
-          type: "json_object",
-        },
-        messages: [
-          {
-            role: "system",
-            content: `You are WebsiteBanja AI, an expert autonomous website designer, UI/UX architect, and conversion copywriter. You apply the authoritative principles from the UI/UX Design Skill (skills/ui-ux/skill.md), Framer Motion physics (skills/framer-motion/skill.md), and 21st.dev component architecture (skills/21st-dev/skill.md) [Active: ${activeSkillsList}] to generate world-class, accessible, conversion-focused websites adhering strictly to the user's explicit business requirements. Return valid JSON only.`,
+      console.log(`[GEN] openai:start model=${generationModelUsed} (chat completion)`);
+      try {
+        const chatResponse = await openai.chat.completions.create({
+          model: generationModelUsed,
+          response_format: {
+            type: "json_object",
           },
-          {
-            role: "user",
-            content: prompt,
-          },
-        ],
-      });
-      console.log("[GEN] openai:success duration=" + (Date.now() - fallbackStart) + "ms");
-
-      parsedResult = parseWebsiteJson(fallbackResponse.choices[0].message.content ?? "{}");
-      console.log("[GEN] json:parsed fallback");
+          messages: [
+            {
+              role: "system",
+              content: `You are WebsiteBanja AI, an expert autonomous website designer, UI/UX architect, and conversion copywriter. You apply authoritative principles from UI/UX, Framer Motion, and 21st.dev [Active: ${activeSkillsList}] to generate world-class, accessible, conversion-focused websites adhering strictly to the user's explicit business requirements. Return valid JSON only.`,
+            },
+            {
+              role: "user",
+              content: prompt,
+            },
+          ],
+        });
+        parsedResult = parseWebsiteJson(chatResponse.choices[0]?.message?.content ?? "{}");
+        console.log("[GEN] openai:success duration=" + (Date.now() - fallbackStart) + "ms");
+      } catch (chatErr) {
+        console.warn(`[GEN] ${generationModelUsed} failed, falling back to gpt-4.1-mini:`, chatErr);
+        generationModelUsed = "gpt-4.1-mini";
+        const fallbackResponse = await openai.chat.completions.create({
+          model: "gpt-4.1-mini",
+          response_format: { type: "json_object" },
+          messages: [
+            { role: "system", content: "You are WebsiteBanja AI. Return valid JSON only." },
+            { role: "user", content: prompt },
+          ],
+        });
+        parsedResult = parseWebsiteJson(fallbackResponse.choices[0]?.message?.content ?? "{}");
+      }
     }
 
     // Post-generation multi-skill design validation and sanitization

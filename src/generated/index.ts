@@ -6,8 +6,4 @@ export { default as GeneratedFeaturesSection } from "./FeaturesSection";
 export { default as GeneratedFAQSection } from "./FAQSection";
 export { default as GeneratedContactSection } from "./ContactSection";
 export { default as GeneratedFooterSection } from "./FooterSection";
-export { default as GeneratedHeroGlow21st } from "./HeroGlow21st";
-export { default as GeneratedBentoGrid21st } from "./BentoGrid21st";
-export { default as GeneratedPricingTable21st } from "./PricingTable21st";
-export { default as GeneratedAnimatedCta21st } from "./AnimatedCta21st";
 export { default as GeneratedWebsite } from "./Website";

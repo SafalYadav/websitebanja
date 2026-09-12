@@ -85,3 +85,23 @@ export function getAiQuota(planId?: string | null): { limit: number; windowDays:
     windowDays: plan.windowDays,
   };
 }
+
+/**
+ * Studio Change Limits (Source of Truth)
+ * Free plan: 4 meaningful changes per billing period/month.
+ * Pro plan: Unlimited changes advertised; 60 internal safety cap per month.
+ */
+export const FREE_STUDIO_CHANGE_LIMIT = 4;
+export const PRO_STUDIO_CHANGE_SAFETY_LIMIT = 60;
+
+export function getStudioChangeLimit(planId?: string | null, status?: SubscriptionStatus | null): number {
+  if (status === "active_paid" && planId === "paid_pro") {
+    return PRO_STUDIO_CHANGE_SAFETY_LIMIT;
+  }
+  return FREE_STUDIO_CHANGE_LIMIT;
+}
+
+export function isProUser(planId?: string | null, status?: SubscriptionStatus | null): boolean {
+  return status === "active_paid" && planId === "paid_pro";
+}
+

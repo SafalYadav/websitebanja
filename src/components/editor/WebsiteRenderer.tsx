@@ -18,6 +18,8 @@ import ProductsSection from "./ProductsSection";
 import FAQSection from "./FAQSection";
 import ContactSection from "./ContactSection";
 import FooterSection from "./FooterSection";
+import ProcessSection from "./ProcessSection";
+import ReviewsSection from "./ReviewsSection";
 
 import { MessageCircle, Globe } from "lucide-react";
 
@@ -151,20 +153,65 @@ export default function WebsiteRenderer({
   const primaryColor = isPublic ? (pColor ?? null) : (pColor !== undefined ? pColor : storePrimaryColor);
   const secondaryColor = isPublic ? (sColor ?? null) : (sColor !== undefined ? sColor : storeSecondaryColor);
   const resolvedStyle = isPublic ? (brandStyle ?? null) : (brandStyle !== undefined ? brandStyle : storeStyle);
-  const resolvedCategory = isPublic ? (category ?? null) : (category !== undefined ? category : storeCategory);
-  const resolvedBusinessName = isPublic ? (businessName ?? null) : (businessName !== undefined ? businessName : storeBusinessName);
+  const rawCategory = isPublic ? (category ?? null) : (category !== undefined ? category : storeCategory);
+  const resolvedCategory =
+    (typeof rawCategory === "string" && rawCategory.trim() ? rawCategory : null) ||
+    (typeof (rawWebsite as any)?.brand?.industry === "string" && (rawWebsite as any).brand.industry.trim() ? (rawWebsite as any).brand.industry : null) ||
+    (typeof (rawWebsite as any)?.category === "string" && (rawWebsite as any).category.trim() ? (rawWebsite as any).category : null) ||
+    (typeof storeCategory === "string" && storeCategory.trim() ? storeCategory : null) ||
+    (() => {
+      const text = [
+        (rawWebsite as any)?.brand?.description || "",
+        (rawWebsite as any)?.hero?.title || "",
+        (rawWebsite as any)?.hero?.subtitle || "",
+        (rawWebsite as any)?.about?.content || "",
+      ].join(" ").toLowerCase();
 
-  // 1. Resolve isolated website theme tokens
+      if (text.includes("ceramic") || text.includes("pottery") || text.includes("tableware") || text.includes("stoneware")) return "Ceramics E-commerce";
+      if (text.includes("dent") || text.includes("orthodont") || text.includes("oral health")) return "Dental Clinic";
+      if (text.includes("architect") || text.includes("interior design") || text.includes("spatial")) return "Architecture Studio";
+      if (text.includes("restaurant") || text.includes("cafe") || text.includes("coffee") || text.includes("dining") || text.includes("bistro")) return "Restaurant & Cafe";
+      if (text.includes("couture") || (text.includes("fashion") && !text.includes("agency"))) return "Luxury Fashion";
+      if (text.includes("saas") || text.includes("software") || text.includes("ai platform") || text.includes("pipeline")) return "SaaS & Technology";
+      if (text.includes("electric") || text.includes("plumb") || text.includes("locksmith") || text.includes("hvac")) return "Local Service Business";
+      if (text.includes("agency") || text.includes("branding") || text.includes("creative studio")) return "Creative Agency";
+
+      const arch = (rawWebsite as any)?.designStrategy?.visualArchetype;
+      if (arch === "clean_clinical") return "Dental Clinic";
+      if (arch === "dark_technical") return "SaaS & Technology";
+      if (arch === "high_trust_service") return "Local Service Business";
+      return null;
+    })();
+
+  const rawBusinessName = isPublic ? (businessName ?? null) : (businessName !== undefined ? businessName : storeBusinessName);
+  const resolvedBusinessName =
+    (typeof rawBusinessName === "string" && rawBusinessName.trim() ? rawBusinessName : null) ||
+    (typeof (rawWebsite as any)?.brand?.name === "string" && (rawWebsite as any).brand.name.trim() ? (rawWebsite as any).brand.name : null) ||
+    (typeof (rawWebsite as any)?.businessName === "string" && (rawWebsite as any).businessName.trim() ? (rawWebsite as any).businessName : null) ||
+    (typeof (rawWebsite as any)?.name === "string" && (rawWebsite as any).name.trim() ? (rawWebsite as any).name : null) ||
+    (typeof storeBusinessName === "string" && storeBusinessName.trim() ? storeBusinessName : null) ||
+    (typeof (rawWebsite as any)?.navbar?.logo?.text === "string" && (rawWebsite as any).navbar.logo.text.trim() ? (rawWebsite as any).navbar.logo.text : null) ||
+    (typeof (rawWebsite as any)?.hero?.title === "string" ? (rawWebsite as any).hero.title.split("&")[0].trim() : null) ||
+    "Brand";
+
+  // 1. Safely normalize all website data and imagery
+  const website = normalizeWebsiteData(rawWebsite, resolvedCategory, resolvedBusinessName);
+
+  // 2. Resolve isolated website theme tokens with contrast verification
+  const isDarkCanvas = Boolean(
+    website?.designStrategy?.backgroundStrategy?.color?.startsWith("#0") ||
+    website?.designStrategy?.backgroundStrategy?.color?.startsWith("#1") ||
+    website?.designStrategy?.visualArchetype === "dark_technical"
+  );
   const theme = resolveWebsiteTheme({
     style: resolvedStyle,
     primaryColor,
     secondaryColor,
     category: resolvedCategory,
     businessName: resolvedBusinessName,
+    archetype: website?.designStrategy?.visualArchetype,
+    colorMode: isDarkCanvas ? "dark" : "light",
   });
-
-  // 2. Safely normalize all website data and imagery
-  const website = normalizeWebsiteData(rawWebsite, resolvedCategory, resolvedBusinessName);
 
   if (!rawWebsite && !website) {
     return (
@@ -197,6 +244,36 @@ export default function WebsiteRenderer({
   }
 
   const activeSectionOrder = activePage?.sectionOrder || website.sectionOrder || [];
+
+  const designatedAboutKey = activeSectionOrder.includes("about")
+    ? "about"
+    : activeSectionOrder.find((k) => {
+        const raw = (rawWebsite as Record<string, unknown> | null | undefined)?.[k] ?? (website as Record<string, unknown>)[k];
+        const isCustom = Boolean(raw && typeof raw === "object" && !Array.isArray(raw) && Object.keys(raw).length > 0 && (raw as any).title);
+        const bType = k.split("_")[0];
+        const isAboutMatch = k === "about" || k === "atmosphere_story" || k === "craft_heritage" || k === "doctor_clinic" || bType === "story" || bType === "heritage" || bType === "clinic";
+        return isAboutMatch && !isCustom;
+      });
+
+  const designatedServicesKey = activeSectionOrder.includes("services")
+    ? "services"
+    : activeSectionOrder.find((k) => {
+        const raw = (rawWebsite as Record<string, unknown> | null | undefined)?.[k] ?? (website as Record<string, unknown>)[k];
+        const hasCustom = (Array.isArray(raw) && raw.length > 0) || (Boolean(raw) && typeof raw === "object" && !Array.isArray(raw) && Object.values(raw as Record<string, unknown>).some((v) => Boolean(v && typeof v === "object" && "title" in v)));
+        const bType = k.split("_")[0];
+        const isServicesMatch = k === "services" || k === "signature_dishes" || k === "menu" || k === "emergency_services" || k === "creative_capabilities" || k === "capabilities" || bType === "services" || bType === "menu" || bType === "emergency";
+        return isServicesMatch && !hasCustom;
+      });
+
+  const designatedFeaturesKey = activeSectionOrder.includes("features")
+    ? "features"
+    : activeSectionOrder.find((k) => {
+        const raw = (rawWebsite as Record<string, unknown> | null | undefined)?.[k] ?? (website as Record<string, unknown>)[k];
+        const hasCustom = (Array.isArray(raw) && raw.length > 0) || (Boolean(raw) && typeof raw === "object" && !Array.isArray(raw) && Object.values(raw as Record<string, unknown>).some((v) => Boolean(v && typeof v === "object" && "title" in v)));
+        const bType = k.split("_")[0];
+        const isFeaturesMatch = k === "features" || k === "trust_proof" || k === "trust_guarantees" || k === "service_area" || k === "awards_metrics" || k === "selected_works" || k === "selected_cases" || k === "gallery" || k === "lookbook" || k === "pricing" || bType === "features" || bType === "trust" || bType === "awards" || bType === "selected" || bType === "gallery" || bType === "pricing";
+        return isFeaturesMatch && !hasCustom;
+      });
 
   const handleSwitchPage = (slug: string) => {
     if (!setActivePage) return;
@@ -234,20 +311,65 @@ export default function WebsiteRenderer({
       } as React.CSSProperties}
     >
       {/* Dynamic Background Texture Surfaces */}
-      {website.designStrategy?.backgroundStrategy?.type === "tech_grid" && (
-        <div className="pointer-events-none fixed inset-0 z-0 bg-[linear-gradient(to_right,rgba(56,189,248,0.04)_1px,transparent_1px),linear-gradient(to_bottom,rgba(56,189,248,0.04)_1px,transparent_1px)] bg-[size:48px_48px] [mask-image:radial-gradient(ellipse_70%_60%_at_50%_30%,#000_60%,transparent_100%)]" />
-      )}
-      {website.designStrategy?.backgroundStrategy?.type === "dot_grid" && (
-        <div className="pointer-events-none fixed inset-0 z-0 bg-[radial-gradient(rgba(148,163,184,0.12)_1px,transparent_1px)] [background-size:24px_24px] [mask-image:radial-gradient(ellipse_70%_60%_at_50%_30%,#000_60%,transparent_100%)]" />
-      )}
-      {website.designStrategy?.backgroundStrategy?.type === "tonal_field" && (
-        <div
-          className="pointer-events-none fixed inset-0 z-0 opacity-25 blur-3xl"
-          style={{
-            background: `radial-gradient(circle at 50% 20%, ${theme.glowPrimary || "var(--wb-primary)"}, transparent 70%)`,
-          }}
-        />
-      )}
+      {(() => {
+        const bgType = website.designStrategy?.backgroundStrategy?.type || (() => {
+          const cat = (resolvedCategory || "").toLowerCase();
+          if (cat.includes("restaurant") || cat.includes("cafe") || cat.includes("dining") || cat.includes("bistro")) return "warm_glow";
+          if (cat.includes("dental") || cat.includes("clinic") || cat.includes("doctor") || cat.includes("medical")) return "clinical_calm";
+          if (cat.includes("saas") || cat.includes("software") || cat.includes("ai") || cat.includes("tech")) return "tech_grid";
+          if (cat.includes("fashion") || cat.includes("luxury") || cat.includes("atelier")) return "luxury_noir";
+          return "subtle_grain";
+        })();
+
+        return (
+          <>
+            {bgType === "tech_grid" && (
+              <>
+                <div className="pointer-events-none fixed inset-0 z-0 bg-[linear-gradient(to_right,rgba(56,189,248,0.06)_1px,transparent_1px),linear-gradient(to_bottom,rgba(56,189,248,0.06)_1px,transparent_1px)] bg-[size:40px_40px] [mask-image:radial-gradient(ellipse_85%_65%_at_50%_30%,#000_65%,transparent_100%)]" />
+                <div className="pointer-events-none fixed top-0 left-1/2 -translate-x-1/2 w-[760px] h-[360px] z-0 bg-gradient-to-b from-cyan-500/12 via-sky-500/6 to-transparent blur-3xl rounded-full" />
+              </>
+            )}
+            {bgType === "dot_grid" && (
+              <div className="pointer-events-none fixed inset-0 z-0 bg-[radial-gradient(rgba(148,163,184,0.16)_1px,transparent_1px)] [background-size:24px_24px] [mask-image:radial-gradient(ellipse_75%_65%_at_50%_30%,#000_70%,transparent_100%)]" />
+            )}
+            {bgType === "tonal_field" && (
+              <div
+                className="pointer-events-none fixed inset-0 z-0 opacity-35 blur-3xl"
+                style={{
+                  background: `radial-gradient(circle at 50% 20%, ${theme.glowPrimary || "var(--wb-primary)"}, transparent 70%)`,
+                }}
+              />
+            )}
+            {bgType === "warm_glow" && (
+              <div
+                className="pointer-events-none fixed inset-0 z-0 opacity-60 blur-3xl"
+                style={{
+                  background: "radial-gradient(ellipse 75% 45% at 50% -5%, rgba(245, 158, 11, 0.22), transparent 75%), radial-gradient(circle at 90% 65%, rgba(217, 119, 6, 0.15), transparent 60%)",
+                }}
+              />
+            )}
+            {bgType === "clinical_calm" && (
+              <div
+                className="pointer-events-none fixed inset-0 z-0"
+                style={{
+                  background: "radial-gradient(circle at 12% 15%, rgba(14, 165, 233, 0.12), transparent 55%), radial-gradient(circle at 88% 65%, rgba(16, 185, 129, 0.09), transparent 55%)",
+                }}
+              />
+            )}
+            {bgType === "luxury_noir" && (
+              <div
+                className="pointer-events-none fixed inset-0 z-0"
+                style={{
+                  background: "radial-gradient(circle at 50% 0%, rgba(212, 175, 55, 0.12), transparent 65%), radial-gradient(circle at 85% 85%, rgba(180, 140, 40, 0.06), transparent 50%)",
+                }}
+              />
+            )}
+            {bgType === "subtle_grain" && (
+              <div className="pointer-events-none fixed inset-0 z-0 bg-[radial-gradient(rgba(100,116,139,0.10)_1px,transparent_1px)] [background-size:16px_16px]" />
+            )}
+          </>
+        );
+      })()}
 
       {/* Global Navigation Bar */}
       <nav
@@ -276,7 +398,7 @@ export default function WebsiteRenderer({
             <>
               <Globe className="h-4 w-4" style={{ color: theme.primary }} />
               <span className="font-extrabold text-xs sm:text-sm tracking-tight" style={{ color: theme.fg }}>
-                {website?.navbar?.logo?.text || resolvedBusinessName || "Website"}
+                {website?.navbar?.logo?.text || (website as any)?.brand?.name || resolvedBusinessName || "Website"}
               </span>
             </>
           )}
@@ -287,7 +409,7 @@ export default function WebsiteRenderer({
             id: p.id,
             label: p.title,
             action: { type: "page" as const, target: p.slug }
-          }))).map((link) => {
+          }))).map((link: any) => {
             const isPageActive = link.action.type === "page" && (link.action.target === activePage.slug || (!link.action.target && activePage.isHome));
             
             if (isPublic && publicSlug) {
@@ -344,72 +466,206 @@ export default function WebsiteRenderer({
         const rawSectionData = (rawWebsite as Record<string, unknown> | null | undefined)?.[key] ?? (website as Record<string, unknown>)[key];
         const baseType = key.split("_")[0];
         const isSelected = isInteractiveStudio && selectedSection === key;
-        const label = SECTION_LABELS[baseType] || baseType;
+        const label = SECTION_LABELS[key] || SECTION_LABELS[baseType] || key;
 
         let content = null;
-        switch (baseType) {
-          case "hero": {
-            const heroData = (rawSectionData && typeof rawSectionData === "object" ? rawSectionData : website.hero) as Hero & { image?: string };
-            content = <HeroSection sectionKey={key} {...heroData} image={heroData.image || website.hero.image} />;
-            break;
+
+        if (key === "hero" || baseType === "hero") {
+          const heroData = (rawSectionData && typeof rawSectionData === "object" ? rawSectionData : website.hero) as Hero & { image?: string; imageFit?: any; imageFocalPoint?: string };
+          content = (
+            <HeroSection
+              sectionKey={key}
+              {...heroData}
+              image={heroData.image || website.hero.image}
+              imageFit={heroData.imageFit || (website.hero as any)?.imageFit}
+              imageFocalPoint={heroData.imageFocalPoint || (website.hero as any)?.imageFocalPoint}
+              heroBackground={heroData.heroBackground || website.designStrategy?.heroBackground}
+              category={resolvedCategory || website.brand?.industry}
+              visualArchetype={website.designStrategy?.visualArchetype}
+            />
+          );
+        } else if (
+          key === "about" ||
+          key === "atmosphere_story" ||
+          key === "doctor_clinic" ||
+          key === "project_details" ||
+          key === "craft_heritage" ||
+          key === "studio_philosophy" ||
+          key === "manifesto" ||
+          baseType === "about"
+        ) {
+          const hasCustomAbout = Boolean(
+            rawSectionData &&
+            typeof rawSectionData === "object" &&
+            !Array.isArray(rawSectionData) &&
+            Object.keys(rawSectionData).length > 0 &&
+            (rawSectionData as any).title
+          );
+
+          if (!hasCustomAbout) {
+            if (key !== designatedAboutKey) {
+              return null;
+            }
           }
-          case "about":
-          case "atmosphere_story":
-          case "doctor_clinic":
-          case "project_details":
-          case "craft_heritage":
-          case "studio_philosophy":
-          case "manifesto": {
-            const aboutData = (rawSectionData && typeof rawSectionData === "object" ? rawSectionData : website.about) as About & { image?: string };
-            content = <AboutSection sectionKey={key} {...aboutData} image={aboutData.image || website.about.image} />;
-            break;
-          }
-          case "services":
-          case "signature_dishes":
-          case "menu":
-          case "emergency_services":
-          case "creative_capabilities":
-          case "capabilities": {
+
+            const aboutData = (hasCustomAbout ? rawSectionData : website.about) as About & { image?: string; imageFit?: any; imageFocalPoint?: string };
+            content = (
+              <AboutSection
+                sectionKey={key}
+                {...aboutData}
+                image={aboutData.image || website.about.image}
+                imageFit={aboutData.imageFit || (website.about as any)?.imageFit}
+                imageFocalPoint={aboutData.imageFocalPoint || (website.about as any)?.imageFocalPoint}
+                badge={aboutData.badge}
+                highlights={aboutData.highlights}
+              />
+            );
+          } else if (
+            key === "treatment_process" ||
+            key === "workflow_steps" ||
+            key === "process" ||
+            key === "methodology" ||
+            baseType === "process" ||
+            baseType === "workflow" ||
+            baseType === "treatment"
+          ) {
+            const processObj = (rawSectionData && typeof rawSectionData === "object" && !Array.isArray(rawSectionData)) ? (rawSectionData as Record<string, unknown>) : null;
+            const stepsData = Array.isArray(rawSectionData)
+              ? rawSectionData
+              : (rawSectionData && typeof rawSectionData === "object" && "steps" in rawSectionData && Array.isArray((rawSectionData as any).steps))
+              ? (rawSectionData as any).steps
+              : null;
+            content = (
+              <ProcessSection
+                sectionKey={key}
+                steps={stepsData}
+                category={resolvedCategory || undefined}
+                title={typeof processObj?.title === "string" ? processObj.title : undefined}
+                subtitle={typeof processObj?.subtitle === "string" ? processObj.subtitle : undefined}
+                badge={typeof processObj?.badge === "string" ? processObj.badge : undefined}
+              />
+            );
+          } else if (
+            key === "reviews" ||
+            key === "testimonials" ||
+            key === "patient_reviews" ||
+            key === "guest_reviews" ||
+            baseType === "reviews" ||
+            baseType === "testimonials"
+          ) {
+            const reviewsObj = (rawSectionData && typeof rawSectionData === "object" && !Array.isArray(rawSectionData)) ? (rawSectionData as Record<string, unknown>) : null;
+            const reviewsData = Array.isArray(rawSectionData)
+              ? rawSectionData
+              : (rawSectionData && typeof rawSectionData === "object" && "reviews" in rawSectionData && Array.isArray((rawSectionData as any).reviews))
+              ? (rawSectionData as any).reviews
+              : (website as any).reviews || null;
+            const sectionPlan = (website as any).skillExecutionPlan?.sections?.find(
+              (s: any) => s.sectionType === key || s.sectionType === baseType
+            );
+            const resolvedCardFamily = (reviewsObj?.cardFamily as any) || sectionPlan?.cardFamily;
+            content = (
+              <ReviewsSection
+                sectionKey={key}
+                reviews={reviewsData}
+                category={resolvedCategory || undefined}
+                title={typeof reviewsObj?.title === "string" ? reviewsObj.title : undefined}
+                subtitle={typeof reviewsObj?.subtitle === "string" ? reviewsObj.subtitle : undefined}
+                badge={typeof reviewsObj?.badge === "string" ? reviewsObj.badge : undefined}
+                cardFamily={resolvedCardFamily}
+              />
+            );
+          } else if (
+            key === "services" ||
+            key === "signature_dishes" ||
+            key === "menu" ||
+            key === "emergency_services" ||
+            key === "creative_capabilities" ||
+            key === "capabilities" ||
+            baseType === "services" ||
+            baseType === "menu" ||
+            baseType === "emergency"
+          ) {
             let servicesData: Service[] = [];
-            if (Array.isArray(rawSectionData)) {
-              servicesData = rawSectionData;
-            } else if (rawSectionData && typeof rawSectionData === "object") {
+            const sectionObj = (rawSectionData && typeof rawSectionData === "object" && !Array.isArray(rawSectionData)) ? (rawSectionData as Record<string, unknown>) : null;
+            const hasCustomServices = Array.isArray(rawSectionData) && rawSectionData.length > 0;
+            if (hasCustomServices) {
+              servicesData = rawSectionData as Service[];
+            } else if (rawSectionData && typeof rawSectionData === "object" && !Array.isArray(rawSectionData)) {
               const vals = Object.values(rawSectionData).filter((v): v is Service => Boolean(v && typeof v === "object" && "title" in v));
               servicesData = vals.length > 0 ? vals : website.services;
             } else {
+              if (key !== designatedServicesKey) {
+                return null;
+              }
               servicesData = website.services;
             }
-            content = <ServicesSection sectionKey={key} services={servicesData} />;
-            break;
-          }
-          case "features":
-          case "trust_proof":
-          case "treatment_process":
-          case "workflow_steps":
-          case "trust_guarantees":
-          case "service_area":
-          case "awards_metrics":
-          case "selected_works":
-          case "selected_cases":
-          case "gallery":
-          case "lookbook":
-          case "reviews":
-          case "pricing": {
+            const sectionPlan = (website as any).skillExecutionPlan?.sections?.find(
+              (s: any) => s.sectionType === key || s.sectionType === baseType
+            );
+            const resolvedCardFamily = (sectionObj?.cardFamily as any) || sectionPlan?.cardFamily;
+            content = (
+              <ServicesSection
+                sectionKey={key}
+                services={servicesData}
+                category={resolvedCategory || undefined}
+                title={typeof sectionObj?.title === "string" ? sectionObj.title : undefined}
+                subtitle={typeof sectionObj?.subtitle === "string" ? sectionObj.subtitle : undefined}
+                badge={typeof sectionObj?.badge === "string" ? sectionObj.badge : undefined}
+                cardTreatment={website.designStrategy?.cardTreatment}
+                visualArchetype={website.designStrategy?.visualArchetype}
+                cardFamily={resolvedCardFamily}
+              />
+            );
+          } else if (
+            key === "features" ||
+            key === "trust_proof" ||
+            key === "trust_guarantees" ||
+            key === "service_area" ||
+            key === "awards_metrics" ||
+            key === "selected_works" ||
+            key === "selected_cases" ||
+            key === "gallery" ||
+            key === "lookbook" ||
+            key === "pricing" ||
+            baseType === "features" ||
+            baseType === "trust" ||
+            baseType === "awards" ||
+            baseType === "selected" ||
+            baseType === "gallery" ||
+            baseType === "pricing"
+          ) {
             let featuresData: Feature[] = [];
-            if (Array.isArray(rawSectionData)) {
-              featuresData = rawSectionData;
-            } else if (rawSectionData && typeof rawSectionData === "object") {
+            const sectionObj = (rawSectionData && typeof rawSectionData === "object" && !Array.isArray(rawSectionData)) ? (rawSectionData as Record<string, unknown>) : null;
+            const hasCustomFeatures = Array.isArray(rawSectionData) && rawSectionData.length > 0;
+            if (hasCustomFeatures) {
+              featuresData = rawSectionData as Feature[];
+            } else if (rawSectionData && typeof rawSectionData === "object" && !Array.isArray(rawSectionData)) {
               const vals = Object.values(rawSectionData).filter((v): v is Feature => Boolean(v && typeof v === "object" && "title" in v));
               featuresData = vals.length > 0 ? vals : website.features;
             } else {
+              if (key !== designatedFeaturesKey) {
+                return null;
+              }
               featuresData = website.features;
             }
-            content = <FeaturesSection sectionKey={key} features={featuresData} />;
-            break;
-          }
-          case "products":
-          case "catalog":
-          case "curated_collection": {
+            const sectionPlan = (website as any).skillExecutionPlan?.sections?.find(
+              (s: any) => s.sectionType === key || s.sectionType === baseType
+            );
+            const resolvedCardFamily = (sectionObj?.cardFamily as any) || sectionPlan?.cardFamily;
+            content = (
+              <FeaturesSection
+                sectionKey={key}
+                features={featuresData}
+                category={resolvedCategory || undefined}
+                title={typeof sectionObj?.title === "string" ? sectionObj.title : undefined}
+                subtitle={typeof sectionObj?.subtitle === "string" ? sectionObj.subtitle : undefined}
+                badge={typeof sectionObj?.badge === "string" ? sectionObj.badge : undefined}
+                cardTreatment={website.designStrategy?.cardTreatment}
+                visualArchetype={website.designStrategy?.visualArchetype}
+                cardFamily={resolvedCardFamily}
+              />
+            );
+          } else if (key === "products" || key === "catalog" || key === "curated_collection" || baseType === "products" || baseType === "catalog" || baseType === "curated") {
             const productsData = (rawSectionData || website.productsSection) as ProductsSectionData;
             content = (
               <ProductsSection
@@ -420,9 +676,7 @@ export default function WebsiteRenderer({
                 isPublic={isPublic}
               />
             );
-            break;
-          }
-          case "faq": {
+          } else if (key === "faq" || baseType === "faq") {
             let faqData: FAQ[] = [];
             if (Array.isArray(rawSectionData)) {
               faqData = rawSectionData;
@@ -433,63 +687,67 @@ export default function WebsiteRenderer({
               faqData = website.faq;
             }
             content = <FAQSection sectionKey={key} faq={faqData} />;
-            break;
-          }
-          case "contact":
-          case "reservation":
-          case "booking": {
+          } else if (key === "contact" || key === "reservation" || key === "booking" || baseType === "contact" || baseType === "reservation" || baseType === "booking") {
             const contactData = (rawSectionData && typeof rawSectionData === "object" ? rawSectionData : website.contact) as Contact;
             content = <ContactSection sectionKey={key} contact={contactData} />;
-            break;
-          }
-          case "footer": {
+          } else if (key === "footer" || baseType === "footer") {
             const footerData = (rawSectionData && typeof rawSectionData === "object" ? rawSectionData : website.footer) as Footer;
-            content = <FooterSection sectionKey={key} footer={footerData} />;
-            break;
-          }
-          default:
+            content = (
+              <FooterSection
+                sectionKey={key}
+                footer={footerData}
+                businessName={resolvedBusinessName}
+                brand={(website as any)?.brand}
+                navbarLogoText={website?.navbar?.logo?.text}
+                heroTitle={website?.hero?.title}
+                heroSubtitle={website?.hero?.subtitle}
+              />
+            );
+          } else {
             content = null;
-        }
+          }
 
-        if (!isInteractiveStudio) {
+          if (!content) return null;
+
+          if (!isInteractiveStudio) {
+            return (
+              <div key={key} id={`wb-section-${key}`}>
+                {content}
+              </div>
+            );
+          }
+
           return (
-            <div key={key} id={`wb-section-${key}`}>
+            <div
+              key={key}
+              id={`wb-section-${key}`}
+              onClick={() => setSelectedSection(key)}
+              className={cn(
+                "group/section relative transition-all duration-150 cursor-pointer scroll-mt-6",
+                isSelected
+                  ? "ring-2 ring-violet-500 ring-offset-4 ring-offset-black/60 shadow-2xl"
+                  : "hover:ring-1 hover:ring-violet-400/40"
+              )}
+            >
+              {/* Floating Section Chip */}
+              <div
+                className={cn(
+                  "absolute top-3 left-4 z-30 flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-bold shadow-xl transition-all duration-150 backdrop-blur-md",
+                  isSelected
+                    ? "bg-violet-600 text-white opacity-100 scale-100 ring-2 ring-white/20"
+                    : "bg-black/80 text-zinc-300 border border-white/10 opacity-0 group-hover/section:opacity-100 scale-95 group-hover/section:scale-100"
+                )}
+              >
+                <span className="capitalize">{label}</span>
+                <span className="text-zinc-400 font-normal">
+                  {isSelected ? "• Active" : "• Click to edit"}
+                </span>
+              </div>
+
               {content}
             </div>
           );
-        }
-
-        return (
-          <div
-            key={key}
-            id={`wb-section-${key}`}
-            onClick={() => setSelectedSection(key)}
-            className={cn(
-              "group/section relative transition-all duration-150 cursor-pointer scroll-mt-6",
-              isSelected
-                ? "ring-2 ring-violet-500 ring-offset-4 ring-offset-black/60 shadow-2xl"
-                : "hover:ring-1 hover:ring-violet-400/40"
-            )}
-          >
-            {/* Floating Section Chip */}
-            <div
-              className={cn(
-                "absolute top-3 left-4 z-30 flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-bold shadow-xl transition-all duration-150 backdrop-blur-md",
-                isSelected
-                  ? "bg-violet-600 text-white opacity-100 scale-100 ring-2 ring-white/20"
-                  : "bg-black/80 text-zinc-300 border border-white/10 opacity-0 group-hover/section:opacity-100 scale-95 group-hover/section:scale-100"
-              )}
-            >
-              <span className="capitalize">{label}</span>
-              <span className="text-zinc-400 font-normal">
-                {isSelected ? "• Active" : "• Click to edit"}
-              </span>
-            </div>
-
-            {content}
-          </div>
-        );
-      })}
+        })}
 
       {/* Floating WhatsApp Quick Action Button */}
       {resolvedWhatsappEnabled && (resolvedWhatsappNumber || resolvedPhone) && (

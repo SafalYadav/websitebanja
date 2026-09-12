@@ -4,16 +4,25 @@
 
 import { getStorageConfig } from "./config";
 import { AzureBlobStorageClient } from "./azureBlob";
+import { SupabaseStorageClient } from "./supabaseStorage";
 import type { IStorageClient, StorageProvider } from "./types";
 
 export * from "./types";
 export * from "./config";
 
 /**
- * Returns a storage client instance for the requested container in Azure Blob Storage.
+ * Returns a storage client instance for the requested container/bucket.
+ * Primary: Azure Blob Storage when configured.
+ * Resilient Fallback: Supabase Storage.
  */
 export function getStorageClient(container: string): IStorageClient {
-  return new AzureBlobStorageClient(container);
+  const config = getStorageConfig();
+
+  if (config.isAzureConfigured) {
+    return new AzureBlobStorageClient(container);
+  }
+
+  return new SupabaseStorageClient(container);
 }
 
 /**

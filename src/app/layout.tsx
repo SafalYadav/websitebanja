@@ -3,6 +3,7 @@ import "./globals.css";
 import SmoothScroll from "@/components/SmoothScroll";
 import { ThemeProvider } from "@/components/theme/ThemeProvider";
 import ToastContainer from "@/components/ui/ToastContainer";
+import CookieConsent from "@/components/ui/CookieConsent";
 
 import JsonLd, {
   websiteJsonLd,
@@ -100,6 +101,7 @@ export default function RootLayout({
             {children}
           </SmoothScroll>
           <ToastContainer />
+          <CookieConsent />
         </ThemeProvider>
       </body>
     </html>

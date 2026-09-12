@@ -6,6 +6,7 @@ import { normalizeAgentResponse } from "@/lib/ai/agentNormalizer";
 import { setProjectKnowledge } from "@/lib/knowledge";
 import { getClientIp, authenticateRequest } from "@/lib/supabaseServer";
 import { dbCheckProjectExists } from "@/lib/db/queries";
+import { getMitraLanguageConfig } from "@/lib/constants/mitraLanguages";
 
 interface RequestMessage {
   role: "user" | "assistant" | "system";
@@ -22,16 +23,32 @@ interface TalkRequestBody {
 function buildFallbackResponse(
   userText: string,
   history: RequestMessage[],
-  priorNeeds: ExtractedUserNeeds
+  priorNeeds: ExtractedUserNeeds,
+  userLanguage: string = "English"
 ): AgentTalkResponse["data"] {
   const normalized = normalizeAgentResponse("", priorNeeds, userText);
   const mergedNeeds = normalized.extractedNeeds;
   const score = normalized.readinessScore;
   const wantsToBuild = /\b(?:build|generate|create)\s+(?:it|my\s+website|the\s+website|site)\s+now\b|\bstart\s+building\b|\byes[,\s]+(?:generate|build|create)\b|\bready to build\b|\bbuild now\b|\bgenerate now\b/i.test(userText);
+  const langConfig = getMitraLanguageConfig(userLanguage);
 
   // If user says to build, NEVER ask again! Immediately launch!
   if (wantsToBuild) {
-    const reply = `Awesome! Let's bring ${mergedNeeds.businessName || "your business"} to life right now. Launching your website generator...`;
+    let reply = `Awesome! Let's bring ${mergedNeeds.businessName || "your business"} to life right now. Launching your website generator...`;
+    if (userLanguage === "Hindi") reply = `शानदार! चलिए ${mergedNeeds.businessName || "आपके बिज़नेस"} की वेबसाइट अभी बनाते हैं।`;
+    else if (userLanguage === "Hinglish") reply = `Awesome! Chaliye ${mergedNeeds.businessName || "aapke business"} ki website abhi banate hain.`;
+    else if (userLanguage === "Gujarati") reply = `સરસ! ચાલો ${mergedNeeds.businessName || "તમારા બિઝનેસ"} ની વેબસાઇટ બનાવીએ.`;
+    else if (userLanguage === "Bengali") reply = `দারুণ! চলুন ${mergedNeeds.businessName || "আপনার ব্যবসার"} ওয়েবসাইট তৈরি করি।`;
+    else if (userLanguage === "Marathi") reply = `छान! चला ${mergedNeeds.businessName || "तुमच्या व्यवसायाची"} वेबसाइट आता तयार करूया.`;
+    else if (userLanguage === "Tamil") reply = `அருமை! ${mergedNeeds.businessName || "உங்கள் வணிகத்திற்கான"} வலைத்தளத்தை உருவாக்குவோம்.`;
+    else if (userLanguage === "Telugu") reply = `అద్భుతం! ${mergedNeeds.businessName || "మీ వ్యాపారం"} కోసం వెబ్‌సైట్‌ను సిద్ధం చేద్దాం.`;
+    else if (userLanguage === "Kannada") reply = `ಉತ್ತಮ! ${mergedNeeds.businessName || "ನಿಮ್ಮ ವ್ಯವಹಾರದ"} ವೆಬ್‌ಸೈಟ್ ನಿರ್ಮಿಸೋಣ.`;
+    else if (userLanguage === "Malayalam") reply = `കൊള്ളാം! ${mergedNeeds.businessName || "നിങ്ങളുടെ ബിസിനസ്സ്"} വെബ്‌സൈറ്റ് തയ്യാറാക്കാം.`;
+    else if (userLanguage === "Punjabi") reply = `ਵਧੀਆ! ਆਓ ${mergedNeeds.businessName || "ਤੁਹਾਡੇ ਕਾਰੋਬਾਰ"} ਦੀ ਵੈੱਬਸਾਈਟ ਬਣਾਈਏ।`;
+    else if (userLanguage === "Odia") reply = `ବହୁତ ଭଲ! ଚାଲନ୍ତୁ ${mergedNeeds.businessName || "ଆପଣଙ୍କ ବ୍ୟବସାୟର"} ୱେବସାଇଟ୍ ତିଆରି କରିବା।`;
+    else if (userLanguage === "Assamese") reply = `বঢ়িয়া! আহক ${mergedNeeds.businessName || "আপোনাৰ ব্যৱসায়ৰ"} ৱেবছাইট বনাওঁ।`;
+    else if (userLanguage === "Urdu") reply = `بہترین! چلیں ${mergedNeeds.businessName || "آپ کے کاروبار"} کی ویب سائٹ بناتے ہیں۔`;
+
     return {
       reply,
       speechText: reply,
@@ -45,11 +62,22 @@ function buildFallbackResponse(
 
   // If we already have enough information, invite them to build
   if (score >= 65) {
-    const reply = `Everything looks fantastic for ${mergedNeeds.businessName || "your business"}! Ready for me to build your website?`;
+    let reply = `Everything looks fantastic for ${mergedNeeds.businessName || "your business"}! Ready for me to build your website?`;
+    let suggestedReplies = ["Yes, generate my website now!", "Let's tweak the colors first", "Add another service offering"];
+    if (userLanguage === "Hindi") {
+      reply = `${mergedNeeds.businessName || "आपके बिज़नेस"} की सभी डिटेल्स बहुत अच्छी लग रही हैं! क्या मैं आपकी वेबसाइट तैयार करूँ?`;
+      suggestedReplies = ["हाँ, वेबसाइट अभी बनाओ!", "पहले कलर्स बदलते हैं", "एक और सर्विस जोड़ें"];
+    } else if (userLanguage === "Hinglish") {
+      reply = `${mergedNeeds.businessName || "Aapke business"} ki sabhi details ready hain! Website generate karein?`;
+      suggestedReplies = ["Haan, website abhi banao!", "Pehle colors tweak karte hain", "Ek aur service add karo"];
+    } else if (userLanguage === "Gujarati") {
+      reply = `${mergedNeeds.businessName || "તમારા બિઝનેસ"} ની બધી વિગતો તૈયાર છે! શું આપણે વેબસાઇટ બનાવીએ?`;
+      suggestedReplies = ["હા, હમણાં જ બનાવો!", "કલર બદલીએ", "બીજી સર્વિસ ઉમેરો"];
+    }
     return {
       reply,
       speechText: reply,
-      suggestedReplies: ["Yes, generate my website now!", "Let's tweak the colors first", "Add another service offering"],
+      suggestedReplies,
       extractedNeeds: mergedNeeds,
       readinessScore: Math.max(score, 85),
       isReadyToBuild: true,
@@ -58,16 +86,12 @@ function buildFallbackResponse(
   }
 
   if (!mergedNeeds.category || mergedNeeds.category === "Other") {
-    const reply = `Hey there! I'm Mitra. What kind of business or project are you dreaming up? Tell me all about it!`;
+    const reply = langConfig.greeting;
+    const suggestedReplies = langConfig.suggestedReplies;
     return {
       reply,
       speechText: reply,
-      suggestedReplies: [
-        "Cozy Cafe or Restaurant",
-        "Modern Tech Startup",
-        "Boutique Clothing & E-Commerce",
-        "Personal Portfolio or Agency",
-      ],
+      suggestedReplies,
       extractedNeeds: mergedNeeds,
       readinessScore: 25,
       isReadyToBuild: false,
@@ -154,6 +178,9 @@ export async function POST(req: Request) {
       );
     }
 
+    const userLanguage = typeof body?.language === "string" && body.language ? body.language : "English";
+    const langConfig = getMitraLanguageConfig(userLanguage);
+
     // Bounded messages: max 12 items, max 2000 chars each
     const messages: RequestMessage[] = rawMessages.slice(-12).map((m) => ({
       role: m.role === "assistant" || m.role === "system" ? m.role : "user",
@@ -166,7 +193,14 @@ export async function POST(req: Request) {
     // If user explicitly asks to generate/build, immediately fulfill without asking again!
     if (wantsToBuild) {
       const bName = currentNeeds.businessName || "your website";
-      const reply = `Awesome! Let's bring ${bName} to life right now. Launching your website generator...`;
+      let reply = `Awesome! Let's bring ${bName} to life right now. Launching your website generator...`;
+      if (userLanguage === "Hindi") {
+        reply = `शानदार! चलिए ${bName} की वेबसाइट अभी बनाते हैं। वेबसाइट जनरेटर शुरू हो रहा है...`;
+      } else if (userLanguage === "Hinglish") {
+        reply = `Awesome! Chaliye ${bName} ki website abhi banate hain. Generator start ho raha hai...`;
+      } else if (userLanguage === "Gujarati") {
+        reply = `સરસ! ચાલો ${bName} ની વેબસાઇટ હમણાં જ બનાવીએ. વેબસાઇટ જનરેટર શરૂ થઈ રહ્યું છે...`;
+      }
       return NextResponse.json({
         success: true,
         data: {
@@ -212,17 +246,13 @@ CRITICAL RULES:
      "location": string
    }
 6. Never auto-generate. Only set "triggerImmediateBuild": true if the user explicitly instructs to build/generate the website now.
-7. AUTOMATIC MULTILINGUAL DETECTION & MIRRORING:
-   - You are natively fluent in ALL Indian languages: Hindi, Hinglish, Gujarati, Marathi, Bengali, Tamil, Telugu, Kannada, Malayalam, Punjabi, and English.
-   - AUTOMATICALLY DETECT the language and script that the user is communicating in from their latest message.
-   - You MUST seamlessly switch and reply in the EXACT SAME LANGUAGE and style as the user:
-     * If the user speaks/writes in Gujarati (e.g., "Mane Cafe mate website banavvi che" or "મને કાફે માટે વેબસાઇટ બનાવવી છે"), reply naturally and warmly in Gujarati!
-     * If the user speaks/writes in Hindi or Hinglish (e.g. "Mujhe ek cafe ke liye website banani hai"), reply fluently in Hindi / Hinglish!
-     * If the user speaks/writes in Marathi, Bengali, Tamil, Telugu, Kannada, Malayalam, Punjabi, or English, immediately reply in that language!
-     * If the user switches language at any point in the conversation, AUTOMATICALLY SWITCH your language to match them immediately!
-   - Include "detectedLanguage": { "code": string, "name": string, "nativeName": string } in your JSON.
-   - Ensure "reply", "speechText", and "suggestedReplies" are all in the user's active detected language.
-   - Always keep "reply" and "speechText" 100% word-for-word identical.
+7. MANDATORY LANGUAGE DIRECTIVE:
+   - The user has explicitly selected: "${langConfig.displayName}" (${langConfig.name}, code: "${langConfig.code}").
+   - You MUST formulate your "reply", "speechText", and "suggestedReplies" strictly in ${langConfig.name}:
+     ${langConfig.systemDirective}
+   - NEVER answer in any language other than "${langConfig.name}". Honor the user's active choice.
+   - Include "detectedLanguage": { "code": "${langConfig.code}", "name": "${langConfig.name}", "nativeName": "${langConfig.nativeName}" } in your JSON.
+   - Always keep "reply" and "speechText" 100% word-for-word identical. Spoken text must be natural, fluent and conversational in that script.
 8. ACCURATE MODIFICATIONS & REMOVALS:
    - When the user modifies or updates a previous preference (e.g., 'Actually change the primary color to dark green', 'Change business name to Apex Care'), immediately update that field in "extractedNeeds".
    - When the user asks to remove or exclude a feature or section (e.g., 'Remove the pricing section', 'Remove testimonials', 'without whatsapp'), remove it from "features" or "services".
@@ -248,11 +278,6 @@ JSON Schema:
 
       const conversationForModel = [
         { role: "system" as const, content: systemPrompt },
-        {
-          role: "system" as const,
-          content: `AUTOMATIC LANGUAGE DETECTION DIRECTIVE:
-Detect the language and script of the user's latest message automatically. Always reply in the exact same language and communication style (Gujarati, Hindi, Hinglish, Marathi, Bengali, Tamil, Telugu, Kannada, Malayalam, Punjabi, or English). If the user switches language, switch your response language immediately. Ensure reply and speechText are identical.`,
-        },
         {
           role: "system" as const,
           content: `Prior accumulated extracted needs: ${JSON.stringify(currentNeeds)}`,
@@ -307,7 +332,7 @@ Detect the language and script of the user's latest message automatically. Alway
     }
 
     // Fallback response engine
-    const fallbackData = buildFallbackResponse(lastUserMessage, messages, currentNeeds);
+    const fallbackData = buildFallbackResponse(lastUserMessage, messages, currentNeeds, userLanguage);
     return NextResponse.json({
       success: true,
       data: fallbackData,

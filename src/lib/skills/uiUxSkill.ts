@@ -63,7 +63,7 @@ export function validateGeneratedWebsiteDesign(
   context?: SkillSelectionContext
 ): DesignValidationResult {
   const warnings: string[] = [];
-  const sanitized = { ...data };
+  let sanitized = { ...data };
 
   // Step A: Compute expected design strategy for this business
   const expectedStrategy = generateDesignStrategy({
@@ -183,6 +183,116 @@ export function validateGeneratedWebsiteDesign(
       description: typeof item?.description === "string" ? item.description : "",
     }));
   }
+
+  // Step H: Content Leakage Prevention (Part I)
+  // Scrub accidental generic boilerplate / internal engineering copy
+  const categoryStr = (context?.category || "").toLowerCase();
+  const isCourierOrLogistics = /delivery|courier|logistics|shipping|freight/i.test(categoryStr);
+
+  const LEAKED_PHRASE_REPLACEMENTS: Array<{ pattern: RegExp; getReplacement: (cat: string) => string }> = [
+    {
+      pattern: /intelligently\s+engineered\s*(&|and)\s*scalable/gi,
+      getReplacement: (cat: string) => {
+        if (/cafe|restaurant|coffee|bakery|food|dining/i.test(cat)) return "Crafted With Artisanal Passion";
+        if (/dental|clinic|doctor|medical|health/i.test(cat)) return "Gentle & Modern Clinical Care";
+        if (/architect|interior|villa/i.test(cat)) return "Sculpted Spatial Architecture";
+        if (/fashion|luxury|jewelry|boutique/i.test(cat)) return "Atelier Tailoring & Pure Silk";
+        if (/plumb|electric|service|repair|contract/i.test(cat)) return "Licensed, Bonded & Insured";
+        return "Purposefully Designed & Refined";
+      },
+    },
+    {
+      pattern: /bespoke\s+quality\s+standards/gi,
+      getReplacement: (cat: string) => {
+        if (/cafe|restaurant|coffee|bakery/i.test(cat)) return "Artisan Single-Origin Quality";
+        if (/dental|clinic|medical/i.test(cat)) return "Certified Medical Standards";
+        if (/architect/i.test(cat)) return "Sustainable Material Craftsmanship";
+        if (/fashion|luxury/i.test(cat)) return "Master Atelier Craftsmanship";
+        return "Uncompromising Quality Standards";
+      },
+    },
+    {
+      pattern: /dedicated\s+service/gi,
+      getReplacement: (cat: string) => {
+        if (/cafe|restaurant/i.test(cat)) return "Warm Hospitality & Care";
+        if (/dental|clinic/i.test(cat)) return "Compassionate Patient Care";
+        if (/fashion|luxury/i.test(cat)) return "Private Client Concierge";
+        if (/plumb|electric|service/i.test(cat)) return "24/7 Rapid Response";
+        return "Attentive Personalized Service";
+      },
+    },
+    {
+      pattern: /fast\s*(&|and)\s*reliable\s+delivery/gi,
+      getReplacement: (cat: string) => {
+        if (isCourierOrLogistics) return "Fast & Reliable Delivery";
+        if (/cafe|restaurant|coffee|bakery/i.test(cat)) return "Freshly Roasted & Baked Daily";
+        if (/dental|clinic|medical/i.test(cat)) return "Prompt & Pain-Free Appointments";
+        if (/architect/i.test(cat)) return "Meticulous Project Execution";
+        if (/fashion|luxury/i.test(cat)) return "Complimentary White-Glove Shipping";
+        if (/plumb|electric|service/i.test(cat)) return "Guaranteed Rapid Local Arrival";
+        return "Timely Project Execution";
+      },
+    },
+    {
+      pattern: /driven\s+by\s+passion,\s*built\s+for\s+impact/gi,
+      getReplacement: (cat: string) => {
+        if (/cafe|restaurant/i.test(cat)) return "Crafted Daily With Care and Community Love";
+        if (/dental|clinic/i.test(cat)) return "Gentle Dentistry Focused on Your Health";
+        if (/architect/i.test(cat)) return "Designing Spaces That Inspire Life";
+        if (/fashion|luxury/i.test(cat)) return "Timeless Silhouette & Bespoke Elegance";
+        return "Dedicated to Excellence in Every Detail";
+      },
+    },
+    {
+      pattern: /engineered\s+from\s+the\s+ground\s+up\s+for\s+exceptional\s+quality/gi,
+      getReplacement: (cat: string) => {
+        if (/cafe|restaurant/i.test(cat)) return "Prepared daily with locally sourced, seasonal ingredients";
+        if (/dental|clinic/i.test(cat)) return "Delivered with modern painless technology and sterile standards";
+        if (/architect/i.test(cat)) return "Conceived with architectural rigor and environmental harmony";
+        return "Built with uncompromising dedication to superior craft";
+      },
+    },
+    {
+      pattern: /high-impact\s+solutions\s+designed\s+with\s+precision/gi,
+      getReplacement: (cat: string) => {
+        if (/cafe|restaurant/i.test(cat)) return "Artisanal food and beverages prepared fresh daily";
+        if (/dental|clinic/i.test(cat)) return "Comprehensive dental treatments tailored to your smile";
+        if (/architect/i.test(cat)) return "Comprehensive architectural and interior blueprints";
+        return "Tailored offerings crafted specifically for your needs";
+      },
+    },
+  ];
+
+  function scrubString(str: string): string {
+    let result = str;
+    for (const { pattern, getReplacement } of LEAKED_PHRASE_REPLACEMENTS) {
+      if (pattern.test(result)) {
+        const replacement = getReplacement(categoryStr);
+        result = result.replace(pattern, replacement);
+        warnings.push(`Scrubbed leaked/generic boilerplate: replaced with "${replacement}".`);
+      }
+    }
+    // Also remove internal framework terms
+    result = result.replace(/\bWebsiteBanja\b/gi, context?.businessName || "Our Brand");
+    result = result.replace(/\bHosted Skill\b/gi, "Specialized Capability");
+    result = result.replace(/\bAST validation\b/gi, "Quality Assurance");
+    return result;
+  }
+
+  function scrubDeep(obj: any): any {
+    if (typeof obj === "string") return scrubString(obj);
+    if (Array.isArray(obj)) return obj.map(scrubDeep);
+    if (obj && typeof obj === "object") {
+      const out: Record<string, any> = {};
+      for (const [k, v] of Object.entries(obj)) {
+        out[k] = scrubDeep(v);
+      }
+      return out;
+    }
+    return obj;
+  }
+
+  sanitized = scrubDeep(sanitized);
 
   // Step H: Motion & Accessibility Audit
   const isNoAnimationRequested = Boolean(

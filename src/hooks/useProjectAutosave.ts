@@ -7,13 +7,18 @@ import type { Project, ProjectUpdates } from "@/types/project";
 export function useProjectAutosave(
   projectId: string,
   updates: ProjectUpdates,
-  enabled: boolean = true
+  enabled: boolean = true,
+  options?: {
+    onQuotaUpdated?: (quota: any) => void;
+    onQuotaExceeded?: (error: any) => void;
+  }
 ) {
   const [isSaving, setIsSaving] = useState(false);
   const [isError, setIsError] = useState(false);
   const [lastSavedAt, setLastSavedAt] = useState<Date>(new Date());
   
   const updatesRef = useRef(updates);
+  const optionsRef = useRef(options);
   const lastSavedRef = useRef("");
   const initializedRef = useRef(false);
   const currentProjectIdRef = useRef(projectId);
@@ -23,6 +28,7 @@ export function useProjectAutosave(
   useEffect(() => {
     updatesRef.current = updates;
     enabledRef.current = enabled;
+    optionsRef.current = options;
   });
 
   // When projectId changes, immediately abort pending saves and reset initialization
@@ -56,8 +62,18 @@ export function useProjectAutosave(
     setIsSaving(true);
     setIsError(false);
     try {
-      const { error } = await updateProject(projectId, currentUpdates);
-      if (error) throw error;
+      const { data, quota, error } = await updateProject(projectId, currentUpdates);
+      if (error) {
+        if ((error as any)?.code === "STUDIO_CHANGE_LIMIT_REACHED" || (error as any)?.status === 403) {
+          optionsRef.current?.onQuotaExceeded?.(error);
+        }
+        throw error;
+      }
+
+      if (quota) {
+        optionsRef.current?.onQuotaUpdated?.(quota);
+      }
+
       lastSavedRef.current = nextFingerprint;
       setLastSavedAt(new Date());
       // Keep projects store in sync for seamless instant back navigation

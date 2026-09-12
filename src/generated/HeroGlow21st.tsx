@@ -5,10 +5,10 @@ import HeroGlow21st from "@/components/21st/HeroGlow21st";
 export default function GeneratedHeroGlow21st() {
   return (
     <HeroGlow21st
-      badge="modern dark luxury with glow effects"
-      title="HyperScale Cloud - High Velocity Platform"
+      badge="Modern Tech Dark"
+      title="CloudPulse AI Observability - High Velocity Platform"
       subtitle="Transform your workflow with autonomous architecture, self-healing code, and dynamic design systems."
-      primaryCta="Deploy in 60 Seconds"
+      primaryCta="Get Started"
       secondaryCta="Explore Architecture"
     />
   );

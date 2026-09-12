@@ -4,6 +4,7 @@ import React, { useState, useRef, useEffect } from "react";
 import { useGeneratedWebsiteStore } from "@/store/generatedWebsiteStore";
 import { cn } from "@/lib/utils";
 import { useWebsiteUI } from "@/contexts/WebsiteUIContext";
+import { useImageEditor } from "@/contexts/ImageEditorContext";
 import type { ElementType } from "@/types/website";
 import { Edit3, Image as ImageIcon, Sparkles, Check, X } from "lucide-react";
 
@@ -35,6 +36,7 @@ export default function EditableElement({
   const selectedElement = useGeneratedWebsiteStore((state) => state.selectedElement);
   const setSelectedElement = useGeneratedWebsiteStore((state) => state.setSelectedElement);
   const updateElementValue = useGeneratedWebsiteStore((state) => state.updateElementValue);
+  const imageEditor = useImageEditor();
 
   const isSelected =
     !isPublic &&
@@ -55,6 +57,54 @@ export default function EditableElement({
       inputRef.current.select();
     }
   }, [isEditingInline]);
+
+  // If this is an image and image editor is active, allow clicking to replace/adjust crop
+  if (elementType === "image" && imageEditor?.isInteractive) {
+    const handleImageClick = (e?: React.MouseEvent) => {
+      if (e) {
+        e.stopPropagation();
+        e.preventDefault();
+      }
+      let src = typeof value === "string" ? value : undefined;
+      let fit: any = "cover";
+      let focalPoint: any = "50% 50%";
+
+      if (React.isValidElement(children)) {
+        src = src || (children.props as any)?.src;
+        fit = (children.props as any)?.fit || fit;
+        focalPoint = (children.props as any)?.focalPoint || focalPoint;
+      }
+
+      imageEditor.openImageModal({
+        elementPath,
+        currentUrl: src || "",
+        originalUrl: src || "",
+        fit,
+        focalPoint,
+        title: label || "Customize Image",
+      });
+
+      if (onImageClick) {
+        onImageClick();
+      }
+    };
+
+    return (
+      <div
+        onClick={handleImageClick}
+        className={cn("group/editable-image relative w-full h-full cursor-pointer", className)}
+      >
+        {React.isValidElement(children)
+          ? React.cloneElement(children as React.ReactElement<any>, {
+              editable: true,
+              onEditClick: handleImageClick,
+              badgeLabel: "Replace",
+              wrapperClassName: cn("w-full h-full", (children.props as any)?.wrapperClassName),
+            })
+          : children}
+      </div>
+    );
+  }
 
   // If in pure preview mode or public live mode, render child without editor wrappers
   if (isPublic || isPreviewMode) {

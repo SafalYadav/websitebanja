@@ -101,10 +101,13 @@ export interface AuthenticatedUser {
  * Validates the request's Bearer token against Supabase Auth.
  * Returns null when there is no valid session — callers must respond 401.
  */
+import type { AuthErrorType } from "@/types/authErrors";
+
 export interface AuthValidationResult {
   user: AuthenticatedUser | null;
   status: 200 | 401 | 503;
   error: string | null;
+  errorType?: AuthErrorType;
 }
 
 /**
@@ -180,7 +183,8 @@ export async function validateUserAuth(req: Request): Promise<AuthValidationResu
     return {
       user: null,
       status: 401,
-      error: "Unauthorized: Missing or invalid Bearer token.",
+      error: "Unauthorized: Missing Bearer token.",
+      errorType: "AUTH_UNAUTHENTICATED",
     };
   }
 
@@ -202,6 +206,7 @@ export async function validateUserAuth(req: Request): Promise<AuthValidationResu
           user: null,
           status: 503,
           error: "Authentication service temporarily unreachable. Please try again shortly.",
+          errorType: "AUTH_PROVIDER_ERROR",
         };
       }
 
@@ -211,6 +216,7 @@ export async function validateUserAuth(req: Request): Promise<AuthValidationResu
         user: null,
         status: 401,
         error: errObj?.message || "Unauthorized: Session invalid or expired.",
+        errorType: "AUTH_SESSION_EXPIRED",
       };
     }
 
@@ -220,6 +226,7 @@ export async function validateUserAuth(req: Request): Promise<AuthValidationResu
         user: null,
         status: 401,
         error: "Unauthorized: User account not found.",
+        errorType: "API_AUTH_ERROR",
       };
     }
 
@@ -234,6 +241,7 @@ export async function validateUserAuth(req: Request): Promise<AuthValidationResu
       },
       status: 200,
       error: null,
+      errorType: "AUTHENTICATED",
     };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -245,6 +253,7 @@ export async function validateUserAuth(req: Request): Promise<AuthValidationResu
       error: isNetwork
         ? "Authentication service temporarily unreachable. Please try again shortly."
         : "Unauthorized: Token verification error.",
+      errorType: isNetwork ? "AUTH_PROVIDER_ERROR" : "API_AUTH_ERROR",
     };
   }
 }

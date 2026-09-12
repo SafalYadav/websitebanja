@@ -93,13 +93,69 @@ export const CATEGORY_MAP: Record<string, CategoryImageSet> = {
     hero: "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?auto=format&fit=crop&w=1200&q=80", // Contemporary architectural facade
     about: "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1000&q=80", // Modern villa architecture
     services: [
-      "https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?auto=format&fit=crop&w=800&q=80", // Architectural planning & drafting
+      "https://images.unsplash.com/photo-1503387762-592deb58ef4e?auto=format&fit=crop&w=800&q=80", // Architectural planning & drafting
       "https://images.unsplash.com/photo-1600566753376-12c8ab7fb75b?auto=format&fit=crop&w=800&q=80", // Interior architectural design
       "https://images.unsplash.com/photo-1600573472591-ee6b68d14c68?auto=format&fit=crop&w=800&q=80", // Sustainable residential concept
     ],
     features: [
       "https://images.unsplash.com/photo-1512917774080-9991f1c4c750?auto=format&fit=crop&w=800&q=80", // Luxury modern structure
       "https://images.unsplash.com/photo-1613490493576-7fde63acd811?auto=format&fit=crop&w=800&q=80", // Minimalist architecture lines
+    ],
+  },
+  dental: {
+    hero: "https://images.unsplash.com/photo-1629909613654-28e377c37b09?auto=format&fit=crop&w=1200&q=80", // Modern bright dental clinical suite
+    about: "https://images.unsplash.com/photo-1588776814546-1ffcf47267a5?auto=format&fit=crop&w=1000&q=80", // Dentist caring consultation
+    services: [
+      "https://images.unsplash.com/photo-1606811841689-23dfddce3e95?auto=format&fit=crop&w=800&q=80", // Advanced 3D dental diagnostics
+      "https://images.unsplash.com/photo-1579684385127-1ef15d508118?auto=format&fit=crop&w=800&q=80", // Pain-free sedation dentistry
+      "https://images.unsplash.com/photo-1598256989800-fe5f95da9787?auto=format&fit=crop&w=800&q=80", // Cosmetic porcelain smile restoration
+      "https://images.unsplash.com/photo-1576091160550-2173dba999ef?auto=format&fit=crop&w=800&q=80", // Modern dental operatory & hygiene
+    ],
+    features: [
+      "https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?auto=format&fit=crop&w=800&q=80", // Spa-like clinical tranquility
+      "https://images.unsplash.com/photo-1505751172876-fa1923c5c528?auto=format&fit=crop&w=800&q=80", // Board-certified dental specialists
+    ],
+  },
+  electrician: {
+    hero: "https://images.unsplash.com/photo-1621905251189-08b45d6a269e?auto=format&fit=crop&w=1200&q=80", // Master electrician inspecting breaker panel
+    about: "https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=1000&q=80", // Electrical technician with precision tools
+    services: [
+      "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=800&q=80", // 24/7 Emergency electrical panel outage repair
+      "https://images.unsplash.com/photo-1504148455328-c376907d081c?auto=format&fit=crop&w=800&q=80", // Residential electrical panel upgrades
+      "https://images.unsplash.com/photo-1593941707882-a5bba14938c7?auto=format&fit=crop&w=800&q=80", // EV fast charger installations
+      "https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&w=800&q=80", // Commercial surge protection & industrial wiring
+    ],
+    features: [
+      "https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&w=800&q=80", // Master engineer safety compliance
+      "https://images.unsplash.com/photo-1505798577917-a65157d3320a?auto=format&fit=crop&w=800&q=80", // Licensed, bonded & insured master electricians
+    ],
+  },
+  ceramics: {
+    hero: "https://images.unsplash.com/photo-1578749556568-bc2c40e68b61?auto=format&fit=crop&w=1200&q=80", // Handcrafted stoneware & ceramic studio pottery
+    about: "https://images.unsplash.com/photo-1565193566173-7a0ee3dbe261?auto=format&fit=crop&w=1000&q=80", // Master artisan wheel-thrown pottery workshop
+    services: [
+      "https://images.unsplash.com/photo-1610701596007-11502861dcfa?auto=format&fit=crop&w=800&q=80", // Artisanal stoneware tableware & plates
+      "https://images.unsplash.com/photo-1590736969955-71cc94801759?auto=format&fit=crop&w=800&q=80", // Architectural & sculptural ceramic vessels
+      "https://images.unsplash.com/photo-1576020799627-aeac74d58064?auto=format&fit=crop&w=800&q=80", // Bespoke custom pottery commissions
+      "https://images.unsplash.com/photo-1493106819501-66d381c466f1?auto=format&fit=crop&w=800&q=80", // Wood-fired kiln clay creations
+    ],
+    features: [
+      "https://images.unsplash.com/photo-1534447677768-be436bb09401?auto=format&fit=crop&w=800&q=80", // Handcrafted ceramic collection
+      "https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=800&q=80", // Sustainably sourced natural clay & mineral glazes
+    ],
+  },
+  fashion: {
+    hero: "https://images.unsplash.com/photo-1490481651871-ab68de25d43d?auto=format&fit=crop&w=1200&q=80", // Haute couture luxury atelier
+    about: "https://images.unsplash.com/photo-1558769132-cb1aea458c5e?auto=format&fit=crop&w=1000&q=80", // Artisanal tailor craftsmanship & textiles
+    services: [
+      "https://images.unsplash.com/photo-1539109136881-3be0616acf4b?auto=format&fit=crop&w=800&q=80", // Bespoke cashmere couture commissions
+      "https://images.unsplash.com/photo-1445205170230-053b83016050?auto=format&fit=crop&w=800&q=80", // Private showings & atelier consultations
+      "https://images.unsplash.com/photo-1469334031218-e382a71b716b?auto=format&fit=crop&w=800&q=80", // Garment preservation & circular sustainability
+      "https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=800&q=80", // Hand-embroidered luxury garments
+    ],
+    features: [
+      "https://images.unsplash.com/photo-1483985988355-763728e1935b?auto=format&fit=crop&w=800&q=80", // Generational European master craftsmanship
+      "https://images.unsplash.com/photo-1487222477894-8943e31ef7b2?auto=format&fit=crop&w=800&q=80", // Zero-waste pure natural textiles
     ],
   },
   "real estate": {
@@ -135,10 +191,12 @@ export const CATEGORY_MAP: Record<string, CategoryImageSet> = {
       "https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=800&q=80", // Digital branding & UI/UX
       "https://images.unsplash.com/photo-1551836022-d5d88e9218df?auto=format&fit=crop&w=800&q=80", // Growth marketing & strategy
       "https://images.unsplash.com/photo-1531403009284-440f080d1e12?auto=format&fit=crop&w=800&q=80", // Product design & prototyping
+      "https://images.unsplash.com/photo-1551434678-e076c223a692?auto=format&fit=crop&w=800&q=80", // Strategic brand consulting
     ],
     features: [
       "https://images.unsplash.com/photo-1552664730-d307ca884978?auto=format&fit=crop&w=800&q=80", // High-impact results
       "https://images.unsplash.com/photo-1553877522-43269d4ea984?auto=format&fit=crop&w=800&q=80", // Enterprise-grade delivery
+      "https://images.unsplash.com/photo-1507679799987-c73779587ccf?auto=format&fit=crop&w=800&q=80", // Leadership & execution
     ],
   },
   tech: {
@@ -148,10 +206,12 @@ export const CATEGORY_MAP: Record<string, CategoryImageSet> = {
       "https://images.unsplash.com/photo-1551836022-d5d88e9218df?auto=format&fit=crop&w=800&q=80", // Cloud workflow automation
       "https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=800&q=80", // AI & intelligent platforms
       "https://images.unsplash.com/photo-1504868584819-f8e8b4b6d7e3?auto=format&fit=crop&w=800&q=80", // Cyber security & infrastructure
+      "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=800&q=80", // Automated data pipelines
     ],
     features: [
       "https://images.unsplash.com/photo-1451187580459-43490279c0fa?auto=format&fit=crop&w=800&q=80", // Global low latency network
       "https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=800&q=80", // Advanced chip architecture
+      "https://images.unsplash.com/photo-1531297484001-80022131f5a1?auto=format&fit=crop&w=800&q=80", // Scalable cloud infrastructure
     ],
   },
   "e-commerce": {
@@ -236,10 +296,23 @@ export const LOCAL_SERVICE_IMAGE_SET: CategoryImageSet = {
   ],
 };
 
+function hasTokens(text: string, patterns: (string | RegExp)[]): boolean {
+  for (const p of patterns) {
+    if (typeof p === "string") {
+      const escaped = p.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const rx = new RegExp(`\\b${escaped}\\b`, "i");
+      if (rx.test(text)) return true;
+    } else {
+      if (p.test(text)) return true;
+    }
+  }
+  return false;
+}
+
 /**
  * Robust Category + Business Name/Context Resolver:
- * Inspects category string, business name, and optional description
- * to deterministically find the exact matching image set.
+ * Uses strict tokenization and word boundaries to prevent substring poisoning
+ * (e.g. "spatial" or "dispatch" incorrectly triggering "spa" -> salon).
  */
 export function getCategoryImages(
   category?: string | null,
@@ -248,220 +321,354 @@ export function getCategoryImages(
 ): CategoryImageSet {
   const combined = `${category || ""} ${businessName || ""} ${description || ""}`.toLowerCase();
 
-  // 1. Check Grocery / Supermarket / Kirana / Food Store
+  // 1. Check Dental & Aesthetic Dentistry (Dedicated dental clinical care — must precede ceramics to prevent "ceramic braces" matching tableware)
   if (
-    combined.includes("grocery") ||
-    combined.includes("supermarket") ||
-    combined.includes("kirana") ||
-    combined.includes("provision") ||
-    combined.includes("mart") ||
-    combined.includes("veggie") ||
-    combined.includes("fruit") ||
-    combined.includes("fresh market") ||
-    combined.includes("organic store")
+    hasTokens(combined, [
+      "dental",
+      "dentist",
+      "dentistry",
+      "smile design",
+      "porcelain veneers",
+      "dental implants",
+      "sedation dentistry",
+      "orthodontics",
+      "orthodontic",
+      "clear aligners",
+      "aligner",
+      "teeth",
+      "oral care",
+    ])
   ) {
-    return CATEGORY_MAP.grocery;
+    return CATEGORY_MAP.dental;
   }
 
-  // 2. Check Cafe / Coffee / Bakery / Roastery
+  // 2. Check Electricians & Specialized Trades (Prevent dispatch matching salon)
   if (
-    combined.includes("cafe") ||
-    combined.includes("coffee") ||
-    combined.includes("bakery") ||
-    combined.includes("roaster") ||
-    combined.includes("espresso") ||
-    combined.includes("pastry") ||
-    combined.includes("tea house")
+    hasTokens(combined, [
+      "electrician",
+      "electricians",
+      "electrical",
+      "voltcraft",
+      "circuit breaker",
+      "panel upgrade",
+      "surge protection",
+      "ev charger",
+      "wiring",
+    ])
   ) {
-    return CATEGORY_MAP.cafe;
+    return CATEGORY_MAP.electrician;
   }
 
-  // 3. Check Restaurant / Dining / Food / Bistro / Bar / Kitchen
+  // 3. Check Specialized Artisanal Ceramics & Pottery (Explicitly exclude medical/dental contexts)
+  const isDentalContext = hasTokens(combined, ["dental", "dentist", "orthodont", "teeth", "clinic", "braces", "aligner"]);
   if (
-    combined.includes("restaurant") ||
-    combined.includes("dining") ||
-    combined.includes("bistro") ||
-    combined.includes("eatery") ||
-    combined.includes("chef") ||
-    combined.includes("culinary") ||
-    combined.includes("food") ||
-    combined.includes("pizzeria") ||
-    combined.includes("grill")
+    !isDentalContext &&
+    hasTokens(combined, [
+      "ceramics",
+      "ceramic",
+      "pottery",
+      "stoneware",
+      "terracotta",
+      "kiln",
+      "potter",
+      "clay",
+      "wheel-thrown",
+      "ceramicist",
+      "ceramicists",
+      "tableware",
+      "raku",
+    ])
   ) {
-    return CATEGORY_MAP.restaurant;
+    return CATEGORY_MAP.ceramics;
   }
 
-  // 4. Check Gym / Fitness / CrossFit / Yoga / Training / Workout
+  // 4. Check Architecture Studio / Spatial Atelier (Prevent "spatial" matching "spa")
   if (
-    combined.includes("gym") ||
-    combined.includes("fitness") ||
-    combined.includes("crossfit") ||
-    combined.includes("yoga") ||
-    combined.includes("workout") ||
-    combined.includes("trainer") ||
-    combined.includes("athletic")
-  ) {
-    return CATEGORY_MAP.gym;
-  }
-
-  // 5. Check Salon / Spa / Beauty / Hair / Nails / Barber / Cosmetic
-  if (
-    combined.includes("salon") ||
-    combined.includes("spa") ||
-    combined.includes("beauty") ||
-    combined.includes("hair") ||
-    combined.includes("barber") ||
-    combined.includes("nail") ||
-    combined.includes("esthetic")
-  ) {
-    return CATEGORY_MAP.salon;
-  }
-
-  // 6. Check Clinic / Dental / Medical / Doctor / Healthcare / Hospital / Pharmacy
-  if (
-    combined.includes("clinic") ||
-    combined.includes("dental") ||
-    combined.includes("dentist") ||
-    combined.includes("medical") ||
-    combined.includes("doctor") ||
-    combined.includes("health") ||
-    combined.includes("hospital") ||
-    combined.includes("therapy") ||
-    combined.includes("pharmacy")
-  ) {
-    return CATEGORY_MAP.clinic;
-  }
-
-  // 7. Check Architecture / Blueprint / Construction / Interior Designer
-  if (
-    combined.includes("architecture") ||
-    combined.includes("architect") ||
-    combined.includes("building design") ||
-    combined.includes("interior design") ||
-    combined.includes("structural")
+    hasTokens(combined, [
+      "architecture",
+      "architectural",
+      "architect",
+      "architects",
+      "spatial atelier",
+      "spatial design",
+      "passive solar",
+      "mass timber",
+      "bioclimatic",
+      "building design",
+      "structural design",
+    ])
   ) {
     return CATEGORY_MAP.architecture;
   }
 
-  // 8. Check Real Estate / Property / Realtor / Homes / Apartments / Villas
+  // 5. Check Luxury Fashion & Bespoke Atelier
   if (
-    combined.includes("real estate") ||
-    combined.includes("property") ||
-    combined.includes("realtor") ||
-    combined.includes("estate") ||
-    combined.includes("homes") ||
-    combined.includes("housing") ||
-    combined.includes("realty")
+    hasTokens(combined, [
+      "haute couture",
+      "couture",
+      "cashmere",
+      "bespoke tailoring",
+      "tailored coats",
+      "evening cloaks",
+      "silk garments",
+      "luxury maison",
+      "sartorial",
+      "fashion atelier",
+    ])
   ) {
-    return CATEGORY_MAP["real estate"];
+    return CATEGORY_MAP.fashion;
   }
 
-  // 9. Check Hotel / Resort / Hospitality / Suites / Lodge / Motel / Stay
+  // 6. Check Creative Agency & Brand Direction
   if (
-    combined.includes("hotel") ||
-    combined.includes("resort") ||
-    combined.includes("hospitality") ||
-    combined.includes("suites") ||
-    combined.includes("stay") ||
-    combined.includes("lodge")
-  ) {
-    return CATEGORY_MAP.hotel;
-  }
-
-  // 10. Check Agency / Creative / Marketing / Advertising / Design Studio
-  if (
-    combined.includes("agency") ||
-    combined.includes("marketing") ||
-    combined.includes("advertising") ||
-    combined.includes("branding") ||
-    combined.includes("consulting") ||
-    combined.includes("creative studio")
+    hasTokens(combined, [
+      "creative agency",
+      "brand direction",
+      "kinetic brand",
+      "brand identity",
+      "design studio",
+      "advertising agency",
+      "creative studio",
+      "media agency",
+      "spatial web",
+    ])
   ) {
     return CATEGORY_MAP.agency;
   }
 
-  // 11. Check Tech / SaaS / Software / AI / Startup / Platform / App
+  // 7. Check Tech / SaaS / Software / AI Infrastructure
   if (
-    combined.includes("tech") ||
-    combined.includes("saas") ||
-    combined.includes("software") ||
-    combined.includes("ai ") ||
-    combined.includes("platform") ||
-    combined.includes("automation") ||
-    combined.includes("cloud") ||
-    combined.includes("cyber")
+    hasTokens(combined, [
+      "saas",
+      "software",
+      "vector database",
+      "vector retrieval",
+      "semantic caching",
+      "rag",
+      "llm",
+      "cloud platform",
+      "telemetry",
+      "devops",
+      "api infrastructure",
+      "automation engine",
+      "cyber",
+    ]) ||
+    combined.includes("vectorpulse") ||
+    combined.includes("artificial intelligence") ||
+    /\b(ai|ml)\b/i.test(combined)
   ) {
     return CATEGORY_MAP.tech;
   }
 
-  // 12. Check E-commerce / Shop / Store / Retail / Fashion / Boutique
+  // 8. Check Cafe / Coffee / Roastery / Bakery
   if (
-    combined.includes("shop") ||
-    combined.includes("store") ||
-    combined.includes("ecommerce") ||
-    combined.includes("e-commerce") ||
-    combined.includes("retail") ||
-    combined.includes("boutique") ||
-    combined.includes("fashion") ||
-    combined.includes("apparel")
+    hasTokens(combined, [
+      "cafe",
+      "coffee",
+      "roastery",
+      "roaster",
+      "espresso",
+      "pour-over",
+      "bakery",
+      "pastries",
+      "sourdough",
+      "tea house",
+      "barista",
+    ])
+  ) {
+    return CATEGORY_MAP.cafe;
+  }
+
+  // 9. Check Restaurant / Dining / Bistro / Brunch / Food
+  if (
+    hasTokens(combined, [
+      "restaurant",
+      "dining",
+      "bistro",
+      "brunch",
+      "culinary",
+      "chef",
+      "pizzeria",
+      "eatery",
+      "gastropub",
+      "small plates",
+      "farm-to-table",
+    ])
+  ) {
+    return CATEGORY_MAP.restaurant;
+  }
+
+  // 10. Check Grocery / Kirana / Supermarket
+  if (
+    hasTokens(combined, [
+      "grocery",
+      "supermarket",
+      "kirana",
+      "provision",
+      "fresh market",
+      "organic produce",
+    ])
+  ) {
+    return CATEGORY_MAP.grocery;
+  }
+
+  // 11. Check Gym / Fitness / Training
+  if (
+    hasTokens(combined, [
+      "gym",
+      "fitness",
+      "crossfit",
+      "workout",
+      "athletic",
+      "personal trainer",
+      "pilates",
+      "yoga",
+    ])
+  ) {
+    return CATEGORY_MAP.gym;
+  }
+
+  // 12. Check Salon / Barber / Hair / Beauty (Strict Tokenization + Negative Guards)
+  // CRITICAL: Must NEVER match "spatial" or "dispatch" or dental "spa atmosphere"
+  const isProtectedOtherCategory = hasTokens(combined, [
+    "spatial",
+    "dispatch",
+    "architect",
+    "architecture",
+    "electrician",
+    "electrical",
+    "dental",
+    "dentist",
+    "saas",
+    "software",
+    "ceramics",
+  ]);
+
+  if (!isProtectedOtherCategory) {
+    if (
+      hasTokens(combined, [
+        "salon",
+        "salons",
+        "hair",
+        "haircut",
+        "hairstyling",
+        "hairdresser",
+        "barber",
+        "barbershop",
+        "nail salon",
+        "cosmetics",
+        "cosmetology",
+        "esthetician",
+        "beauty salon",
+      ]) ||
+      /\b(day\s*spa|medical\s*spa|medspa|wellness\s*spa|spa\s*resort|spa\s*treatment)\b/i.test(combined) ||
+      (/\bspa\b/i.test(combined) && !combined.includes("spa-like") && !combined.includes("spa atmosphere"))
+    ) {
+      return CATEGORY_MAP.salon;
+    }
+  }
+
+  // 13. Check General Clinic / Healthcare (Non-dental)
+  if (
+    hasTokens(combined, [
+      "clinic",
+      "medical",
+      "doctor",
+      "healthcare",
+      "hospital",
+      "physician",
+      "pharmacy",
+      "therapy",
+    ])
+  ) {
+    return CATEGORY_MAP.clinic;
+  }
+
+  // 14. Check Real Estate / Properties
+  if (
+    hasTokens(combined, [
+      "real estate",
+      "realtor",
+      "property",
+      "properties",
+      "villas",
+      "estates",
+      "realty",
+    ])
+  ) {
+    return CATEGORY_MAP["real estate"];
+  }
+
+  // 15. Check Hotel & Hospitality
+  if (
+    hasTokens(combined, [
+      "hotel",
+      "resort",
+      "hospitality",
+      "boutique hotel",
+      "suites",
+      "lodge",
+    ])
+  ) {
+    return CATEGORY_MAP.hotel;
+  }
+
+  // 16. Check General E-commerce / Boutique Retail
+  if (
+    hasTokens(combined, [
+      "ecommerce",
+      "e-commerce",
+      "online store",
+      "retail shop",
+      "boutique",
+      "apparel",
+    ])
   ) {
     return CATEGORY_MAP["e-commerce"];
   }
 
-  // 13. Check Education / School / Academy / Learning / Institute / Tutoring
+  // 17. Check Education
   if (
-    combined.includes("education") ||
-    combined.includes("school") ||
-    combined.includes("academy") ||
-    combined.includes("learning") ||
-    combined.includes("course") ||
-    combined.includes("tutor") ||
-    combined.includes("institute")
+    hasTokens(combined, [
+      "education",
+      "school",
+      "academy",
+      "tutoring",
+      "courses",
+      "institute",
+    ])
   ) {
     return CATEGORY_MAP.education;
   }
 
-  // 14. Check Portfolio / Freelancer / Photography / Artist / Musician
+  // 18. Check Transport
   if (
-    combined.includes("portfolio") ||
-    combined.includes("photography") ||
-    combined.includes("photographer") ||
-    combined.includes("freelance") ||
-    combined.includes("artist") ||
-    combined.includes("personal")
-  ) {
-    return CATEGORY_MAP.portfolio;
-  }
-
-  // 15. Check Transport / Car Rental / Cab / Fleet / Logistics
-  if (
-    combined.includes("transport") ||
-    combined.includes("car rental") ||
-    combined.includes("rental car") ||
-    combined.includes("taxi") ||
-    combined.includes("cab") ||
-    combined.includes("chauffeur") ||
-    combined.includes("fleet") ||
-    combined.includes("logistics")
+    hasTokens(combined, [
+      "transport",
+      "car rental",
+      "rental car",
+      "chauffeur",
+      "fleet",
+      "taxi",
+    ])
   ) {
     return TRANSPORT_IMAGE_SET;
   }
 
-  // 16. Check Local Service / Plumber / Electrician / Handyman / Repair
+  // 19. Check General Local Trades
   if (
-    combined.includes("plumber") ||
-    combined.includes("plumbing") ||
-    combined.includes("electrician") ||
-    combined.includes("handyman") ||
-    combined.includes("repair") ||
-    combined.includes("cleaning") ||
-    combined.includes("local service") ||
-    combined.includes("contractor")
+    hasTokens(combined, [
+      "plumber",
+      "plumbing",
+      "handyman",
+      "contractor",
+      "cleaning",
+      "repair",
+    ])
   ) {
     return LOCAL_SERVICE_IMAGE_SET;
   }
 
-  // Default fallback to general professional business
   return CATEGORY_MAP.general;
 }
 
@@ -545,3 +752,47 @@ export function getImageIntentForSection(
     fallbackType: "svg_geometric",
   };
 }
+
+/**
+ * Curated, low-noise atmospheric background imagery.
+ * Used exclusively for the subtle contextual watermark/atmosphere layer behind hero typography.
+ */
+export function getHeroAtmosphereImage(category?: string, archetype?: string): string {
+  const cat = (category || "").toLowerCase();
+  const arch = (archetype || "").toLowerCase();
+
+  if (cat.includes("restaurant") || cat.includes("cafe") || cat.includes("coffee") || cat.includes("dining") || arch === "warm_artisanal") {
+    return "https://images.unsplash.com/photo-1447933601403-0c6688de566e?auto=format&fit=crop&w=1600&q=80"; // Macro roasted coffee crema & warm steam texture
+  }
+
+  if (cat.includes("dental") || cat.includes("dentist") || cat.includes("clinic") || arch === "clean_clinical") {
+    return "https://images.unsplash.com/photo-1588776814546-1ffcf47267a5?auto=format&fit=crop&w=1600&q=80"; // Soft serene cyan clinical instruments & translucent medical lighting
+  }
+
+  if (cat.includes("saas") || cat.includes("tech") || cat.includes("software") || cat.includes("ai") || arch === "dark_technical") {
+    return "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=1600&q=80"; // Abstract obsidian telemetry server mesh with neon cyan/sky depth
+  }
+
+  if (cat.includes("architect") || cat.includes("interior") || arch === "minimal_editorial") {
+    return "https://images.unsplash.com/photo-1513694203232-719a280e022f?auto=format&fit=crop&w=1600&q=80"; // Crisp architectural shadow geometry across concrete facade
+  }
+
+  if (cat.includes("fashion") || cat.includes("luxury") || cat.includes("couture") || arch === "luxury_bespoke") {
+    return "https://images.unsplash.com/photo-1584917865442-de89df76afd3?auto=format&fit=crop&w=1600&q=80"; // Flowing soft silk fabric folds with elegant light and tactile atelier texture
+  }
+
+  if (cat.includes("electric") || cat.includes("plumb") || cat.includes("repair") || arch === "high_trust_service") {
+    return "https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=1600&q=80"; // Precision copper wiring and blueprint schematic lines
+  }
+
+  if (cat.includes("ceramic") || cat.includes("pottery") || cat.includes("stoneware")) {
+    return "https://images.unsplash.com/photo-1578749556568-bc2c40e68b61?auto=format&fit=crop&w=1600&q=80"; // Handcrafted stoneware clay texture and mineral glaze grain
+  }
+
+  if (cat.includes("agency") || cat.includes("creative") || arch === "expressive_creative") {
+    return "https://images.unsplash.com/photo-1550684848-fac1c5b4e853?auto=format&fit=crop&w=1600&q=80"; // Monochromatic dark abstract geometric fluid distortion
+  }
+
+  return "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=1600&q=80"; // Universal subtle ambient fluid mesh
+}
+
