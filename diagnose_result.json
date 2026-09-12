@@ -1,0 +1,313 @@
+{
+  "timestamp": "2026-09-12T07:39:36.481Z",
+  "resources": [
+    {
+      "changedTime": "2026-09-07T17:03:46.152718+00:00",
+      "createdTime": "2026-09-07T16:49:37.517872+00:00",
+      "extendedLocation": null,
+      "id": "/subscriptions/5f99d086-da25-4807-b98b-76c7e114bf38/resourceGroups/websitebanja-rg/providers/Microsoft.DBforPostgreSQL/flexibleServers/websitebanja-db",
+      "identity": null,
+      "kind": null,
+      "location": "centralindia",
+      "managedBy": null,
+      "name": "websitebanja-db",
+      "plan": null,
+      "properties": null,
+      "provisioningState": "Succeeded",
+      "resourceGroup": "websitebanja-rg",
+      "sku": {
+        "capacity": null,
+        "family": null,
+        "model": null,
+        "name": "Standard_B1ms",
+        "size": null,
+        "tier": "Burstable"
+      },
+      "systemData": {
+        "createdAt": "2026-09-07T16:49:52.600375Z"
+      },
+      "tags": {},
+      "type": "Microsoft.DBforPostgreSQL/flexibleServers"
+    },
+    {
+      "changedTime": "2026-09-07T19:07:53.161060+00:00",
+      "createdTime": "2026-09-07T18:57:26.768965+00:00",
+      "extendedLocation": null,
+      "id": "/subscriptions/5f99d086-da25-4807-b98b-76c7e114bf38/resourceGroups/websitebanja-rg/providers/Microsoft.Storage/storageAccounts/websitebanjastorage",
+      "identity": null,
+      "kind": "StorageV2",
+      "location": "centralindia",
+      "managedBy": null,
+      "name": "websitebanjastorage",
+      "plan": null,
+      "properties": null,
+      "provisioningState": "Succeeded",
+      "resourceGroup": "websitebanja-rg",
+      "sku": {
+        "capacity": null,
+        "family": null,
+        "model": null,
+        "name": "Standard_LRS",
+        "size": null,
+        "tier": "Standard"
+      },
+      "tags": {},
+      "type": "Microsoft.Storage/storageAccounts"
+    },
+    {
+      "changedTime": "2026-09-10T12:52:29.796311+00:00",
+      "createdTime": "2026-09-10T12:42:26.523640+00:00",
+      "extendedLocation": null,
+      "id": "/subscriptions/5f99d086-da25-4807-b98b-76c7e114bf38/resourceGroups/websitebanja-rg/providers/Microsoft.ContainerRegistry/registries/websitebanjacr",
+      "identity": null,
+      "kind": null,
+      "location": "centralindia",
+      "managedBy": null,
+      "name": "websitebanjacr",
+      "plan": null,
+      "properties": null,
+      "provisioningState": "Succeeded",
+      "resourceGroup": "websitebanja-rg",
+      "sku": {
+        "capacity": null,
+        "family": null,
+        "model": null,
+        "name": "Basic",
+        "size": null,
+        "tier": "Basic"
+      },
+      "systemData": {
+        "createdAt": "2026-09-10T12:42:26.5620094Z",
+        "createdBy": "safalyadavxd@gmail.com",
+        "createdByType": "User",
+        "lastModifiedAt": "2026-09-10T12:42:26.5620094Z",
+        "lastModifiedBy": "safalyadavxd@gmail.com",
+        "lastModifiedByType": "User"
+      },
+      "tags": {},
+      "type": "Microsoft.ContainerRegistry/registries"
+    },
+    {
+      "changedTime": "2026-09-10T13:49:09.658745+00:00",
+      "createdTime": "2026-09-10T13:38:46.243053+00:00",
+      "extendedLocation": null,
+      "id": "/subscriptions/5f99d086-da25-4807-b98b-76c7e114bf38/resourceGroups/websitebanja-rg/providers/Microsoft.OperationalInsights/workspaces/workspace-websitebanjarg9eEH",
+      "identity": null,
+      "kind": null,
+      "location": "centralindia",
+      "managedBy": null,
+      "name": "workspace-websitebanjarg9eEH",
+      "plan": null,
+      "properties": null,
+      "provisioningState": "Succeeded",
+      "resourceGroup": "websitebanja-rg",
+      "sku": null,
+      "tags": null,
+      "type": "Microsoft.OperationalInsights/workspaces"
+    },
+    {
+      "changedTime": "2026-09-10T13:51:34.946759+00:00",
+      "createdTime": "2026-09-10T13:39:19.165154+00:00",
+      "extendedLocation": null,
+      "id": "/subscriptions/5f99d086-da25-4807-b98b-76c7e114bf38/resourceGroups/websitebanja-rg/providers/Microsoft.App/managedEnvironments/websitebanja-env",
+      "identity": null,
+      "kind": null,
+      "location": "centralindia",
+      "managedBy": null,
+      "name": "websitebanja-env",
+      "plan": null,
+      "properties": null,
+      "provisioningState": "Succeeded",
+      "resourceGroup": "websitebanja-rg",
+      "sku": null,
+      "systemData": {
+        "createdAt": "2026-09-10T13:39:19.2078211Z",
+        "createdBy": "safalyadavxd@gmail.com",
+        "createdByType": "User",
+        "lastModifiedAt": "2026-09-10T13:39:19.2078211Z",
+        "lastModifiedBy": "safalyadavxd@gmail.com",
+        "lastModifiedByType": "User"
+      },
+      "tags": null,
+      "type": "Microsoft.App/managedEnvironments"
+    },
+    {
+      "changedTime": "2026-09-10T14:05:42.897996+00:00",
+      "createdTime": "2026-09-10T13:41:30.439533+00:00",
+      "extendedLocation": null,
+      "id": "/subscriptions/5f99d086-da25-4807-b98b-76c7e114bf38/resourceGroups/websitebanja-rg/providers/Microsoft.App/containerApps/websitebanja-app",
+      "identity": {
+        "principalId": "4c68a074-ad36-41c2-94c5-df164d85c3e1",
+        "tenantId": "ff6bffe8-5cd3-4bd1-a750-b7705bf461dc",
+        "type": "SystemAssigned",
+        "userAssignedIdentities": null
+      },
+      "kind": null,
+      "location": "centralindia",
+      "managedBy": null,
+      "name": "websitebanja-app",
+      "plan": null,
+      "properties": null,
+      "provisioningState": "Succeeded",
+      "resourceGroup": "websitebanja-rg",
+      "sku": null,
+      "systemData": {
+        "createdAt": "2026-09-10T13:41:30.4825373Z",
+        "createdBy": "safalyadavxd@gmail.com",
+        "createdByType": "User",
+        "lastModifiedAt": "2026-09-10T13:55:39.1298722Z",
+        "lastModifiedBy": "safalyadavxd@gmail.com",
+        "lastModifiedByType": "User"
+      },
+      "tags": null,
+      "type": "Microsoft.App/containerApps"
+    },
+    {
+      "changedTime": "2026-09-10T16:34:20.734341+00:00",
+      "createdTime": "2026-09-10T16:19:56.065238+00:00",
+      "extendedLocation": null,
+      "id": "/subscriptions/5f99d086-da25-4807-b98b-76c7e114bf38/resourceGroups/websitebanja-rg/providers/Microsoft.App/managedEnvironments/websitebanja-env/managedCertificates/websitebanja.com-websiteb-260910161955",
+      "identity": null,
+      "kind": null,
+      "location": "centralindia",
+      "managedBy": null,
+      "name": "websitebanja-env/websitebanja.com-websiteb-260910161955",
+      "plan": null,
+      "properties": null,
+      "provisioningState": "Succeeded",
+      "resourceGroup": "websitebanja-rg",
+      "sku": null,
+      "systemData": {
+        "createdAt": "2026-09-10T16:19:56.0984094Z",
+        "createdBy": "safalyadavxd@gmail.com",
+        "createdByType": "User",
+        "lastModifiedAt": "2026-09-10T16:19:56.0984094Z",
+        "lastModifiedBy": "safalyadavxd@gmail.com",
+        "lastModifiedByType": "User"
+      },
+      "tags": null,
+      "type": "Microsoft.App/managedEnvironments/managedCertificates"
+    },
+    {
+      "changedTime": "2026-09-10T16:47:17.748740+00:00",
+      "createdTime": "2026-09-10T16:32:09.678208+00:00",
+      "extendedLocation": null,
+      "id": "/subscriptions/5f99d086-da25-4807-b98b-76c7e114bf38/resourceGroups/websitebanja-rg/providers/Microsoft.App/managedEnvironments/websitebanja-env/managedCertificates/www.websitebanja.com-websiteb-260910163208",
+      "identity": null,
+      "kind": null,
+      "location": "centralindia",
+      "managedBy": null,
+      "name": "websitebanja-env/www.websitebanja.com-websiteb-260910163208",
+      "plan": null,
+      "properties": null,
+      "provisioningState": "Succeeded",
+      "resourceGroup": "websitebanja-rg",
+      "sku": null,
+      "systemData": {
+        "createdAt": "2026-09-10T16:32:09.7378699Z",
+        "createdBy": "safalyadavxd@gmail.com",
+        "createdByType": "User",
+        "lastModifiedAt": "2026-09-10T16:32:09.7378699Z",
+        "lastModifiedBy": "safalyadavxd@gmail.com",
+        "lastModifiedByType": "User"
+      },
+      "tags": null,
+      "type": "Microsoft.App/managedEnvironments/managedCertificates"
+    }
+  ],
+  "server": {
+    "administratorLogin": "websitebanjaadmin",
+    "administratorLoginPassword": null,
+    "authConfig": {
+      "activeDirectoryAuth": "Disabled",
+      "passwordAuth": "Enabled",
+      "tenantId": null
+    },
+    "availabilityZone": "3",
+    "backup": {
+      "backupRetentionDays": 7,
+      "earliestRestoreDate": "2026-09-07T16:56:09.086762+00:00",
+      "geoRedundantBackup": "Disabled"
+    },
+    "cluster": null,
+    "createMode": null,
+    "dataEncryption": {
+      "geoBackupEncryptionKeyStatus": null,
+      "geoBackupFederatedIdentityClientId": null,
+      "geoBackupKeyUri": null,
+      "geoBackupUserAssignedIdentityId": null,
+      "primaryEncryptionKeyStatus": null,
+      "primaryFederatedIdentityClientId": null,
+      "primaryKeyUri": null,
+      "primaryUserAssignedIdentityId": null,
+      "type": "SystemManaged"
+    },
+    "fullyQualifiedDomainName": "websitebanja-db.postgres.database.azure.com",
+    "highAvailability": {
+      "mode": "Disabled",
+      "standbyAvailabilityZone": null,
+      "state": "NotEnabled"
+    },
+    "id": "/subscriptions/5f99d086-da25-4807-b98b-76c7e114bf38/resourceGroups/websitebanja-rg/providers/Microsoft.DBforPostgreSQL/flexibleServers/websitebanja-db",
+    "identity": null,
+    "location": "Central India",
+    "maintenanceWindow": {
+      "customWindow": "Disabled",
+      "dayOfWeek": 0,
+      "startHour": 0,
+      "startMinute": 0
+    },
+    "minorVersion": "11",
+    "name": "websitebanja-db",
+    "network": {
+      "delegatedSubnetResourceId": null,
+      "privateDnsZoneArmResourceId": null,
+      "publicNetworkAccess": "Enabled"
+    },
+    "pointInTimeUtc": null,
+    "privateEndpointConnections": [],
+    "replica": {
+      "capacity": 5,
+      "promoteMode": null,
+      "promoteOption": null,
+      "replicationState": null,
+      "role": "Primary"
+    },
+    "replicaCapacity": 5,
+    "replicationRole": "Primary",
+    "resourceGroup": "websitebanja-rg",
+    "sku": {
+      "name": "Standard_B1ms",
+      "tier": "Burstable"
+    },
+    "sourceServerResourceId": null,
+    "state": "Ready",
+    "storage": {
+      "autoGrow": "Disabled",
+      "iops": 120,
+      "storageSizeGb": 32,
+      "throughput": null,
+      "tier": "P4",
+      "type": "Premium_LRS"
+    },
+    "systemData": {
+      "createdAt": "2026-09-07T16:49:52.600375+00:00",
+      "createdBy": null,
+      "createdByType": null,
+      "lastModifiedAt": null,
+      "lastModifiedBy": null,
+      "lastModifiedByType": null
+    },
+    "tags": {},
+    "type": "Microsoft.DBforPostgreSQL/flexibleServers",
+    "version": "17"
+  },
+  "firewall": null,
+  "dbQuery": {
+    "success": false,
+    "error": "timeout expired",
+    "cause": null
+  },
+  "error": null,
+  "firewallError": "Command failed: az postgres flexible-server firewall-rule list --resource-group websitebanja-rg --name websitebanja-db -o json\nERROR: unrecognized arguments: --name websitebanja-db\n\nhttps://aka.ms/cli_ref\nRead more about the command in reference docs\n"
+}
