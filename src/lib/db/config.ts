@@ -76,7 +76,7 @@ export function getDatabaseConfig(): DatabaseConfig {
       max: parseInt(process.env.DATABASE_MAX_CONNECTIONS || "20", 10),
       min: parseInt(process.env.DATABASE_MIN_CONNECTIONS || "2", 10),
       idleTimeoutMillis: parseInt(process.env.DATABASE_IDLE_TIMEOUT_MS || "30000", 10),
-      connectionTimeoutMillis: parseInt(process.env.DATABASE_CONN_TIMEOUT_MS || "5000", 10),
+      connectionTimeoutMillis: parseInt(process.env.DATABASE_CONN_TIMEOUT_MS || "10000", 10),
     },
     isAzureConfigured: Boolean((databaseUrl && databaseUrl.includes("postgres")) || (user && password)),
   };

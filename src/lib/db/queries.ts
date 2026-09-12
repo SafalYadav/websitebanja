@@ -40,6 +40,8 @@ export function getPool(): Pool {
       min: config.pool.min,
       idleTimeoutMillis: config.pool.idleTimeoutMillis,
       connectionTimeoutMillis: config.pool.connectionTimeoutMillis,
+      keepAlive: true,
+      keepAliveInitialDelayMillis: 10000,
     });
   } else if (config.databaseUrl) {
     _pool = new Pool({
@@ -49,12 +51,19 @@ export function getPool(): Pool {
       min: config.pool.min,
       idleTimeoutMillis: config.pool.idleTimeoutMillis,
       connectionTimeoutMillis: config.pool.connectionTimeoutMillis,
+      keepAlive: true,
+      keepAliveInitialDelayMillis: 10000,
     });
   } else {
     throw new Error(
       "Azure PostgreSQL is not configured. Set AZURE_DB_USER + AZURE_DB_PASSWORD or DATABASE_URL."
     );
   }
+
+  // Prevent idle connection errors from bubbling up as unhandled exceptions
+  _pool.on("error", (err) => {
+    console.warn("[Azure PostgreSQL Pool] Unexpected error on idle client:", err.message);
+  });
 
   return _pool;
 }

@@ -109,8 +109,11 @@ export async function getProjects(): Promise<{ data: Project[]; error: Error | n
 
     const json = await res.json();
     if (!res.ok || !json.success) {
-      // Return empty array for unauthenticated / unauthorized without throwing
-      return { data: [], error: null };
+      if (res.status === 401) {
+        // Return empty array for unauthenticated / unauthorized without throwing
+        return { data: [], error: null };
+      }
+      return { data: [], error: new Error(json.error || "Failed to fetch projects") };
     }
 
     const projects = (json.data || []).map((p: Project) => hydrateProjectMetadata(p)!);
