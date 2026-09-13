@@ -59,36 +59,32 @@ async function main() {
     }
   }
 
-  // Step 2: Configure Secret in Azure Container App
-  if (keySecret) {
-    console.log("\n[Step 2] Configuring razorpay-key-secret in Azure Container App Secret Store...");
-    let secretConfigured = false;
+  // Step 2: Configure Secrets in Azure Container App Secret Store (Atomic & Resilient)
+  const secretsToSet = [];
+  if (keySecret) secretsToSet.push({ name: "razorpay-key-secret", value: keySecret });
+  if (cronSecret) secretsToSet.push({ name: "cron-secret", value: cronSecret });
 
-    // Try standard CLI first
-    try {
-      execSync(
-        `az containerapp secret set --name "${containerAppName}" --resource-group "${resourceGroup}" --secrets razorpay-key-secret="${keySecret}" 2>/dev/null`,
-        { stdio: "pipe" }
-      );
-      console.log("az containerapp secret set succeeded.");
-      secretConfigured = true;
-    } catch {
-      console.log("az containerapp secret set returned authorization check on environment. Falling back to targeted ARM REST PATCH...");
-    }
+  if (secretsToSet.length > 0) {
+    console.log(`\n[Step 2] Configuring secrets in Azure Container App Secret Store (${secretsToSet.map(s => s.name).join(", ")})...`);
+    await waitForProvisioningReady(60);
 
-    // Fallback: Targeted ARM REST API patch (scoped to container app without managedEnvironmentId)
-    if (!secretConfigured && subscriptionId) {
+    let secretsConfigured = false;
+    for (let attempt = 1; attempt <= 4; attempt++) {
       try {
+        await waitForProvisioningReady(30);
         const listUri = `https://management.azure.com/subscriptions/${subscriptionId}/resourceGroups/${resourceGroup}/providers/Microsoft.App/containerApps/${containerAppName}/listSecrets?api-version=2024-03-01`;
         const secretsRaw = execSync(`az rest --method post --uri "${listUri}" -o json`, { stdio: "pipe" }).toString();
         const existing = JSON.parse(secretsRaw);
         const secretsList = Array.isArray(existing.value) ? existing.value : [];
 
-        // Filter out existing razorpay-key-secret if present, then append new value
+        const namesToSet = new Set(secretsToSet.map((s) => s.name));
         const updatedSecrets = secretsList
-          .filter((s) => s.name !== "razorpay-key-secret")
+          .filter((s) => !namesToSet.has(s.name))
           .map((s) => ({ name: s.name, value: s.value }));
-        updatedSecrets.push({ name: "razorpay-key-secret", value: keySecret });
+
+        for (const s of secretsToSet) {
+          updatedSecrets.push(s);
+        }
 
         const patchUri = `https://management.azure.com/subscriptions/${subscriptionId}/resourceGroups/${resourceGroup}/providers/Microsoft.App/containerApps/${containerAppName}?api-version=2024-03-01`;
         const patchBody = JSON.stringify({
@@ -102,57 +98,12 @@ async function main() {
         execSync(`az rest --method patch --uri "${patchUri}" --body '${patchBody.replace(/'/g, "'\\''")}'`, {
           stdio: "pipe",
         });
-        console.log("Targeted ARM REST API secret patch succeeded.");
-        secretConfigured = true;
+        console.log("Targeted ARM REST API secrets patch succeeded.");
+        secretsConfigured = true;
+        break;
       } catch (restErr) {
-        console.error("ARM REST API secret patch error:", restErr.message);
-      }
-    }
-  }
-
-  // Step 2b: Configure cron-secret in Azure Container App
-  if (cronSecret) {
-    console.log("\n[Step 2b] Configuring cron-secret in Azure Container App Secret Store...");
-    let cronConfigured = false;
-    try {
-      execSync(
-        `az containerapp secret set --name "${containerAppName}" --resource-group "${resourceGroup}" --secrets cron-secret="${cronSecret}" 2>/dev/null`,
-        { stdio: "pipe" }
-      );
-      console.log("az containerapp secret set for cron-secret succeeded.");
-      cronConfigured = true;
-    } catch {
-      console.log("az containerapp secret set for cron-secret returned authorization check. Falling back to targeted ARM REST PATCH...");
-    }
-
-    if (!cronConfigured && subscriptionId) {
-      try {
-        const listUri = `https://management.azure.com/subscriptions/${subscriptionId}/resourceGroups/${resourceGroup}/providers/Microsoft.App/containerApps/${containerAppName}/listSecrets?api-version=2024-03-01`;
-        const secretsRaw = execSync(`az rest --method post --uri "${listUri}" -o json`, { stdio: "pipe" }).toString();
-        const existing = JSON.parse(secretsRaw);
-        const secretsList = Array.isArray(existing.value) ? existing.value : [];
-
-        const updatedSecrets = secretsList
-          .filter((s) => s.name !== "cron-secret")
-          .map((s) => ({ name: s.name, value: s.value }));
-        updatedSecrets.push({ name: "cron-secret", value: cronSecret });
-
-        const patchUri = `https://management.azure.com/subscriptions/${subscriptionId}/resourceGroups/${resourceGroup}/providers/Microsoft.App/containerApps/${containerAppName}?api-version=2024-03-01`;
-        const patchBody = JSON.stringify({
-          properties: {
-            configuration: {
-              secrets: updatedSecrets,
-            },
-          },
-        });
-
-        execSync(`az rest --method patch --uri "${patchUri}" --body '${patchBody.replace(/'/g, "'\\''")}'`, {
-          stdio: "pipe",
-        });
-        console.log("Targeted ARM REST API cron-secret patch succeeded.");
-        cronConfigured = true;
-      } catch (restErr) {
-        console.error("ARM REST API cron-secret patch error:", restErr.message);
+        console.warn(`ARM REST API secrets patch attempt ${attempt} error:`, restErr.message);
+        await sleep(5000);
       }
     }
   }
