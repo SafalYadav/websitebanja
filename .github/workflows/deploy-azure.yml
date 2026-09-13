@@ -92,6 +92,7 @@ jobs:
           CONTAINER_APP_NAME: ${{ env.CONTAINER_APP_NAME }}
           RAZORPAY_KEY_ID: ${{ secrets.RAZORPAY_KEY_ID }}
           RAZORPAY_KEY_SECRET: ${{ secrets.RAZORPAY_KEY_SECRET }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
           IMAGE_TAG: ${{ env.ACR_SERVER }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
         run: |
           node scripts/configure_azure_razorpay.mjs

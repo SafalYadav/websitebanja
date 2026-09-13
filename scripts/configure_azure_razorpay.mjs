@@ -5,17 +5,19 @@ const resourceGroup = process.env.RESOURCE_GROUP || "websitebanja-rg";
 const containerAppName = process.env.CONTAINER_APP_NAME || "websitebanja-app";
 const keyId = process.env.RAZORPAY_KEY_ID;
 const keySecret = process.env.RAZORPAY_KEY_SECRET;
+const cronSecret = process.env.CRON_SECRET;
 const imageTag = process.env.IMAGE_TAG;
 const clientId = process.env.AZURE_CLIENT_ID;
 
 console.log("================================================================================");
-console.log("CONFIGURING AZURE CONTAINER APP FOR RAZORPAY");
+console.log("CONFIGURING AZURE CONTAINER APP FOR RAZORPAY & BILLING CRON");
 console.log("================================================================================");
 console.log("Container App:", containerAppName);
 console.log("Resource Group:", resourceGroup);
 console.log("Image Tag:", imageTag || "not specified");
 console.log("Razorpay Key ID configured:", Boolean(keyId));
 console.log("Razorpay Key Secret configured:", Boolean(keySecret));
+console.log("Billing CRON Secret configured:", Boolean(cronSecret));
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -108,6 +110,53 @@ async function main() {
     }
   }
 
+  // Step 2b: Configure cron-secret in Azure Container App
+  if (cronSecret) {
+    console.log("\n[Step 2b] Configuring cron-secret in Azure Container App Secret Store...");
+    let cronConfigured = false;
+    try {
+      execSync(
+        `az containerapp secret set --name "${containerAppName}" --resource-group "${resourceGroup}" --secrets cron-secret="${cronSecret}" 2>/dev/null`,
+        { stdio: "pipe" }
+      );
+      console.log("az containerapp secret set for cron-secret succeeded.");
+      cronConfigured = true;
+    } catch {
+      console.log("az containerapp secret set for cron-secret returned authorization check. Falling back to targeted ARM REST PATCH...");
+    }
+
+    if (!cronConfigured && subscriptionId) {
+      try {
+        const listUri = `https://management.azure.com/subscriptions/${subscriptionId}/resourceGroups/${resourceGroup}/providers/Microsoft.App/containerApps/${containerAppName}/listSecrets?api-version=2024-03-01`;
+        const secretsRaw = execSync(`az rest --method post --uri "${listUri}" -o json`, { stdio: "pipe" }).toString();
+        const existing = JSON.parse(secretsRaw);
+        const secretsList = Array.isArray(existing.value) ? existing.value : [];
+
+        const updatedSecrets = secretsList
+          .filter((s) => s.name !== "cron-secret")
+          .map((s) => ({ name: s.name, value: s.value }));
+        updatedSecrets.push({ name: "cron-secret", value: cronSecret });
+
+        const patchUri = `https://management.azure.com/subscriptions/${subscriptionId}/resourceGroups/${resourceGroup}/providers/Microsoft.App/containerApps/${containerAppName}?api-version=2024-03-01`;
+        const patchBody = JSON.stringify({
+          properties: {
+            configuration: {
+              secrets: updatedSecrets,
+            },
+          },
+        });
+
+        execSync(`az rest --method patch --uri "${patchUri}" --body '${patchBody.replace(/'/g, "'\\''")}'`, {
+          stdio: "pipe",
+        });
+        console.log("Targeted ARM REST API cron-secret patch succeeded.");
+        cronConfigured = true;
+      } catch (restErr) {
+        console.error("ARM REST API cron-secret patch error:", restErr.message);
+      }
+    }
+  }
+
   // Wait for provisioning to complete before modifying template/image
   await waitForProvisioningReady(60);
 
@@ -124,6 +173,10 @@ async function main() {
     if (keySecret) {
       updateCmd += ` "RAZORPAY_KEY_SECRET=secretref:razorpay-key-secret"`;
     }
+  }
+
+  if (cronSecret) {
+    updateCmd += ` "CRON_SECRET=secretref:cron-secret"`;
   }
 
   let updated = false;
@@ -163,6 +216,9 @@ async function main() {
           }
           if (keySecret) {
             envMap.set("RAZORPAY_KEY_SECRET", { name: "RAZORPAY_KEY_SECRET", secretRef: "razorpay-key-secret" });
+          }
+          if (cronSecret) {
+            envMap.set("CRON_SECRET", { name: "CRON_SECRET", secretRef: "cron-secret" });
           }
 
           container.env = Array.from(envMap.values());
