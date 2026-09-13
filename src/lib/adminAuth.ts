@@ -8,6 +8,58 @@ export interface AdminAuthResult {
   error?: string;
 }
 
+export interface AdminUserCandidate {
+  id?: string;
+  email?: string | null;
+  app_metadata?: Record<string, unknown>;
+}
+
+/**
+ * Authoritative server-side determination of whether a user is an administrator.
+ * Evaluates:
+ * 1. user.app_metadata.role === "admin" | "superadmin" (tamper-proof JWT claim)
+ * 2. user.email matches ADMIN_EMAILS (comma-separated, case-insensitive)
+ * 3. user.id matches ADMIN_USER_IDS (comma-separated)
+ */
+export function isUserAdmin(user: AdminUserCandidate | null | undefined): boolean {
+  if (!user) return false;
+
+  // 1. Check app_metadata for explicit admin/superadmin role
+  const appRole = (user.app_metadata as Record<string, unknown> | undefined)?.role;
+  if (appRole === "admin" || appRole === "superadmin") {
+    return true;
+  }
+
+  // 2. Check against ADMIN_EMAILS environment variable (comma-separated list)
+  if (user.email && typeof user.email === "string") {
+    const userEmail = user.email.toLowerCase().trim();
+    const rawAdminEmails = process.env.ADMIN_EMAILS || "";
+    const adminEmailList = rawAdminEmails
+      .split(",")
+      .map((e) => e.trim().toLowerCase())
+      .filter(Boolean);
+
+    if (adminEmailList.includes(userEmail)) {
+      return true;
+    }
+  }
+
+  // 3. Check against ADMIN_USER_IDS environment variable (comma-separated list)
+  if (user.id && typeof user.id === "string") {
+    const rawAdminUserIds = process.env.ADMIN_USER_IDS || "";
+    const adminUserIdList = rawAdminUserIds
+      .split(",")
+      .map((id) => id.trim())
+      .filter(Boolean);
+
+    if (adminUserIdList.includes(user.id)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 /**
  * Server-side Admin Authorization Verification.
  * Inspects incoming request authorization header, validates session with Supabase,
@@ -32,26 +84,11 @@ export async function verifyAdminAuth(req: Request): Promise<AdminAuthResult> {
     const supabase = createClient(supabaseUrl, supabaseKey);
     const { data: { user }, error: authError } = await supabase.auth.getUser(token);
 
-    if (authError || !user || !user.email) {
+    if (authError || !user) {
       return { isAdmin: false, error: "Unauthorized: Invalid or expired session." };
     }
 
-    const userEmail = user.email.toLowerCase().trim();
-
-    // 1. Check against ADMIN_EMAILS environment variable (comma-separated list)
-    const rawAdminEmails = process.env.ADMIN_EMAILS || "";
-    const adminEmailList = rawAdminEmails
-      .split(",")
-      .map((e) => e.trim().toLowerCase())
-      .filter(Boolean);
-
-    // 2. Check app_metadata for explicit admin role
-    const appRole = (user.app_metadata as Record<string, unknown> | undefined)?.role;
-    const isRoleAdmin = appRole === "admin" || appRole === "superadmin";
-
-    const isEmailInList = adminEmailList.includes(userEmail);
-
-    if (isEmailInList || isRoleAdmin) {
+    if (isUserAdmin(user)) {
       return {
         isAdmin: true,
         userId: user.id,

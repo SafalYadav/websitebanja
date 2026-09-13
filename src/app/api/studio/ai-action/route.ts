@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
       isAdmin = authResult.isAdmin;
       if (!isAdmin) {
         // Enforce Studio Change Quota
-        const quota = await getStudioQuota(user.id);
+        const quota = await getStudioQuota(user.id, user);
         if (quota.isBlocked) {
           return NextResponse.json(
             {

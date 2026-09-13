@@ -37,6 +37,7 @@ export interface UserSubscription {
 export interface StudioQuotaStatus {
   planId: PlanId;
   isPro: boolean;
+  isAdmin?: boolean;
   changesUsed: number;
   limit: number;
   remainingChanges: number;

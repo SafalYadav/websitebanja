@@ -134,7 +134,7 @@ export async function PATCH(request: Request, context: RouteContext) {
     );
 
     if (isMeaningful) {
-      const quota = await getStudioQuota(auth.user.id);
+      const quota = await getStudioQuota(auth.user.id, auth.user);
       if (quota.isBlocked) {
         return NextResponse.json(
           {
@@ -201,10 +201,10 @@ export async function PATCH(request: Request, context: RouteContext) {
     // Quota Accounting: Only increment after successful database persistence of meaningful mutations
     let latestQuota;
     if (isMeaningful) {
-      const quotaResult = await consumeStudioQuota(auth.user.id, mutationHash);
+      const quotaResult = await consumeStudioQuota(auth.user.id, mutationHash, auth.user);
       latestQuota = quotaResult.quota;
     } else {
-      latestQuota = await getStudioQuota(auth.user.id);
+      latestQuota = await getStudioQuota(auth.user.id, auth.user);
     }
 
     const project = hydrateProjectMetadata(row as unknown as Project);

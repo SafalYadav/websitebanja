@@ -19,7 +19,7 @@ export async function GET(request: Request) {
       );
     }
 
-    const quota = await getStudioQuota(auth.user.id);
+    const quota = await getStudioQuota(auth.user.id, auth.user);
 
     return NextResponse.json({
       success: true,

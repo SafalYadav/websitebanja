@@ -6,9 +6,9 @@ import {
   isProUser,
 } from "@/lib/plans";
 import { dbGetUserSubscription } from "@/lib/db/queries";
+import { isUserAdmin, type AdminUserCandidate } from "@/lib/adminAuth";
 
 import type { StudioQuotaStatus, PlanId, SubscriptionStatus } from "@/types/plans";
-
 
 export { FREE_STUDIO_CHANGE_LIMIT, PRO_STUDIO_CHANGE_SAFETY_LIMIT };
 
@@ -24,6 +24,16 @@ interface QuotaRecord {
 // In-memory quota cache and mutex per user to ensure atomic check-and-increment and high performance
 const quotaStore = new Map<string, QuotaRecord>();
 const userLocks = new Map<string, Promise<unknown>>();
+const adminUserIds = new Set<string>();
+
+/**
+ * Registers an admin user ID (for authoritative server caching or testing)
+ */
+export function registerAdminUserId(userId: string): void {
+  if (userId) {
+    adminUserIds.add(userId);
+  }
+}
 
 /**
  * Sequential execution per user to prevent concurrent race-condition quota bypass
@@ -149,13 +159,39 @@ export function isMeaningfulStudioMutation(
 }
 
 /**
- * Retrieves the current Studio change quota status for the authenticated user.
+ * Authoritatively determines if the user is an admin based on:
+ * 1. userCandidate passed from server-authenticated session (email, app_metadata.role, id)
+ * 2. In-memory cached admin user IDs (registered upon prior authenticated verification)
+ * 3. Environment variable ADMIN_USER_IDS or ADMIN_EMAILS
  */
-export async function getStudioQuota(userId: string): Promise<StudioQuotaStatus> {
+export function isStudioAdmin(userId: string, userCandidate?: AdminUserCandidate | null): boolean {
+  if (userCandidate && isUserAdmin(userCandidate)) {
+    if (userId) adminUserIds.add(userId);
+    return true;
+  }
+  if (userId && adminUserIds.has(userId)) {
+    return true;
+  }
+  if (userId && isUserAdmin({ id: userId })) {
+    adminUserIds.add(userId);
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Retrieves the current Studio change quota status for the authenticated user.
+ * Admin users receive an authoritative bypass with unlimited changes and isBlocked=false.
+ */
+export async function getStudioQuota(
+  userId: string,
+  userCandidate?: AdminUserCandidate | null
+): Promise<StudioQuotaStatus> {
   if (!userId) {
     return {
       planId: "free",
       isPro: false,
+      isAdmin: false,
       changesUsed: 0,
       limit: FREE_STUDIO_CHANGE_LIMIT,
       remainingChanges: FREE_STUDIO_CHANGE_LIMIT,
@@ -165,15 +201,14 @@ export async function getStudioQuota(userId: string): Promise<StudioQuotaStatus>
     };
   }
 
+  const isAdmin = isStudioAdmin(userId, userCandidate);
+
   // 1. Fetch user's subscription entitlement
   const sub = await dbGetUserSubscription(userId);
   const rawPlanId: PlanId = sub?.plan_id === "paid_pro" ? "paid_pro" : "free";
   const status: SubscriptionStatus = (sub?.status as SubscriptionStatus) || "free";
   const pro = isProUser(rawPlanId, status, sub?.current_period_end);
-  const planId: PlanId = pro ? "paid_pro" : "free";
-
-  const limit = getStudioChangeLimit(planId, status, sub?.current_period_end);
-
+  const planId: PlanId = (isAdmin || pro) ? "paid_pro" : "free";
 
   // 2. Retrieve or initialize user quota record
   let record = quotaStore.get(userId);
@@ -201,12 +236,30 @@ export async function getStudioQuota(userId: string): Promise<StudioQuotaStatus>
     }
   }
 
+  // ADMIN RULE: Unlimited changes, no 60-change safety cap, never blocked
+  if (isAdmin) {
+    return {
+      planId: "paid_pro",
+      isPro: true,
+      isAdmin: true,
+      changesUsed: record.changesUsed,
+      limit: 999999,
+      remainingChanges: 999999,
+      isBlocked: false,
+      periodStart: record.periodStart.toISOString(),
+      periodEnd: record.periodEnd.toISOString(),
+    };
+  }
+
+  // Normal Pro vs Free limits
+  const limit = getStudioChangeLimit(planId, status, sub?.current_period_end);
   const remainingChanges = Math.max(0, limit - record.changesUsed);
   const isBlocked = record.changesUsed >= limit;
 
   return {
     planId,
     isPro: pro,
+    isAdmin: false,
     changesUsed: record.changesUsed,
     limit,
     remainingChanges,
@@ -219,10 +272,12 @@ export async function getStudioQuota(userId: string): Promise<StudioQuotaStatus>
 /**
  * Atomically checks and increments quota for a meaningful mutation.
  * Handles race conditions and rejects when limit is exceeded.
+ * Admin users bypass all quota limits and safety caps.
  */
 export async function consumeStudioQuota(
   userId: string,
-  mutationHash: string
+  mutationHash: string,
+  userCandidate?: AdminUserCandidate | null
 ): Promise<{
   success: boolean;
   quota: StudioQuotaStatus;
@@ -232,7 +287,24 @@ export async function consumeStudioQuota(
   cta?: string;
 }> {
   return withUserLock(userId, async () => {
-    const quota = await getStudioQuota(userId);
+    const quota = await getStudioQuota(userId, userCandidate);
+
+    // ADMIN RULE: Genuinely unlimited, never blocked, no quota cap
+    if (quota.isAdmin) {
+      const record = quotaStore.get(userId);
+      if (record) {
+        record.changesUsed += 1;
+        record.lastMutationHash = mutationHash;
+        if (mutationHash) {
+          record.mutationHistory.add(mutationHash);
+        }
+      }
+      return {
+        success: true,
+        quota,
+        blocked: false,
+      };
+    }
 
     // Duplicate retry check: if this exact mutation was already recorded, do not double-count
     const record = quotaStore.get(userId);
@@ -244,7 +316,7 @@ export async function consumeStudioQuota(
       };
     }
 
-    // Quota boundary check
+    // Quota boundary check (Normal Pro capped at 60, Free capped at 4)
     if (quota.isBlocked) {
       return {
         success: false,
@@ -260,7 +332,7 @@ export async function consumeStudioQuota(
       };
     }
 
-    // Increment change count
+    // Increment change count for non-admin
     if (record) {
       record.changesUsed += 1;
       record.lastMutationHash = mutationHash;
@@ -269,7 +341,7 @@ export async function consumeStudioQuota(
       }
     }
 
-    const updatedQuota = await getStudioQuota(userId);
+    const updatedQuota = await getStudioQuota(userId, userCandidate);
 
     return {
       success: true,
@@ -277,6 +349,28 @@ export async function consumeStudioQuota(
       blocked: false,
     };
   });
+}
+
+/** Alias for consumeStudioQuota */
+export const consumeStudioChange = consumeStudioQuota;
+
+/**
+ * Authoritative mutation guard.
+ * Throws if user is blocked from making changes.
+ */
+export async function assertStudioGenerationAllowed(
+  userId: string,
+  userCandidate?: AdminUserCandidate | null
+): Promise<{ allowed: boolean; quota: StudioQuotaStatus }> {
+  const quota = await getStudioQuota(userId, userCandidate);
+  if (quota.isBlocked) {
+    throw new Error(
+      quota.isPro
+        ? "You've reached your current Studio change limit."
+        : "You've reached your Free Plan Studio change limit."
+    );
+  }
+  return { allowed: true, quota };
 }
 
 /**
@@ -311,7 +405,9 @@ export async function elevateQuotaToPro(userId: string): Promise<StudioQuotaStat
 export function resetQuotaStoreForTesting(userId?: string): void {
   if (userId) {
     quotaStore.delete(userId);
+    adminUserIds.delete(userId);
   } else {
     quotaStore.clear();
+    adminUserIds.clear();
   }
 }
