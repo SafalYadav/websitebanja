@@ -4,6 +4,15 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { dbCheckSubscriptionExpiries } from "@/lib/db/queries";
 
+import crypto from "crypto";
+
+function timingSafeMatch(provided: string | null | undefined, expected: string): boolean {
+  if (!provided || typeof provided !== "string" || !expected) return false;
+  const hashProvided = crypto.createHash("sha256").update(provided).digest();
+  const hashExpected = crypto.createHash("sha256").update(expected).digest();
+  return crypto.timingSafeEqual(hashProvided, hashExpected);
+}
+
 /**
  * GET or POST /api/billing/check-expiries
  * Scheduled / cron endpoint to:
@@ -23,14 +32,25 @@ async function handleCheckExpiries(request: Request) {
   try {
     const cronSecret = process.env.CRON_SECRET;
     const authHeader = request.headers.get("authorization");
+    const xCronSecret = request.headers.get("x-cron-secret");
     const { searchParams } = new URL(request.url);
     const querySecret = searchParams.get("secret");
 
+    // Extract Bearer token if present
+    let bearerToken: string | null = null;
+    if (authHeader) {
+      if (authHeader.startsWith("Bearer ")) {
+        bearerToken = authHeader.slice(7).trim();
+      } else {
+        bearerToken = authHeader.trim();
+      }
+    }
+
     if (cronSecret) {
       const isAuthorized =
-        authHeader === `Bearer ${cronSecret}` ||
-        querySecret === cronSecret ||
-        request.headers.get("x-cron-secret") === cronSecret;
+        (bearerToken ? timingSafeMatch(bearerToken, cronSecret) : false) ||
+        (querySecret ? timingSafeMatch(querySecret, cronSecret) : false) ||
+        (xCronSecret ? timingSafeMatch(xCronSecret, cronSecret) : false);
 
       if (!isAuthorized) {
         return NextResponse.json(

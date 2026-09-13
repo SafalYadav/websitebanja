@@ -1,0 +1,49 @@
+name: Production Billing Expiry & Notification Cron
+
+on:
+  schedule:
+    # Trigger every 6 hours (00:00, 06:00, 12:00, 18:00 UTC)
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check-expiries:
+    name: Check Subscriptions & Trigger Expiry Warnings
+    runs-on: ubuntu-latest
+    steps:
+      - name: Invoke Check Expiries Endpoint
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          set -euo pipefail
+
+          ENDPOINT="https://websitebanja.com/api/billing/check-expiries"
+          RESPONSE_FILE=$(mktemp)
+
+          echo "Invoking billing expiry check at ${ENDPOINT}..."
+
+          # Pass Authorization header with secret safely via env variable
+          HTTP_STATUS=$(curl -sSL -w "%{http_code}" -o "$RESPONSE_FILE" \
+            -X POST "$ENDPOINT" \
+            -H "Authorization: Bearer ${CRON_SECRET}" \
+            -H "Content-Type: application/json" \
+            -H "User-Agent: GitHubActions-BillingCron/1.0" \
+            --connect-timeout 10 \
+            --max-time 30 || echo "000")
+
+          echo "HTTP Status Code: ${HTTP_STATUS}"
+          echo "Response Body:"
+          cat "$RESPONSE_FILE"
+          echo ""
+
+          if [ "$HTTP_STATUS" -ne 200 ]; then
+            echo "::error::Billing expiry check failed with HTTP status ${HTTP_STATUS}"
+            rm -f "$RESPONSE_FILE"
+            exit 1
+          fi
+
+          rm -f "$RESPONSE_FILE"
+          echo "Billing expiry check completed successfully."
