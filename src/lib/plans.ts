@@ -94,14 +94,30 @@ export function getAiQuota(planId?: string | null): { limit: number; windowDays:
 export const FREE_STUDIO_CHANGE_LIMIT = 4;
 export const PRO_STUDIO_CHANGE_SAFETY_LIMIT = 60;
 
-export function getStudioChangeLimit(planId?: string | null, status?: SubscriptionStatus | null): number {
-  if (status === "active_paid" && planId === "paid_pro") {
+export function getStudioChangeLimit(
+  planId?: string | null,
+  status?: SubscriptionStatus | null,
+  expiresAt?: string | Date | null
+): number {
+  if (isProUser(planId, status, expiresAt)) {
     return PRO_STUDIO_CHANGE_SAFETY_LIMIT;
   }
   return FREE_STUDIO_CHANGE_LIMIT;
 }
 
-export function isProUser(planId?: string | null, status?: SubscriptionStatus | null): boolean {
-  return status === "active_paid" && planId === "paid_pro";
+export function isProUser(
+  planId?: string | null,
+  status?: SubscriptionStatus | null,
+  expiresAt?: string | Date | null
+): boolean {
+  if (status !== "active_paid" || planId !== "paid_pro") return false;
+  if (expiresAt) {
+    const exp = new Date(expiresAt).getTime();
+    if (!isNaN(exp) && exp <= Date.now()) {
+      return false;
+    }
+  }
+  return true;
 }
+
 

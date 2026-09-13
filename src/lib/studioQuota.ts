@@ -5,7 +5,8 @@ import {
   getStudioChangeLimit,
   isProUser,
 } from "@/lib/plans";
-import { dbGetUserSubscription, getPool } from "@/lib/db/queries";
+import { dbGetUserSubscription } from "@/lib/db/queries";
+
 import type { StudioQuotaStatus, PlanId, SubscriptionStatus } from "@/types/plans";
 
 
@@ -166,11 +167,13 @@ export async function getStudioQuota(userId: string): Promise<StudioQuotaStatus>
 
   // 1. Fetch user's subscription entitlement
   const sub = await dbGetUserSubscription(userId);
-  const planId: PlanId = sub?.plan_id === "paid_pro" ? "paid_pro" : "free";
+  const rawPlanId: PlanId = sub?.plan_id === "paid_pro" ? "paid_pro" : "free";
   const status: SubscriptionStatus = (sub?.status as SubscriptionStatus) || "free";
-  const pro = isProUser(planId, status);
+  const pro = isProUser(rawPlanId, status, sub?.current_period_end);
+  const planId: PlanId = pro ? "paid_pro" : "free";
 
-  const limit = getStudioChangeLimit(planId, status);
+  const limit = getStudioChangeLimit(planId, status, sub?.current_period_end);
+
 
   // 2. Retrieve or initialize user quota record
   let record = quotaStore.get(userId);

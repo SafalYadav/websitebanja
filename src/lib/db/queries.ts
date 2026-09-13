@@ -1257,18 +1257,162 @@ export async function dbCheckProjectExists(
 
 // ─── Subscription Queries ───────────────────────────────────────────────────
 
+// ─── Subscription Queries ───────────────────────────────────────────────────
+
+export interface UserSubscriptionRecord {
+  plan_id: string;
+  status: string;
+  amount_inr?: number;
+  current_period_start?: string | Date | null;
+  current_period_end?: string | Date | null;
+  pro_expiry_notification_sent_at?: string | Date | null;
+}
+
 // In-memory fallback map for subscriptions when Azure DB circuit is open or unreachable
-const fallbackSubscriptions = new Map<string, { plan_id: string; status: string; amount_inr: number }>();
+const fallbackSubscriptions = new Map<string, UserSubscriptionRecord>();
+
+let isSubscriptionSchemaEnsured = false;
+async function ensureSubscriptionSchema(pool: Pool) {
+  if (isSubscriptionSchemaEnsured) return;
+  try {
+    await pool.query(
+      `ALTER TABLE public.subscriptions ADD COLUMN IF NOT EXISTS pro_expiry_notification_sent_at TIMESTAMPTZ;`
+    );
+    isSubscriptionSchemaEnsured = true;
+  } catch {
+    // Non-fatal if permission denied or column already exists
+  }
+}
 
 export async function dbGetUserSubscription(
   userId: string
-): Promise<{ plan_id: string; status: string; amount_inr?: number } | null> {
+): Promise<UserSubscriptionRecord | null> {
+  let sub: UserSubscriptionRecord | null = null;
+
   if (!isAzureCircuitOpen()) {
     try {
+      const pool = getPool();
+      await ensureSubscriptionSchema(pool);
       const result = await Promise.race([
-        getPool().query(
-          `SELECT plan_id, status, amount_inr FROM public.subscriptions WHERE user_id = $1 LIMIT 1`,
+        pool.query(
+          `SELECT plan_id, status, amount_inr, current_period_start, current_period_end, pro_expiry_notification_sent_at
+           FROM public.subscriptions WHERE user_id = $1 LIMIT 1`,
           [userId]
+        ),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error("Azure DB connection timeout")), 1500)
+        ),
+      ]);
+      markAzureSuccess();
+      if (result.rows[0]) {
+        sub = result.rows[0];
+      }
+    } catch (err) {
+      markAzureFailed(err);
+    }
+  }
+
+  if (!sub) {
+    sub = fallbackSubscriptions.get(userId) || { plan_id: "free", status: "free", amount_inr: 0 };
+  }
+
+  // Server-authoritative check: If user was active_paid / paid_pro, but now >= current_period_end
+  if (sub && sub.plan_id === "paid_pro" && sub.status === "active_paid" && sub.current_period_end) {
+    const expiresAt = new Date(sub.current_period_end).getTime();
+    if (!isNaN(expiresAt) && expiresAt <= Date.now()) {
+      // Automatically treated as expired & free
+      const expiredSub: UserSubscriptionRecord = {
+        ...sub,
+        plan_id: "free",
+        status: "expired",
+      };
+      fallbackSubscriptions.set(userId, expiredSub);
+
+      // Lazily update Azure DB so database record reflects expired status
+      if (!isAzureCircuitOpen()) {
+        getPool()
+          .query(
+            `UPDATE public.subscriptions SET status = 'expired', updated_at = now() WHERE user_id = $1 AND status = 'active_paid' AND current_period_end <= now()`,
+            [userId]
+          )
+          .catch(() => {});
+      }
+
+      return expiredSub;
+    }
+  }
+
+  fallbackSubscriptions.set(userId, sub);
+  return sub;
+}
+
+export async function dbUpsertUserSubscription(
+  userId: string,
+  planId: string = "paid_pro",
+  status: string = "active_paid",
+  amountInr: number = 500
+): Promise<UserSubscriptionRecord> {
+  const now = new Date();
+  const existing = fallbackSubscriptions.get(userId);
+
+  // Stacking renewal calculation: max(current_expiry, now) + 30 days
+  let periodStart = now;
+  let periodEnd: Date | null = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+
+  if (planId === "paid_pro") {
+    if (existing?.current_period_end) {
+      const existingEnd = new Date(existing.current_period_end);
+      if (!isNaN(existingEnd.getTime()) && existingEnd.getTime() > now.getTime()) {
+        periodStart = existing.current_period_start ? new Date(existing.current_period_start) : now;
+        periodEnd = new Date(existingEnd.getTime() + 30 * 24 * 60 * 60 * 1000);
+      }
+    }
+  } else {
+    periodEnd = null;
+  }
+
+  const memoryRecord: UserSubscriptionRecord = {
+    plan_id: planId,
+    status,
+    amount_inr: amountInr,
+    current_period_start: periodStart.toISOString(),
+    current_period_end: periodEnd ? periodEnd.toISOString() : null,
+    pro_expiry_notification_sent_at: null,
+  };
+  fallbackSubscriptions.set(userId, memoryRecord);
+
+  if (!isAzureCircuitOpen()) {
+    try {
+      const pool = getPool();
+      await ensureSubscriptionSchema(pool);
+
+      const result = await Promise.race([
+        pool.query(
+          `INSERT INTO public.subscriptions (
+             user_id, plan_id, status, amount_inr,
+             current_period_start, current_period_end,
+             pro_expiry_notification_sent_at, updated_at
+           )
+           VALUES (
+             $1, $2, $3, $4,
+             now(), now() + interval '30 days',
+             NULL, now()
+           )
+           ON CONFLICT (user_id)
+           DO UPDATE SET
+             plan_id = $2,
+             status = $3,
+             amount_inr = $4,
+             current_period_start = CASE
+               WHEN subscriptions.current_period_end IS NOT NULL AND subscriptions.current_period_end > now()
+                 THEN subscriptions.current_period_start
+               ELSE now()
+             END,
+             current_period_end = GREATEST(COALESCE(subscriptions.current_period_end, now()), now()) + interval '30 days',
+             pro_expiry_notification_sent_at = NULL,
+             updated_at = now()
+           RETURNING plan_id, status, amount_inr, current_period_start, current_period_end, pro_expiry_notification_sent_at`,
+          [userId, planId, status, amountInr]
         ),
         new Promise<never>((_, reject) =>
           setTimeout(() => reject(new Error("Azure DB connection timeout")), 1500)
@@ -1284,42 +1428,78 @@ export async function dbGetUserSubscription(
     }
   }
 
-  // Fallback: Check in-memory fallback cache or default to free tier
-  return fallbackSubscriptions.get(userId) || { plan_id: "free", status: "free", amount_inr: 0 };
+  return memoryRecord;
 }
 
-export async function dbUpsertUserSubscription(
-  userId: string,
-  planId: string = "paid_pro",
-  status: string = "active_paid",
-  amountInr: number = 500
-): Promise<{ plan_id: string; status: string; amount_inr: number }> {
-  fallbackSubscriptions.set(userId, { plan_id: planId, status, amount_inr: amountInr });
+export async function dbCheckSubscriptionExpiries(): Promise<{
+  expiredCount: number;
+  notifiedCount: number;
+  notifiedUsers: string[];
+}> {
+  let expiredCount = 0;
+  let notifiedCount = 0;
+  const notifiedUsers: string[] = [];
 
   if (!isAzureCircuitOpen()) {
     try {
-      const result = await Promise.race([
-        getPool().query(
-          `INSERT INTO public.subscriptions (user_id, plan_id, status, amount_inr, current_period_start, current_period_end, updated_at)
-           VALUES ($1, $2, $3, $4, now(), now() + interval '30 days', now())
-           ON CONFLICT (user_id)
-           DO UPDATE SET plan_id = $2, status = $3, amount_inr = $4, updated_at = now()
-           RETURNING plan_id, status, amount_inr`,
-          [userId, planId, status, amountInr]
-        ),
-        new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error("Azure DB connection timeout")), 1500)
-        ),
-      ]);
-      markAzureSuccess();
-      return result.rows[0];
+      const pool = getPool();
+      await ensureSubscriptionSchema(pool);
+
+      // 1. Mark expired subscriptions in DB
+      const expireResult = await pool.query(
+        `UPDATE public.subscriptions
+         SET status = 'expired', updated_at = now()
+         WHERE status = 'active_paid'
+           AND plan_id = 'paid_pro'
+           AND current_period_end IS NOT NULL
+           AND current_period_end <= now()
+         RETURNING user_id`
+      );
+      expiredCount = expireResult.rowCount || 0;
+
+      // 2. Find subscriptions expiring within 24 hours that haven't been notified yet
+      const notifyResult = await pool.query(
+        `UPDATE public.subscriptions
+         SET pro_expiry_notification_sent_at = now(), updated_at = now()
+         WHERE status = 'active_paid'
+           AND plan_id = 'paid_pro'
+           AND current_period_end IS NOT NULL
+           AND current_period_end > now()
+           AND current_period_end <= now() + interval '24 hours'
+           AND pro_expiry_notification_sent_at IS NULL
+         RETURNING user_id, current_period_end`
+      );
+
+      notifiedCount = notifyResult.rowCount || 0;
+      for (const row of notifyResult.rows) {
+        notifiedUsers.push(row.user_id);
+      }
     } catch (err) {
       markAzureFailed(err);
     }
   }
 
-  return { plan_id: planId, status, amount_inr: amountInr };
+  // Also verify fallback memory subscriptions
+  const nowMs = Date.now();
+  const dayMs = 24 * 60 * 60 * 1000;
+  for (const [uid, record] of fallbackSubscriptions.entries()) {
+    if (record.plan_id === "paid_pro" && record.status === "active_paid" && record.current_period_end) {
+      const endMs = new Date(record.current_period_end).getTime();
+      if (endMs <= nowMs) {
+        record.status = "expired";
+        record.plan_id = "free";
+        expiredCount++;
+      } else if (endMs - nowMs <= dayMs && !record.pro_expiry_notification_sent_at) {
+        record.pro_expiry_notification_sent_at = new Date().toISOString();
+        notifiedCount++;
+        notifiedUsers.push(uid);
+      }
+    }
+  }
+
+  return { expiredCount, notifiedCount, notifiedUsers };
 }
+
 
 
 // ─── Custom Domain Queries ──────────────────────────────────────────────────

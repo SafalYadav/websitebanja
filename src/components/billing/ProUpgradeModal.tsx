@@ -22,14 +22,22 @@ interface ProUpgradeModalProps {
   onUpgradeSuccess?: () => void;
   title?: string;
   subtitle?: string;
+  ctaText?: string;
+  isRenewal?: boolean;
 }
 
 export default function ProUpgradeModal({
   isOpen,
   onClose,
   onUpgradeSuccess,
-  title = "You've reached your Free Plan Studio change limit.",
-  subtitle = "Upgrade to Pro to continue editing your website.",
+  isRenewal = false,
+  title = isRenewal
+    ? "Your Pro plan expires tomorrow."
+    : "You've reached your Free Plan Studio change limit.",
+  subtitle = isRenewal
+    ? "Your Pro access will expire in 1 day. Renew Pro to continue enjoying Unlimited Studio Changes and Pro features."
+    : "Upgrade to Pro to continue editing your website.",
+  ctaText = isRenewal ? "Renew Pro — ₹500" : "Upgrade to Pro — ₹500/month",
 }: ProUpgradeModalProps) {
   const [isProcessing, setIsProcessing] = useState(false);
 
@@ -41,10 +49,17 @@ export default function ProUpgradeModal({
       amountPaise: 50000,
       onSuccess: () => {
         setIsProcessing(false);
-        toast.success(
-          "Welcome to Paid Pro!",
-          "Payment successful! You now have Unlimited Studio Changes."
-        );
+        if (isRenewal) {
+          toast.success(
+            "Pro Plan Renewed!",
+            "Your 30-day Pro access and Unlimited Studio Changes have been extended."
+          );
+        } else {
+          toast.success(
+            "Welcome to Paid Pro!",
+            "Payment successful! You now have Unlimited Studio Changes."
+          );
+        }
         onUpgradeSuccess?.();
         onClose();
       },
@@ -57,6 +72,7 @@ export default function ProUpgradeModal({
       },
     });
   };
+
 
   return (
     <AnimatePresence>
@@ -163,10 +179,11 @@ export default function ProUpgradeModal({
               </>
             ) : (
               <>
-                <span>Upgrade to Pro — ₹500/month</span>
+                <span>{ctaText}</span>
                 <ArrowRight className="h-4 w-4" />
               </>
             )}
+
           </button>
 
           <div className="mt-4 flex items-center justify-center gap-4 text-xs text-zinc-500">

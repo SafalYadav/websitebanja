@@ -22,16 +22,53 @@ export async function GET(request: Request) {
     const sub = await dbGetUserSubscription(auth.user.id);
     const planId = sub?.plan_id || "free";
     const status = sub?.status || "free";
+    const expiresAt = sub?.current_period_end ? new Date(sub.current_period_end).toISOString() : null;
     const isPro = planId === "paid_pro" && status === "active_paid";
-    const planDef = getPlan(planId);
+    const now = Date.now();
+
+    // Check if Pro is expiring soon (<= 24 hours remaining)
+    let isExpiringSoon = false;
+    let daysRemaining = 0;
+    let hoursRemaining = 0;
+    let formattedExpiryDate = "";
+
+    if (expiresAt) {
+      const expMs = new Date(expiresAt).getTime();
+      const diffMs = expMs - now;
+      if (diffMs > 0) {
+        hoursRemaining = Math.ceil(diffMs / (1000 * 60 * 60));
+        daysRemaining = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+        isExpiringSoon = isPro && diffMs <= 24 * 60 * 60 * 1000;
+        formattedExpiryDate = new Intl.DateTimeFormat("en-IN", {
+          day: "2-digit",
+          month: "short",
+          year: "numeric",
+        }).format(new Date(expiresAt));
+      }
+    }
+
+    const planDef = getPlan(isPro ? "paid_pro" : "free");
 
     return NextResponse.json({
       success: true,
       data: {
         userId: auth.user.id,
-        planId,
-        status,
+        planId: isPro ? "paid_pro" : "free",
+        status: isPro ? "active_paid" : status,
         isPro,
+        expiresAt,
+        isExpiringSoon,
+        daysRemaining,
+        hoursRemaining,
+        formattedExpiryDate,
+        expiryNotification: isExpiringSoon
+          ? {
+              title: "Your Pro plan expires tomorrow.",
+              message:
+                "Your Pro access will expire in 1 day. Renew Pro to continue enjoying Unlimited Studio Changes and Pro features.",
+              cta: "Renew Pro — ₹500",
+            }
+          : null,
         amountINR: isPro ? 500 : 0,
         formattedPrice: isPro ? formatINR(500) : formatINR(0),
         period: planDef.period,
@@ -49,8 +86,8 @@ export async function GET(request: Request) {
 
 /**
  * POST /api/subscription
- * Activates or switches user subscription in Azure PostgreSQL.
- * Supported plans: 'free' (₹0) and 'paid_pro' (₹500/month).
+ * Downgrades or cancels subscription in Azure PostgreSQL back to Free Starter.
+ * Upgrading to Paid Pro is strictly gated behind verified Razorpay payment.
  */
 export async function POST(request: Request) {
   try {
@@ -65,37 +102,30 @@ export async function POST(request: Request) {
       action?: "upgrade" | "cancel";
     };
 
-    const targetPlanId = body.planId === "paid_pro" || body.action === "upgrade" ? "paid_pro" : "free";
-
-    if (targetPlanId === "paid_pro") {
-      const updated = await dbUpsertUserSubscription(auth.user.id, "paid_pro", "active_paid", 500);
-      return NextResponse.json({
-        success: true,
-        message: "Successfully activated Paid Pro plan (₹500/month).",
-        data: {
-          planId: updated.plan_id,
-          status: updated.status,
-          isPro: true,
-          amountINR: 500,
-          formattedPrice: formatINR(500),
-          plan: PLANS.paid_pro,
+    if (body.planId === "paid_pro" || body.action === "upgrade") {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Direct Pro upgrade without payment is disabled. Please complete payment via Razorpay checkout.",
         },
-      });
-    } else {
-      const updated = await dbUpsertUserSubscription(auth.user.id, "free", "free", 0);
-      return NextResponse.json({
-        success: true,
-        message: "Successfully updated subscription to Free Starter.",
-        data: {
-          planId: updated.plan_id,
-          status: updated.status,
-          isPro: false,
-          amountINR: 0,
-          formattedPrice: formatINR(0),
-          plan: PLANS.free,
-        },
-      });
+        { status: 403 }
+      );
     }
+
+    const updated = await dbUpsertUserSubscription(auth.user.id, "free", "free", 0);
+    return NextResponse.json({
+      success: true,
+      message: "Successfully updated subscription to Free Starter.",
+      data: {
+        planId: updated.plan_id,
+        status: updated.status,
+        isPro: false,
+        amountINR: 0,
+        formattedPrice: formatINR(0),
+        plan: PLANS.free,
+      },
+    });
+
   } catch (err) {
     console.error("[POST /api/subscription] Error:", err);
     return NextResponse.json(

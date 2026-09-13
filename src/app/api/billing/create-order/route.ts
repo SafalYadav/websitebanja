@@ -39,17 +39,10 @@ export async function POST(request: Request) {
       receipt?: string;
     };
 
-    // Default Pro subscription amount: ₹500 = 50,000 paise
-    const amountInPaise = typeof body.amount === "number" && body.amount > 0 ? body.amount : 50000;
-    const currency = body.currency || "INR";
+    // Server-enforced Pro subscription amount: exactly ₹500 = 50,000 paise (client cannot modify)
+    const amountInPaise = 50000;
+    const currency = "INR";
 
-    // Validate minimum amount: 100 paise (₹1)
-    if (amountInPaise < 100) {
-      return NextResponse.json(
-        { success: false, error: "Minimum order amount is 100 paise (₹1)." },
-        { status: 400 }
-      );
-    }
 
     const razorpay = getRazorpayClient();
     const receipt = body.receipt || `rcpt_${auth.user.id.slice(0, 8)}_${Date.now().toString(36)}`;

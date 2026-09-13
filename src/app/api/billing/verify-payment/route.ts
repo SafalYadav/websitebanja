@@ -73,8 +73,8 @@ export async function POST(request: Request) {
       );
     }
 
-    // Mark subscription as active Paid Pro in DB (source of truth)
-    await dbUpsertUserSubscription(auth.user.id, "paid_pro", "active_paid", 500);
+    // Mark subscription as active Paid Pro in DB (source of truth) with 30-day stacking entitlement
+    const updatedSub = await dbUpsertUserSubscription(auth.user.id, "paid_pro", "active_paid", 500);
 
     // Elevate Studio change quota to Pro
     const updatedQuota = await elevateQuotaToPro(auth.user.id);
@@ -84,8 +84,10 @@ export async function POST(request: Request) {
       message: "Payment verified successfully. Welcome to Paid Pro!",
       isPro: true,
       planId: "paid_pro",
+      expiresAt: updatedSub.current_period_end,
       quota: updatedQuota,
     });
+
   } catch (err) {
     console.error("[Razorpay verify-payment] Error:", err);
     return NextResponse.json(

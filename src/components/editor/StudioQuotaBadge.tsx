@@ -19,31 +19,36 @@ export default function StudioQuotaBadge({
   const [quota, setQuota] = useState<StudioQuotaStatus | null>(overrideQuota || null);
   const [loading, setLoading] = useState(!overrideQuota);
 
-  const fetchQuota = useCallback(async () => {
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const headers: Record<string, string> = { "Content-Type": "application/json" };
-      if (session?.access_token) {
-        headers["Authorization"] = `Bearer ${session.access_token}`;
-      }
-
-      const res = await fetch("/api/studio/quota", { headers });
-      const json = await res.json();
-      if (res.ok && json.success && json.data) {
-        setQuota(json.data);
-      }
-    } catch {
-      // Ignore network errors on background check
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
   useEffect(() => {
-    if (!overrideQuota) {
-      void fetchQuota();
+    if (overrideQuota) return;
+    let isMounted = true;
+
+    async function load() {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const headers: Record<string, string> = { "Content-Type": "application/json" };
+        if (session?.access_token) {
+          headers["Authorization"] = `Bearer ${session.access_token}`;
+        }
+
+        const res = await fetch("/api/studio/quota", { headers });
+        const json = await res.json();
+        if (isMounted && res.ok && json.success && json.data) {
+          setQuota(json.data);
+        }
+      } catch {
+        // Ignore network errors on background check
+      } finally {
+        if (isMounted) setLoading(false);
+      }
     }
-  }, [overrideQuota, fetchQuota, refreshTrigger]);
+
+    void load();
+    return () => {
+      isMounted = false;
+    };
+  }, [overrideQuota, refreshTrigger]);
+
 
   const activeQuota = overrideQuota ?? quota;
 

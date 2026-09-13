@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
+
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { motion, useReducedMotion } from "framer-motion";
@@ -18,6 +19,7 @@ import type { Project } from "@/types/project";
 import { toast } from "@/store/toastStore";
 import ThemeToggle from "@/components/theme/ThemeToggle";
 import Logo from "@/components/brand/Logo";
+import ProUpgradeModal from "@/components/billing/ProUpgradeModal";
 import {
   Sparkles,
   Plus,
@@ -34,6 +36,7 @@ import {
   Clock,
   ShieldCheck,
   X,
+  AlertCircle,
 } from "lucide-react";
 
 function formatDate(value?: string) {
@@ -73,12 +76,40 @@ export default function Dashboard() {
     planId: string;
     isPro: boolean;
     status: string;
+    expiresAt?: string | null;
+    isExpiringSoon?: boolean;
+    formattedExpiryDate?: string;
   }>({ planId: "free", isPro: false, status: "free" });
   const [isPlanModalOpen, setIsPlanModalOpen] = useState(false);
+  const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
+  const [isRenewalModalOpen, setIsRenewalModalOpen] = useState(false);
   const [isUpgrading, setIsUpgrading] = useState(false);
 
   // Show full loading skeleton on true initial cold-start before initial load completes
   const isInitialLoading = !isInitialLoaded || (storeLoading && projects.length === 0);
+
+  const loadUserSubscription = useCallback(async (token: string) => {
+    try {
+      const subRes = await fetch("/api/subscription", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (subRes.ok) {
+        const subJson = await subRes.json();
+        if (subJson.success && subJson.data) {
+          setSubscription({
+            planId: subJson.data.planId,
+            isPro: subJson.data.isPro,
+            status: subJson.data.status,
+            expiresAt: subJson.data.expiresAt,
+            isExpiringSoon: subJson.data.isExpiringSoon,
+            formattedExpiryDate: subJson.data.formattedExpiryDate,
+          });
+        }
+      }
+    } catch (subErr) {
+      console.warn("Failed to load subscription status:", subErr);
+    }
+  }, []);
 
   useEffect(() => {
     // Fallback: If code is present in query parameters, forward to dedicated auth callback
@@ -88,26 +119,6 @@ export default function Dashboard() {
     }
 
     let isMounted = true;
-
-    async function loadUserSubscription(token: string) {
-      try {
-        const subRes = await fetch("/api/subscription", {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (subRes.ok) {
-          const subJson = await subRes.json();
-          if (isMounted && subJson.success && subJson.data) {
-            setSubscription({
-              planId: subJson.data.planId,
-              isPro: subJson.data.isPro,
-              status: subJson.data.status,
-            });
-          }
-        }
-      } catch (subErr) {
-        console.warn("Failed to load subscription status:", subErr);
-      }
-    }
 
     // 1. Check existing session immediately
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -119,6 +130,7 @@ export default function Dashboard() {
       void loadProjects();
       void loadUserSubscription(session.access_token);
     });
+
 
     // 2. Listen to ongoing auth state transitions (login, logout, token refresh)
     const {
@@ -313,25 +325,41 @@ export default function Dashboard() {
 
           <div className="flex items-center gap-3">
             {/* Pro Plan Indicator & Upgrade Trigger */}
+
             {subscription.isPro ? (
-              <button
-                type="button"
-                onClick={() => setIsPlanModalOpen(true)}
-                className="flex items-center gap-1.5 rounded-xl border border-cyan-500/40 bg-cyan-50/80 px-3 py-1.5 text-xs font-bold text-cyan-700 dark:bg-cyan-950/40 dark:text-cyan-300 dark:border-cyan-800/60 shadow-xs hover:scale-105 transition cursor-pointer"
-                title="Manage Subscription"
-              >
-                <Sparkles className="h-3.5 w-3.5 text-cyan-500" />
-                <span>Paid Pro (₹500/mo)</span>
-              </button>
+              subscription.isExpiringSoon ? (
+                <button
+                  type="button"
+                  onClick={() => setIsRenewalModalOpen(true)}
+                  className="flex items-center gap-1.5 rounded-xl border border-amber-500/60 bg-amber-50/90 px-3 py-1.5 text-xs font-bold text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-700 shadow-xs hover:scale-105 transition cursor-pointer animate-pulse"
+                  title="Your Pro plan expires tomorrow. Click to renew for ₹500."
+                >
+                  <Sparkles className="h-3.5 w-3.5 text-amber-500" />
+                  <span>Pro expires tomorrow</span>
+                  <span className="rounded-lg bg-amber-500/20 px-1.5 py-0.5 text-[10px] text-amber-900 dark:text-amber-200">
+                    Renew Pro — ₹500
+                  </span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setIsPlanModalOpen(true)}
+                  className="flex items-center gap-1.5 rounded-xl border border-cyan-500/40 bg-cyan-50/80 px-3 py-1.5 text-xs font-bold text-cyan-700 dark:bg-cyan-950/40 dark:text-cyan-300 dark:border-cyan-800/60 shadow-xs hover:scale-105 transition cursor-pointer"
+                  title={`Pro plan active until ${subscription.formattedExpiryDate || "30 days"}`}
+                >
+                  <Sparkles className="h-3.5 w-3.5 text-cyan-500" />
+                  <span>Pro • Active until {subscription.formattedExpiryDate || "30 days"}</span>
+                </button>
+              )
             ) : (
               <button
                 type="button"
-                onClick={() => setIsPlanModalOpen(true)}
+                onClick={() => setIsUpgradeModalOpen(true)}
                 className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 px-3 py-1.5 text-xs font-bold text-white shadow-xs hover:opacity-95 hover:scale-105 transition cursor-pointer"
                 title="Upgrade to Paid Pro"
               >
                 <Sparkles className="h-3.5 w-3.5" />
-                <span>Upgrade to Pro (₹500/mo)</span>
+                <span>Free Plan • Upgrade to Pro — ₹500/month</span>
               </button>
             )}
 
@@ -349,6 +377,37 @@ export default function Dashboard() {
       </header>
 
       <main className="mx-auto max-w-7xl px-6 py-10 space-y-10">
+        {/* 24-Hour Expiry Notification Banner */}
+        {subscription.isPro && subscription.isExpiringSoon && (
+          <motion.div
+            initial={shouldReduceMotion ? { opacity: 1 } : { opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="rounded-2xl border border-amber-500/40 bg-amber-50/90 dark:bg-amber-950/40 p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-md backdrop-blur-sm"
+          >
+            <div className="flex items-start sm:items-center gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-500/20 text-amber-600 dark:text-amber-400">
+                <AlertCircle className="h-5 w-5" />
+              </div>
+              <div>
+                <h4 className="text-sm font-bold text-amber-950 dark:text-amber-200">
+                  Your Pro plan expires tomorrow.
+                </h4>
+                <p className="text-xs text-amber-800/90 dark:text-amber-300/90 mt-0.5 leading-relaxed">
+                  Your Pro access will expire in 1 day. Renew Pro to continue enjoying Unlimited Studio Changes and Pro features.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsRenewalModalOpen(true)}
+              className="shrink-0 inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 px-4 py-2.5 text-xs font-bold text-slate-950 shadow-md hover:opacity-95 active:scale-[0.98] transition cursor-pointer"
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+              <span>Renew Pro — ₹500</span>
+            </button>
+          </motion.div>
+        )}
+
         {/* Executive Studio Header with Tactile Surface & Primary Action */}
         <motion.div
           initial={shouldReduceMotion ? { opacity: 1 } : { opacity: 0, y: 12 }}
@@ -853,11 +912,13 @@ export default function Dashboard() {
                 {!subscription.isPro && (
                   <button
                     type="button"
-                    onClick={() => void handleTogglePlan("paid_pro")}
-                    disabled={isUpgrading}
-                    className="mt-4 w-full rounded-xl bg-cyan-600 py-2.5 text-xs font-bold text-white shadow-md hover:bg-cyan-700 transition cursor-pointer disabled:opacity-60"
+                    onClick={() => {
+                      setIsPlanModalOpen(false);
+                      setIsUpgradeModalOpen(true);
+                    }}
+                    className="mt-4 w-full rounded-xl bg-cyan-600 py-2.5 text-xs font-bold text-white shadow-md hover:bg-cyan-700 transition cursor-pointer"
                   >
-                    {isUpgrading ? "Activating..." : "Activate Pro (₹500/mo)"}
+                    Upgrade to Pro — ₹500/month
                   </button>
                 )}
               </div>
@@ -869,6 +930,36 @@ export default function Dashboard() {
           </motion.div>
         </div>
       )}
+
+      {/* Pro Upgrade Modal */}
+      <ProUpgradeModal
+        isOpen={isUpgradeModalOpen}
+        onClose={() => setIsUpgradeModalOpen(false)}
+        title="Upgrade to Pro"
+        subtitle="Get 30 days of Unlimited Studio Changes, custom domains, and premium features."
+        ctaText="Upgrade to Pro — ₹500/month"
+        onUpgradeSuccess={() => {
+          supabase.auth.getSession().then(({ data: { session } }) => {
+            if (session?.access_token) void loadUserSubscription(session.access_token);
+          });
+        }}
+      />
+
+      {/* Pro Renewal Modal */}
+      <ProUpgradeModal
+        isOpen={isRenewalModalOpen}
+        onClose={() => setIsRenewalModalOpen(false)}
+        isRenewal={true}
+        title="Your Pro plan expires tomorrow."
+        subtitle="Your Pro access will expire in 1 day. Renew Pro to continue enjoying Unlimited Studio Changes and Pro features."
+        ctaText="Renew Pro — ₹500"
+        onUpgradeSuccess={() => {
+          supabase.auth.getSession().then(({ data: { session } }) => {
+            if (session?.access_token) void loadUserSubscription(session.access_token);
+          });
+        }}
+      />
     </div>
   );
 }
+
