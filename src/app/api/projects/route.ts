@@ -72,7 +72,7 @@ export async function POST(request: Request) {
     const body = await request.json().catch(() => ({}));
     const name = typeof body?.name === "string" ? body.name.trim() : "My Website";
 
-    const row = await dbCreateProject(auth.user.id, name);
+    const row = await dbCreateProject(auth.user.id, name, auth.user.email);
     const project = hydrateProjectMetadata(row as unknown as Project);
 
     return NextResponse.json({ success: true, data: project });

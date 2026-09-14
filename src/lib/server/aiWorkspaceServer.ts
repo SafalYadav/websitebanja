@@ -58,6 +58,11 @@ export async function serverAssertAiWorkspaceAccess(projectId: string, userId: s
   let project: { id: string; user_id: string } | null = null;
   try {
     project = await dbGetProjectOwnership(projectId);
+    // If not immediately visible, retry once after 150ms to tolerate momentary database commit lag
+    if (!project) {
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      project = await dbGetProjectOwnership(projectId);
+    }
   } catch (err) {
     throw new AiWorkspaceError(
       "❌ Project ownership validation failed",
@@ -65,7 +70,7 @@ export async function serverAssertAiWorkspaceAccess(projectId: string, userId: s
     );
   }
 
-  if (!project || project.user_id !== userId) {
+  if (!project || project.user_id.toLowerCase() !== userId.toLowerCase()) {
     throw new AiWorkspaceError(
       "❌ Project ownership validation failed",
       `User '${userId}' does not own project '${projectId}'`
@@ -80,8 +85,8 @@ export async function serverWriteAiWorkspace(
 ) {
   const storage = getStorageClient(AI_WORKSPACE_BUCKET);
 
-  for (const file of AI_WORKSPACE_FILES) {
-    if (existingWorkspace?.[file] === workspace[file]) continue;
+  const uploadPromises = AI_WORKSPACE_FILES.map(async (file) => {
+    if (existingWorkspace?.[file] === workspace[file]) return;
     const path = workspacePath(projectId, file);
     await retryUpload(file, async () => {
       const { data, error } = await storage.upload(
@@ -94,7 +99,9 @@ export async function serverWriteAiWorkspace(
         throw new Error(`Upload acknowledgement path mismatch: expected '${path}', received '${data?.path}'`);
       }
     });
-  }
+  });
+
+  await Promise.all(uploadPromises);
 }
 
 export async function serverReadAiWorkspace(projectId: string): Promise<AiWorkspace> {

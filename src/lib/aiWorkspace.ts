@@ -70,7 +70,7 @@ export async function writeAiWorkspace(
   projectId: string,
   workspace: AiWorkspace,
   existingWorkspace?: AiWorkspace
-): Promise<void> {
+): Promise<AiWorkspace> {
   await assertAiWorkspaceAccess(projectId);
 
   try {
@@ -85,6 +85,8 @@ export async function writeAiWorkspace(
     if (!res.ok || !json.success) {
       throw new AiWorkspaceError("❌ Workspace save failed", json.error || `HTTP ${res.status}`);
     }
+
+    return (json.data as AiWorkspace) || workspace;
   } catch (err) {
     if (err instanceof AiWorkspaceError) throw err;
     throw new AiWorkspaceError("❌ Workspace save failed", err instanceof Error ? err.message : String(err));

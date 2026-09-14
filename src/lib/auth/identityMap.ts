@@ -57,17 +57,36 @@ export async function resolveUserUuid(
     }
 
     // 3. Provision new user record in auth.users
-    const insertRes = await pool.query(
-      `INSERT INTO auth.users (id, email, raw_user_meta_data, raw_app_meta_data)
-       VALUES (gen_random_uuid(), $1, $2, $3)
-       ON CONFLICT (email) DO UPDATE SET updated_at = now()
-       RETURNING id;`,
-      [
-        normalized,
-        JSON.stringify(metadata || {}),
-        JSON.stringify({ provider: "azure_entra", providers: ["azure_entra"] }),
-      ]
+    const explicitId = (
+      typeof metadata?.userId === "string" ? metadata.userId :
+      typeof metadata?.id === "string" ? metadata.id :
+      typeof metadata?.sub === "string" ? metadata.sub : null
     );
+
+    const insertRes = explicitId
+      ? await pool.query(
+          `INSERT INTO auth.users (id, email, raw_user_meta_data, raw_app_meta_data)
+           VALUES ($1, $2, $3, $4)
+           ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email, updated_at = now()
+           RETURNING id;`,
+          [
+            explicitId,
+            normalized,
+            JSON.stringify(metadata || {}),
+            JSON.stringify({ provider: "supabase", providers: ["supabase"] }),
+          ]
+        )
+      : await pool.query(
+          `INSERT INTO auth.users (id, email, raw_user_meta_data, raw_app_meta_data)
+           VALUES (gen_random_uuid(), $1, $2, $3)
+           ON CONFLICT (email) DO UPDATE SET updated_at = now()
+           RETURNING id;`,
+          [
+            normalized,
+            JSON.stringify(metadata || {}),
+            JSON.stringify({ provider: "azure_entra", providers: ["azure_entra"] }),
+          ]
+        );
 
     return insertRes.rows[0].id;
   } finally {

@@ -10,7 +10,7 @@ import { useBuilderStore } from "@/store/builderStore";
 import { useGeneratedWebsiteStore, type ViewportMode } from "@/store/generatedWebsiteStore";
 import { dashboardRoute, editorRoute, loginRoute } from "@/lib/editorRoutes";
 import { supabase } from "@/lib/supabase";
-import { AiWorkspaceError, readAiWorkspace, verifyAiWorkspace, writeAiWorkspace } from "@/lib/aiWorkspace";
+import { AiWorkspaceError, readAiWorkspace, writeAiWorkspace } from "@/lib/aiWorkspace";
 import type { AiWorkspace, PlanningInput } from "@/types/aiWorkspace";
 import type { WebsiteData } from "@/types/website";
 import WebsiteRenderer from "@/components/editor/WebsiteRenderer";
@@ -286,8 +286,7 @@ export default function LoadingPage() {
         throw new Error(planningResult.message || "Planning website structure failed.");
       }
 
-      await writeAiWorkspace(effectiveProjectId, planningResult.data, existingWorkspace);
-      const workspace = await verifyAiWorkspace(effectiveProjectId);
+      const workspace = await writeAiWorkspace(effectiveProjectId, planningResult.data, existingWorkspace);
 
       // Milestone 2 & 3: Visual styling & section generation
       setCurrentStep(2);

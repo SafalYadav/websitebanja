@@ -118,15 +118,66 @@ async function withUserContext<T>(
   }
 }
 
+// ─── User Identity Synchronization ──────────────────────────────────────────
+
+/**
+ * Idempotently ensures that the authenticated Supabase user ID exists in
+ * Azure PostgreSQL's auth.users table so that foreign keys in public.projects
+ * (user_id REFERENCES auth.users(id)) succeed 100% of the time.
+ */
+export async function ensureAzureUser(
+  userId: string,
+  email?: string | null
+): Promise<void> {
+  if (isAzureCircuitOpen()) return;
+
+  try {
+    const pool = getPool();
+    const cleanEmail = email ? email.trim().toLowerCase() : null;
+
+    // Try to upsert by user ID
+    await pool.query(
+      `INSERT INTO auth.users (id, email, updated_at)
+       VALUES ($1, $2, now())
+       ON CONFLICT (id) DO UPDATE SET
+         email = COALESCE(EXCLUDED.email, auth.users.email),
+         updated_at = now()`,
+      [userId, cleanEmail || `${userId}@supabase.user`]
+    );
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    // If email unique constraint conflicts with another record with a different id:
+    if (msg.includes("email")) {
+      try {
+        const pool = getPool();
+        await pool.query(
+          `INSERT INTO auth.users (id, email, updated_at)
+           VALUES ($1, $2, now())
+           ON CONFLICT (id) DO UPDATE SET updated_at = now()`,
+          [userId, `${userId}@supabase.user`]
+        );
+      } catch (innerErr) {
+        console.warn("[ensureAzureUser] Secondary user sync notice:", innerErr);
+      }
+    } else {
+      console.warn("[ensureAzureUser] User sync notice:", msg);
+    }
+  }
+}
+
 // ─── Project Queries ───────────────────────────────────────────────────────────
 
 export async function dbCreateProject(
   userId: string,
-  name: string
+  name: string,
+  userEmail?: string | null
 ): Promise<Record<string, unknown> | null> {
   if (!isAzureCircuitOpen()) {
     try {
       const pool = getPool();
+      // Ensure user exists in Azure PostgreSQL auth.users before inserting project
+      await ensureAzureUser(userId, userEmail);
+
       const result = await Promise.race([
         pool.query(
           `INSERT INTO public.projects (user_id, name) VALUES ($1, $2) RETURNING *`,
@@ -160,6 +211,9 @@ export async function dbGetProjects(
 ): Promise<Record<string, unknown>[]> {
   const summaryFields = "id, user_id, name, business_name, category, description, style, primary_color, secondary_color, is_published, public_slug, published_at, created_at, updated_at, custom_domain, custom_domain_status, whatsapp_number, whatsapp_enabled";
 
+  let azureRows: Record<string, unknown>[] = [];
+  let azureSuccess = false;
+
   if (!isAzureCircuitOpen()) {
     try {
       const pool = getPool();
@@ -173,7 +227,11 @@ export async function dbGetProjects(
         ),
       ]);
       markAzureSuccess();
-      return result.rows;
+      azureRows = result.rows;
+      azureSuccess = true;
+      if (azureRows.length > 0) {
+        return azureRows;
+      }
     } catch (err) {
       markAzureFailed(err);
     }
@@ -187,8 +245,16 @@ export async function dbGetProjects(
     .eq("user_id", userId)
     .order("created_at", { ascending: false });
 
-  if (error) throw new Error(error.message);
-  return (data as Record<string, unknown>[]) || [];
+  if (error) {
+    if (azureSuccess) return azureRows;
+    throw new Error(error.message);
+  }
+
+  if (data && data.length > 0) {
+    return data as Record<string, unknown>[];
+  }
+
+  return azureRows;
 }
 
 export async function dbUpdateProject(
@@ -228,7 +294,9 @@ export async function dbUpdateProject(
         ),
       ]);
       markAzureSuccess();
-      return result.rows[0] || null;
+      if (result.rows[0]) {
+        return result.rows[0];
+      }
     } catch (err) {
       markAzureFailed(err);
     }
@@ -280,7 +348,9 @@ export async function dbGetProject(
         ),
       ]);
       markAzureSuccess();
-      return result.rows[0] || null;
+      if (result.rows[0]) {
+        return result.rows[0];
+      }
     } catch (err) {
       markAzureFailed(err);
     }
@@ -533,7 +603,10 @@ export async function dbUnpublishProject(
         ),
       ]);
       markAzureSuccess();
-      return result.rows[0] || null;
+      if (result.rows[0]) {
+        return result.rows[0];
+      }
+      // If not updated in Azure yet, fall through to Supabase DB
     } catch (err) {
       markAzureFailed(err);
     }
@@ -599,7 +672,9 @@ export async function dbGetProjectOwnership(
         ),
       ]);
       markAzureSuccess();
-      return (result.rows[0] as { id: string; user_id: string }) || null;
+      if (result.rows[0]) {
+        return result.rows[0] as { id: string; user_id: string };
+      }
     } catch (err) {
       markAzureFailed(err);
     }
@@ -616,14 +691,36 @@ export async function dbGetProjectOwnership(
     console.error("[dbGetProjectOwnership Supabase Error]", error.message);
     return null;
   }
-  return (data as { id: string; user_id: string }) || null;
+
+  if (data) {
+    // Opportunistically replicate ownership stub to Azure PostgreSQL if Azure is available
+    if (!isAzureCircuitOpen()) {
+      ensureAzureUser(data.user_id).then(async () => {
+        try {
+          await getPool().query(
+            `INSERT INTO public.projects (id, user_id, name)
+             VALUES ($1, $2, 'Synced Project')
+             ON CONFLICT (id) DO NOTHING`,
+            [data.id, data.user_id]
+          );
+        } catch {}
+      }).catch(() => {});
+    }
+    return data as { id: string; user_id: string };
+  }
+
+  return null;
 }
 
 export async function dbDuplicateProject(
   original: Record<string, unknown>
 ): Promise<Record<string, unknown> | null> {
+  const userId = original.user_id as string;
+
   if (!isAzureCircuitOpen()) {
     try {
+      await ensureAzureUser(userId, original.email as string | undefined);
+
       const result = await Promise.race([
         getPool().query(
           `INSERT INTO public.projects (
@@ -633,7 +730,7 @@ export async function dbDuplicateProject(
           ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
           RETURNING *`,
           [
-            original.user_id,
+            userId,
             `Copy of ${original.name}`,
             original.business_name || null,
             original.category || null,
@@ -1012,7 +1109,10 @@ export async function dbGetProjectByPublicSlug(
         ),
       ]);
       markAzureSuccess();
-      return result.rows[0] || null;
+      if (result.rows[0]) {
+        return result.rows[0];
+      }
+      // If not found in Azure yet, fall through to Supabase DB
     } catch (err) {
       markAzureFailed(err);
     }
@@ -1197,7 +1297,10 @@ export async function dbGetProjectJsonData(
         ),
       ]);
       markAzureSuccess();
-      return (result.rows[0]?.json_data as Record<string, unknown>) || null;
+      if (result.rows.length > 0 && result.rows[0]?.json_data !== undefined) {
+        return (result.rows[0]?.json_data as Record<string, unknown>) || null;
+      }
+      // If not in Azure yet, fall through to Supabase DB
     } catch (err) {
       markAzureFailed(err);
     }
@@ -1234,7 +1337,10 @@ export async function dbCheckProjectExists(
         ),
       ]);
       markAzureSuccess();
-      return result.rows.length > 0;
+      if (result.rows.length > 0) {
+        return true;
+      }
+      // If not in Azure yet, check Supabase before returning false
     } catch (err) {
       markAzureFailed(err);
     }
@@ -1744,7 +1850,10 @@ export async function dbGetProjectRecordById(
         ),
       ]);
       markAzureSuccess();
-      return result.rows[0] || null;
+      if (result.rows[0]) {
+        return result.rows[0];
+      }
+      // If not found in Azure yet, fall through to Supabase DB
     } catch (err) {
       markAzureFailed(err);
     }

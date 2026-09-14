@@ -152,7 +152,7 @@ export async function POST(request: Request) {
     if (projectId && !projectId.startsWith("demo") && !projectId.startsWith("test") && projectId !== "preview") {
       const projRecord = await dbGetProjectOwnership(projectId);
 
-      if (projRecord && projRecord.user_id !== user.id) {
+      if (projRecord && projRecord.user_id.toLowerCase() !== user.id.toLowerCase()) {
         return NextResponse.json(
           { success: false, message: "Forbidden: You do not have permission to plan for this project." },
           { status: 403 }
