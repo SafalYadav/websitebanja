@@ -38,6 +38,7 @@ import {
   CardBody,
 } from "@/components/cards";
 import { LayoutGrid, Sparkles, CheckCircle2 } from "lucide-react";
+import AdSenseBanner from "@/components/ads/AdSenseBanner";
 
 export default function PatternAuditPage({ params }: { params: Promise<{ pattern: string }> }) {
   const resolvedParams = use(params);
@@ -427,6 +428,8 @@ export default function PatternAuditPage({ params }: { params: Promise<{ pattern
               />
             </div>
           )}
+
+          <AdSenseBanner className="max-w-3xl my-10" />
         </div>
       </main>
     </div>

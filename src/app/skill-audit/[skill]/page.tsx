@@ -48,6 +48,7 @@ import {
   Zap,
   ShieldCheck
 } from "lucide-react";
+import AdSenseBanner from "@/components/ads/AdSenseBanner";
 
 const ALL_SKILLS = [
   "master-design-intelligence",
@@ -421,6 +422,8 @@ export default function SkillAuditPage({ params }: { params: Promise<{ skill: st
                 </div>
               </div>
             )}
+
+            <AdSenseBanner className="max-w-4xl my-10" />
           </div>
         </main>
       </MotionConfig>

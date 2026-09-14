@@ -11,6 +11,7 @@ import FAQ from "@/components/FAQ";
 import CtaSection from "@/components/landing/CtaSection";
 import Footer from "@/components/Footer";
 import SmoothScrollProvider from "@/components/landing/SmoothScrollProvider";
+import AdSenseBanner from "@/components/ads/AdSenseBanner";
 
 import JsonLd, { faqPageJsonLd } from "@/components/seo/JsonLd";
 
@@ -26,6 +27,7 @@ export default function Home() {
           <AboutEntity />
           <Features />
           <HowItWorks />
+          <AdSenseBanner className="max-w-4xl px-4 my-12" />
           <BeforeAfterComparison />
           <BuildChoiceSection />
           <Pricing />

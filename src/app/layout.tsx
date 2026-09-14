@@ -4,6 +4,7 @@ import SmoothScroll from "@/components/SmoothScroll";
 import { ThemeProvider } from "@/components/theme/ThemeProvider";
 import ToastContainer from "@/components/ui/ToastContainer";
 import CookieConsent from "@/components/ui/CookieConsent";
+import AdSenseScript from "@/components/ads/AdSenseScript";
 
 import JsonLd, {
   websiteJsonLd,
@@ -81,6 +82,9 @@ export const metadata: Metadata = {
       "max-snippet": -1,
     },
   },
+  other: {
+    "google-adsense-account": "ca-pub-6886166249093676",
+  },
 };
 
 export default function RootLayout({
@@ -102,6 +106,7 @@ export default function RootLayout({
           </SmoothScroll>
           <ToastContainer />
           <CookieConsent />
+          <AdSenseScript />
         </ThemeProvider>
       </body>
     </html>
