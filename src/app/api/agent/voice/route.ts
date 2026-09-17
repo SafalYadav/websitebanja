@@ -6,7 +6,6 @@ import { isGeminiLiveAvailable, pcmCache, CANONICAL_INITIAL_GREETING } from '@/l
 import { getCachedGreetingPcm, findMatchingGreetingPcm } from '@/lib/ai/cachedAudio';
 import { checkMemoryRateLimit } from '@/lib/rateLimit';
 import { getClientIp } from '@/lib/supabaseServer';
-import { openai } from '@/lib/openai';
 import { MITRA_LANGUAGES, type MitraLanguageId } from '@/lib/constants/mitraLanguages';
 
 export const runtime = 'nodejs';
@@ -24,11 +23,12 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const hasVoice = isGeminiLiveAvailable() || isGeminiTtsAvailable() || Boolean(process.env.OPENAI_API_KEY);
+    // Voice synthesizer is powered exclusively by Gemini TTS / Google Neural Audio. Zero OpenAI TTS.
+    const hasVoice = isGeminiLiveAvailable() || isGeminiTtsAvailable();
 
     if (!hasVoice) {
       return NextResponse.json(
-        { error: 'Voice synthesizer is not configured on this server. Set GEMINI_API_KEY or OPENAI_API_KEY.' },
+        { error: 'Voice synthesizer is not configured on this server. Set GEMINI_API_KEY.' },
         { status: 503 }
       );
     }
@@ -142,35 +142,11 @@ export async function POST(req: NextRequest) {
               return;
             }
           } catch (geminiErr) {
-            console.warn('[CanonicalVoice] Google Gemini TTS synthesis failed, trying neural fallback:', geminiErr);
+            console.warn('[CanonicalVoice] Google Gemini TTS synthesis failed:', geminiErr);
           }
         }
 
-        // Step 4: High-fidelity Neural TTS Fallback (produces exact linear 24kHz 16-bit mono PCM)
-        if (process.env.OPENAI_API_KEY) {
-          try {
-            const openAiRes = await openai.audio.speech.create({
-              model: 'tts-1',
-              voice: 'nova',
-              input: trimmedText,
-              response_format: 'pcm', // Linear 24kHz 16-bit mono PCM!
-            });
-            const rawPcm = Buffer.from(await openAiRes.arrayBuffer());
-            if (rawPcm && rawPcm.length > 0) {
-              pcmCache.set(textHash, rawPcm);
-              const CHUNK_SIZE = 8192;
-              for (let i = 0; i < rawPcm.length; i += CHUNK_SIZE) {
-                if (isClosed) break;
-                safeEnqueue(rawPcm.subarray(i, Math.min(i + CHUNK_SIZE, rawPcm.length)));
-              }
-              safeClose();
-              return;
-            }
-          } catch (fallbackErr) {
-            console.warn('[CanonicalVoice] Neural TTS fallback failed:', fallbackErr);
-          }
-        }
-
+        // Zero OpenAI TTS fallback: Mitra never calls OpenAI for voice audio.
         console.warn('[CanonicalVoice] Voice synthesis finished for text hash:', textHash.slice(0, 10));
         safeClose();
       },

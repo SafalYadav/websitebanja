@@ -10,6 +10,7 @@ import {
   dbDeleteProject,
   dbGetProjectOwnership,
   dbGetProjectJsonData,
+  dbGetUserSubscription,
 } from "@/lib/db/queries";
 import { hydrateProjectMetadata } from "@/lib/projectHydration";
 import { getStorageClient } from "@/lib/storage";
@@ -19,6 +20,8 @@ import {
   getStudioQuota,
   consumeStudioQuota,
 } from "@/lib/studioQuota";
+import { isProUser, type SubscriptionStatus } from "@/lib/plans";
+import { isUserAdmin } from "@/lib/adminAuth";
 import type { Project, ProjectUpdates } from "@/types/project";
 
 
@@ -126,6 +129,29 @@ export async function PATCH(request: Request, context: RouteContext) {
       return NextResponse.json({ success: false, error: "Project not found or unauthorized" }, { status: 404 });
     }
 
+    // Server-side Pro Entitlement Enforcement for Custom Domains
+    if (
+      cleanUpdates.custom_domain &&
+      typeof cleanUpdates.custom_domain === "string" &&
+      cleanUpdates.custom_domain.trim() !== "" &&
+      cleanUpdates.custom_domain !== (existing as unknown as Record<string, unknown>).custom_domain
+    ) {
+      const sub = await dbGetUserSubscription(auth.user.id);
+      const isPro = isProUser(sub?.plan_id, sub?.status as SubscriptionStatus | null | undefined, sub?.current_period_end);
+      const isAdmin = isUserAdmin(auth.user);
+      if (!isPro && !isAdmin) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "PRO_REQUIRED",
+            code: "CUSTOM_DOMAIN_PRO_REQUIRED",
+            message: "Connecting a custom domain requires an active Paid Pro subscription.",
+            cta: "Upgrade to Pro — ₹500/month",
+          },
+          { status: 403 }
+        );
+      }
+    }
 
     // Server-side Studio Change Quota Enforcement
     const { isMeaningful, mutationHash } = isMeaningfulStudioMutation(

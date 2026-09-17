@@ -314,11 +314,239 @@ function hasTokens(text: string, patterns: (string | RegExp)[]): boolean {
  * Uses strict tokenization and word boundaries to prevent substring poisoning
  * (e.g. "spatial" or "dispatch" incorrectly triggering "spa" -> salon).
  */
-export function getCategoryImages(
+
+function stringToSeed(str: string): number {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = (hash << 5) - hash + str.charCodeAt(i);
+    hash |= 0;
+  }
+  return Math.abs(hash);
+}
+
+export interface CategoryPoolSet {
+  heroes: string[];
+  abouts: string[];
+  atmospheres: string[];
+  services: string[];
+  features: string[];
+}
+
+export const CATEGORY_IMAGE_POOLS: Record<string, CategoryPoolSet> = {
+  cafe: {
+    heroes: [
+      "https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?auto=format&fit=crop&w=1200&q=80", // Warm cafe interior
+      "https://images.unsplash.com/photo-1554118811-1e0d58224f24?auto=format&fit=crop&w=1200&q=80", // Scandinavian minimalist coffee bar
+      "https://images.unsplash.com/photo-1559925393-8be0ec4767c8?auto=format&fit=crop&w=1200&q=80", // Roastery drum sunlit atmosphere
+      "https://images.unsplash.com/photo-1559496417-e7f25cb247f3?auto=format&fit=crop&w=1200&q=80", // Velvet espresso lounge
+      "https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?auto=format&fit=crop&w=1200&q=80", // Artisan pour-over bar
+      "https://images.unsplash.com/photo-1453614512568-c4024d13c247?auto=format&fit=crop&w=1200&q=80", // Rustic exposed brick coffee workshop
+      "https://images.unsplash.com/photo-1600093463592-8e36ae95ef56?auto=format&fit=crop&w=1200&q=80", // Modern architectural cafe glass facade
+      "https://images.unsplash.com/photo-1521017432531-fbd92d768814?auto=format&fit=crop&w=1200&q=80", // Sunlit terrace cafe
+    ],
+    abouts: [
+      "https://images.unsplash.com/photo-1442512595331-e89e73853f31?auto=format&fit=crop&w=1000&q=80", // Pouring microfoam latte art
+      "https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?auto=format&fit=crop&w=1000&q=80", // Roasted beans drum
+      "https://images.unsplash.com/photo-1497636577773-f1231844b336?auto=format&fit=crop&w=1000&q=80", // Cupping tasting sample bowls
+      "https://images.unsplash.com/photo-1509785307050-d4066910ec1e?auto=format&fit=crop&w=1000&q=80", // Inspecting single-origin beans
+      "https://images.unsplash.com/photo-1498804103079-a6351b050096?auto=format&fit=crop&w=1000&q=80", // Ceramic mugs and pour-over on oak
+      "https://images.unsplash.com/photo-1517256064527-09c73fc73e38?auto=format&fit=crop&w=1000&q=80", // Morning bakery and espresso
+    ],
+    atmospheres: [
+      "https://images.unsplash.com/photo-1447933601403-0c6688de566e?auto=format&fit=crop&w=1600&q=80", // Crema steam texture
+      "https://images.unsplash.com/photo-1518832553480-cd0e625ed3e6?auto=format&fit=crop&w=1600&q=80", // Botanical coffee leaf shadows
+      "https://images.unsplash.com/photo-1579546929518-9e396f3cc809?auto=format&fit=crop&w=1600&q=80", // Warm amber abstract tone
+      "https://images.unsplash.com/photo-1508739773434-c26b3d09e071?auto=format&fit=crop&w=1600&q=80", // Amber wood grain
+    ],
+    services: [
+      "https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?auto=format&fit=crop&w=800&q=80", // Specialty latte art
+      "https://images.unsplash.com/photo-1509042239860-f550ce710b93?auto=format&fit=crop&w=800&q=80", // Fresh pastries bakery
+      "https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?auto=format&fit=crop&w=800&q=80", // Roasted beans
+      "https://images.unsplash.com/photo-1517701550927-30cf4ba1dba5?auto=format&fit=crop&w=800&q=80", // Cold brew extraction tower
+      "https://images.unsplash.com/photo-1536256263959-770b48d82b0a?auto=format&fit=crop&w=800&q=80", // Artisanal matcha & chai
+      "https://images.unsplash.com/photo-1587314168485-3236d6710814?auto=format&fit=crop&w=800&q=80", // Artisan desserts & tarts
+      "https://images.unsplash.com/photo-1559056199-641a0ac8b55e?auto=format&fit=crop&w=800&q=80", // Packaged single origin bags
+    ],
+    features: [
+      "https://images.unsplash.com/photo-1511920170033-f8396924c348?auto=format&fit=crop&w=800&q=80", // Cafe ambiance
+      "https://images.unsplash.com/photo-1497636577773-f1231844b336?auto=format&fit=crop&w=800&q=80", // Barista brewing
+      "https://images.unsplash.com/photo-1507133750040-4a8f57021571?auto=format&fit=crop&w=800&q=80", // Ethical sourcing origin farm
+      "https://images.unsplash.com/photo-1554118811-1e0d58224f24?auto=format&fit=crop&w=800&q=80", // Seating comfort
+    ],
+  },
+  restaurant: {
+    heroes: [
+      "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=1200&q=80",
+      "https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=1200&q=80",
+      "https://images.unsplash.com/photo-1550966871-3ed3cdb5ed0c?auto=format&fit=crop&w=1200&q=80",
+      "https://images.unsplash.com/photo-1578474846511-04ba529f0b88?auto=format&fit=crop&w=1200&q=80",
+      "https://images.unsplash.com/photo-1541544741938-0af808871cc0?auto=format&fit=crop&w=1200&q=80",
+    ],
+    abouts: [
+      "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=1000&q=80",
+      "https://images.unsplash.com/photo-1414235077428-338989a2e8c0?auto=format&fit=crop&w=1000&q=80",
+      "https://images.unsplash.com/photo-1498837167922-ddd27525d352?auto=format&fit=crop&w=1000&q=80",
+      "https://images.unsplash.com/photo-1507048821117-6573c20c5eaf?auto=format&fit=crop&w=1000&q=80",
+    ],
+    atmospheres: [
+      "https://images.unsplash.com/photo-1414235077428-338989a2e8c0?auto=format&fit=crop&w=1600&q=80",
+      "https://images.unsplash.com/photo-1508739773434-c26b3d09e071?auto=format&fit=crop&w=1600&q=80",
+    ],
+    services: [
+      "https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=800&q=80",
+      "https://images.unsplash.com/photo-1559339352-11d035aa65de?auto=format&fit=crop&w=800&q=80",
+      "https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=800&q=80",
+    ],
+    features: [
+      "https://images.unsplash.com/photo-1498837167922-ddd27525d352?auto=format&fit=crop&w=800&q=80",
+      "https://images.unsplash.com/photo-1414235077428-338989a2e8c0?auto=format&fit=crop&w=800&q=80",
+    ],
+  },
+  dental: {
+    heroes: [
+      "https://images.unsplash.com/photo-1629909613654-28e377c37b09?auto=format&fit=crop&w=1200&q=80",
+      "https://images.unsplash.com/photo-1588776814546-1ffcf47267a5?auto=format&fit=crop&w=1200&q=80",
+      "https://images.unsplash.com/photo-1606811841689-23dfddce3e95?auto=format&fit=crop&w=1200&q=80",
+    ],
+    abouts: [
+      "https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?auto=format&fit=crop&w=1000&q=80",
+      "https://images.unsplash.com/photo-1579684385127-1ef15d508118?auto=format&fit=crop&w=1000&q=80",
+    ],
+    atmospheres: [
+      "https://images.unsplash.com/photo-1588776814546-1ffcf47267a5?auto=format&fit=crop&w=1600&q=80",
+    ],
+    services: [
+      "https://images.unsplash.com/photo-1588776814546-1ffcf47267a5?auto=format&fit=crop&w=800&q=80",
+      "https://images.unsplash.com/photo-1579684385127-1ef15d508118?auto=format&fit=crop&w=800&q=80",
+      "https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?auto=format&fit=crop&w=800&q=80",
+    ],
+    features: [
+      "https://images.unsplash.com/photo-1505751172876-fa1923c5c528?auto=format&fit=crop&w=800&q=80",
+      "https://images.unsplash.com/photo-1584515979956-d9f6e5d09982?auto=format&fit=crop&w=800&q=80",
+    ],
+  },
+  clinic: {
+    heroes: [
+      "https://images.unsplash.com/photo-1629909613654-28e377c37b09?auto=format&fit=crop&w=1200&q=80",
+      "https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?auto=format&fit=crop&w=1200&q=80",
+    ],
+    abouts: [
+      "https://images.unsplash.com/photo-1579684385127-1ef15d508118?auto=format&fit=crop&w=1000&q=80",
+      "https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?auto=format&fit=crop&w=1000&q=80",
+    ],
+    atmospheres: [
+      "https://images.unsplash.com/photo-1588776814546-1ffcf47267a5?auto=format&fit=crop&w=1600&q=80",
+    ],
+    services: [
+      "https://images.unsplash.com/photo-1579684385127-1ef15d508118?auto=format&fit=crop&w=800&q=80",
+      "https://images.unsplash.com/photo-1588776814546-1ffcf47267a5?auto=format&fit=crop&w=800&q=80",
+      "https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?auto=format&fit=crop&w=800&q=80",
+    ],
+    features: [
+      "https://images.unsplash.com/photo-1505751172876-fa1923c5c528?auto=format&fit=crop&w=800&q=80",
+      "https://images.unsplash.com/photo-1584515979956-d9f6e5d09982?auto=format&fit=crop&w=800&q=80",
+    ],
+  },
+  architecture: {
+    heroes: [
+      "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?auto=format&fit=crop&w=1200&q=80",
+      "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1200&q=80",
+      "https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&w=1200&q=80",
+      "https://images.unsplash.com/photo-1513694203232-719a280e022f?auto=format&fit=crop&w=1200&q=80",
+    ],
+    abouts: [
+      "https://images.unsplash.com/photo-1600566753376-12c8ab7fb75b?auto=format&fit=crop&w=1000&q=80",
+      "https://images.unsplash.com/photo-1503387762-592deb58ef4e?auto=format&fit=crop&w=1000&q=80",
+      "https://images.unsplash.com/photo-1600573472591-ee6b68d14c68?auto=format&fit=crop&w=1000&q=80",
+    ],
+    atmospheres: [
+      "https://images.unsplash.com/photo-1513694203232-719a280e022f?auto=format&fit=crop&w=1600&q=80",
+    ],
+    services: [
+      "https://images.unsplash.com/photo-1503387762-592deb58ef4e?auto=format&fit=crop&w=800&q=80",
+      "https://images.unsplash.com/photo-1600566753376-12c8ab7fb75b?auto=format&fit=crop&w=800&q=80",
+      "https://images.unsplash.com/photo-1600573472591-ee6b68d14c68?auto=format&fit=crop&w=800&q=80",
+    ],
+    features: [
+      "https://images.unsplash.com/photo-1600585154526-990dced4db0d?auto=format&fit=crop&w=800&q=80",
+      "https://images.unsplash.com/photo-1512917774080-9991f1c4c750?auto=format&fit=crop&w=800&q=80",
+    ],
+  },
+  ceramics: {
+    heroes: [
+      "https://images.unsplash.com/photo-1578749556568-bc2c40e68b61?auto=format&fit=crop&w=1200&q=80",
+      "https://images.unsplash.com/photo-1565193566173-7a0ee3dbe261?auto=format&fit=crop&w=1200&q=80",
+      "https://images.unsplash.com/photo-1610701596007-11502861dcfa?auto=format&fit=crop&w=1200&q=80",
+    ],
+    abouts: [
+      "https://images.unsplash.com/photo-1590736969955-71cc94801759?auto=format&fit=crop&w=1000&q=80",
+      "https://images.unsplash.com/photo-1576020799627-aeac74d58064?auto=format&fit=crop&w=1000&q=80",
+    ],
+    atmospheres: [
+      "https://images.unsplash.com/photo-1578749556568-bc2c40e68b61?auto=format&fit=crop&w=1600&q=80",
+    ],
+    services: [
+      "https://images.unsplash.com/photo-1610701596007-11502861dcfa?auto=format&fit=crop&w=800&q=80",
+      "https://images.unsplash.com/photo-1590736969955-71cc94801759?auto=format&fit=crop&w=800&q=80",
+      "https://images.unsplash.com/photo-1576020799627-aeac74d58064?auto=format&fit=crop&w=800&q=80",
+    ],
+    features: [
+      "https://images.unsplash.com/photo-1534447677768-be436bb09401?auto=format&fit=crop&w=800&q=80",
+      "https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=800&q=80",
+    ],
+  },
+  tech: {
+    heroes: [
+      "https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=1200&q=80",
+      "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=1200&q=80",
+      "https://images.unsplash.com/photo-1451187580459-43490279c0fa?auto=format&fit=crop&w=1200&q=80",
+    ],
+    abouts: [
+      "https://images.unsplash.com/photo-1531482615713-2afd69097998?auto=format&fit=crop&w=1000&q=80",
+      "https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=1000&q=80",
+    ],
+    atmospheres: [
+      "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=1600&q=80",
+    ],
+    services: [
+      "https://images.unsplash.com/photo-1551836022-d5d88e9218df?auto=format&fit=crop&w=800&q=80",
+      "https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=800&q=80",
+      "https://images.unsplash.com/photo-1504868584819-f8e8b4b6d7e3?auto=format&fit=crop&w=800&q=80",
+    ],
+    features: [
+      "https://images.unsplash.com/photo-1451187580459-43490279c0fa?auto=format&fit=crop&w=800&q=80",
+      "https://images.unsplash.com/photo-1531297484001-80022131f5a1?auto=format&fit=crop&w=800&q=80",
+    ],
+  },
+  general: {
+    heroes: [
+      "https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&w=1200&q=80",
+      "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?auto=format&fit=crop&w=1200&q=80",
+      "https://images.unsplash.com/photo-1507679799987-c73779587ccf?auto=format&fit=crop&w=1200&q=80",
+    ],
+    abouts: [
+      "https://images.unsplash.com/photo-1522071820081-009f0129c71c?auto=format&fit=crop&w=1000&q=80",
+      "https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?auto=format&fit=crop&w=1000&q=80",
+    ],
+    atmospheres: [
+      "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=1600&q=80",
+    ],
+    services: [
+      "https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=800&q=80",
+      "https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?auto=format&fit=crop&w=800&q=80",
+      "https://images.unsplash.com/photo-1507679799987-c73779587ccf?auto=format&fit=crop&w=800&q=80",
+    ],
+    features: [
+      "https://images.unsplash.com/photo-1552664730-d307ca884978?auto=format&fit=crop&w=800&q=80",
+      "https://images.unsplash.com/photo-1553877522-43269d4ea984?auto=format&fit=crop&w=800&q=80",
+    ],
+  },
+};
+export function resolveCategoryKey(
   category?: string | null,
   businessName?: string | null,
   description?: string | null
-): CategoryImageSet {
+): string {
   const combined = `${category || ""} ${businessName || ""} ${description || ""}`.toLowerCase();
 
   // 1. Check Dental & Aesthetic Dentistry (Dedicated dental clinical care — must precede ceramics to prevent "ceramic braces" matching tableware)
@@ -339,7 +567,7 @@ export function getCategoryImages(
       "oral care",
     ])
   ) {
-    return CATEGORY_MAP.dental;
+    return "dental";
   }
 
   // 2. Check Electricians & Specialized Trades (Prevent dispatch matching salon)
@@ -356,7 +584,7 @@ export function getCategoryImages(
       "wiring",
     ])
   ) {
-    return CATEGORY_MAP.electrician;
+    return "electrician";
   }
 
   // 3. Check Specialized Artisanal Ceramics & Pottery (Explicitly exclude medical/dental contexts)
@@ -379,7 +607,7 @@ export function getCategoryImages(
       "raku",
     ])
   ) {
-    return CATEGORY_MAP.ceramics;
+    return "ceramics";
   }
 
   // 4. Check Architecture Studio / Spatial Atelier (Prevent "spatial" matching "spa")
@@ -398,7 +626,7 @@ export function getCategoryImages(
       "structural design",
     ])
   ) {
-    return CATEGORY_MAP.architecture;
+    return "architecture";
   }
 
   // 5. Check Luxury Fashion & Bespoke Atelier
@@ -416,7 +644,7 @@ export function getCategoryImages(
       "fashion atelier",
     ])
   ) {
-    return CATEGORY_MAP.fashion;
+    return "fashion";
   }
 
   // 6. Check Creative Agency & Brand Direction
@@ -433,7 +661,7 @@ export function getCategoryImages(
       "spatial web",
     ])
   ) {
-    return CATEGORY_MAP.agency;
+    return "agency";
   }
 
   // 7. Check Tech / SaaS / Software / AI Infrastructure
@@ -457,7 +685,7 @@ export function getCategoryImages(
     combined.includes("artificial intelligence") ||
     /\b(ai|ml)\b/i.test(combined)
   ) {
-    return CATEGORY_MAP.tech;
+    return "tech";
   }
 
   // 8. Check Cafe / Coffee / Roastery / Bakery
@@ -476,7 +704,7 @@ export function getCategoryImages(
       "barista",
     ])
   ) {
-    return CATEGORY_MAP.cafe;
+    return "cafe";
   }
 
   // 9. Check Restaurant / Dining / Bistro / Brunch / Food
@@ -495,7 +723,7 @@ export function getCategoryImages(
       "farm-to-table",
     ])
   ) {
-    return CATEGORY_MAP.restaurant;
+    return "restaurant";
   }
 
   // 10. Check Grocery / Kirana / Supermarket
@@ -509,7 +737,7 @@ export function getCategoryImages(
       "organic produce",
     ])
   ) {
-    return CATEGORY_MAP.grocery;
+    return "grocery";
   }
 
   // 11. Check Gym / Fitness / Training
@@ -525,7 +753,7 @@ export function getCategoryImages(
       "yoga",
     ])
   ) {
-    return CATEGORY_MAP.gym;
+    return "gym";
   }
 
   // 12. Check Salon / Barber / Hair / Beauty (Strict Tokenization + Negative Guards)
@@ -564,7 +792,7 @@ export function getCategoryImages(
       /\b(day\s*spa|medical\s*spa|medspa|wellness\s*spa|spa\s*resort|spa\s*treatment)\b/i.test(combined) ||
       (/\bspa\b/i.test(combined) && !combined.includes("spa-like") && !combined.includes("spa atmosphere"))
     ) {
-      return CATEGORY_MAP.salon;
+      return "salon";
     }
   }
 
@@ -581,7 +809,7 @@ export function getCategoryImages(
       "therapy",
     ])
   ) {
-    return CATEGORY_MAP.clinic;
+    return "clinic";
   }
 
   // 14. Check Real Estate / Properties
@@ -596,7 +824,7 @@ export function getCategoryImages(
       "realty",
     ])
   ) {
-    return CATEGORY_MAP["real estate"];
+    return "real estate";
   }
 
   // 15. Check Hotel & Hospitality
@@ -610,7 +838,7 @@ export function getCategoryImages(
       "lodge",
     ])
   ) {
-    return CATEGORY_MAP.hotel;
+    return "hotel";
   }
 
   // 16. Check General E-commerce / Boutique Retail
@@ -624,7 +852,7 @@ export function getCategoryImages(
       "apparel",
     ])
   ) {
-    return CATEGORY_MAP["e-commerce"];
+    return "e-commerce";
   }
 
   // 17. Check Education
@@ -638,7 +866,7 @@ export function getCategoryImages(
       "institute",
     ])
   ) {
-    return CATEGORY_MAP.education;
+    return "education";
   }
 
   // 18. Check Transport
@@ -652,7 +880,7 @@ export function getCategoryImages(
       "taxi",
     ])
   ) {
-    return TRANSPORT_IMAGE_SET;
+    return "general";
   }
 
   // 19. Check General Local Trades
@@ -666,14 +894,73 @@ export function getCategoryImages(
       "repair",
     ])
   ) {
-    return LOCAL_SERVICE_IMAGE_SET;
+    return "electrician";
   }
 
-  return CATEGORY_MAP.general;
+  return "general";
 }
 
 import type { ImageIntentConfig } from "@/types/website";
 
+
+export interface CategoryImageOptions {
+  seed?: string | number;
+  avoidImages?: string[];
+  archetype?: string;
+}
+
+export function getCategoryImages(
+  category?: string | null,
+  businessName?: string | null,
+  description?: string | null,
+  options?: CategoryImageOptions
+): CategoryImageSet {
+  const key = resolveCategoryKey(category, businessName, description);
+  const pool = CATEGORY_IMAGE_POOLS[key] || CATEGORY_IMAGE_POOLS.general;
+  const baseSet = CATEGORY_MAP[key] || CATEGORY_MAP.general;
+
+  if (!pool) return baseSet;
+
+  let seedNum = 0;
+  if (options?.seed !== undefined) {
+    seedNum = typeof options.seed === "number" ? Math.abs(options.seed) : stringToSeed(String(options.seed));
+  } else if (businessName || description) {
+    seedNum = stringToSeed(`${businessName || ""}-${description || ""}`);
+  }
+
+  const avoidSet = new Set((options?.avoidImages || []).map((img) => img.trim().split("?")[0]));
+
+  const filterPool = (list: string[]) => {
+    const valid = list.filter((img) => !avoidSet.has(img.trim().split("?")[0]));
+    return valid.length > 0 ? valid : list;
+  };
+
+  const heroes = filterPool(pool.heroes);
+  const abouts = filterPool(pool.abouts);
+  const services = filterPool(pool.services);
+  const features = filterPool(pool.features);
+
+  const hero = heroes[seedNum % heroes.length];
+  const nonHeroAbouts = abouts.filter((a) => a !== hero);
+  const about = (nonHeroAbouts.length > 0 ? nonHeroAbouts : abouts)[(seedNum + 1) % (nonHeroAbouts.length || abouts.length)];
+
+  const selectedServices: string[] = [];
+  for (let i = 0; i < Math.min(3, services.length); i++) {
+    selectedServices.push(services[(seedNum + i) % services.length]);
+  }
+
+  const selectedFeatures: string[] = [];
+  for (let i = 0; i < Math.min(2, features.length); i++) {
+    selectedFeatures.push(features[(seedNum + i + 2) % features.length]);
+  }
+
+  return {
+    hero,
+    about,
+    services: selectedServices,
+    features: selectedFeatures,
+  };
+}
 export function getImageIntentForSection(
   category?: string | null,
   sectionKey?: string | null,
@@ -757,7 +1044,23 @@ export function getImageIntentForSection(
  * Curated, low-noise atmospheric background imagery.
  * Used exclusively for the subtle contextual watermark/atmosphere layer behind hero typography.
  */
-export function getHeroAtmosphereImage(category?: string, archetype?: string): string {
+export function getHeroAtmosphereImage(
+  category?: string,
+  archetype?: string,
+  seedInput?: string | number
+): string {
+  const key = resolveCategoryKey(category, "", "");
+  const pool = CATEGORY_IMAGE_POOLS[key];
+  if (pool && pool.atmospheres && pool.atmospheres.length > 0) {
+    let seedNum = 0;
+    if (seedInput !== undefined) {
+      seedNum = typeof seedInput === "number" ? Math.abs(seedInput) : stringToSeed(String(seedInput));
+    } else if (archetype) {
+      seedNum = stringToSeed(archetype);
+    }
+    return pool.atmospheres[seedNum % pool.atmospheres.length];
+  }
+
   const cat = (category || "").toLowerCase();
   const arch = (archetype || "").toLowerCase();
 

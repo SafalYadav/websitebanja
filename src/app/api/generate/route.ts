@@ -13,12 +13,18 @@ import { openai, OPENAI_GENERATION_MODEL } from "@/lib/openai";
 import { buildWebsitePrompt } from "@/lib/prompts";
 import { shouldBypassRateLimit, checkMemoryRateLimit } from "@/lib/rateLimit";
 import { validateBusinessInputs } from "@/lib/validation";
+import type { SkillId } from "@/lib/skills/types";
+import { runSkillsAgent, getRecentDesignFingerprints, buildDeterministicSkillsFallback } from "@/lib/agents/skills";
+import {
+  runUniquenessAgent,
+  MAX_UNIQUENESS_REGENERATIONS,
+  type UniquenessAgentOutput,
+} from "@/lib/agents/uniqueness";
 import { trackAnalyticsEvent } from "@/lib/analytics";
 import type { AiWorkspace } from "@/types/aiWorkspace";
 import {
   validateGeneratedWebsiteUiUx,
   validateGeneratedWebsiteDesign,
-  selectDesignSkills,
 } from "@/lib/skills/uiUxSkill";
 import {
   isOpenAISkillsConfigured,
@@ -186,17 +192,59 @@ export async function POST(req: Request) {
       );
     }
 
-    const selectorStart = Date.now();
-    console.log("[GEN] selector:start");
-    const skillSelection = selectDesignSkills({
-      ...websiteData,
-      prompt: (websiteData as any).prompt || websiteData.description,
-    });
-    console.log("[GEN] selector:success duration=" + (Date.now() - selectorStart) + "ms activeSkills=" + skillSelection.metadata.selectedIds.join(","));
+    const skillsStart = Date.now();
+    console.log("[GEN] skillsAgent:start");
+    const recentFingerprints = await getRecentDesignFingerprints(websiteData.category, 3);
+    const skillsAgentResult = await runSkillsAgent(
+      {
+        category: websiteData.category,
+        businessName: websiteData.businessName,
+        description: websiteData.description,
+        targetAudience: websiteData.targetAudience,
+        stylePreferences: websiteData.style ? [websiteData.style] : undefined,
+        primaryColor: websiteData.primaryColor,
+        recentProjects: recentFingerprints,
+        threeDPreference: websiteData.threeDPreference,
+      },
+      {
+        userId: user.id,
+        sessionId: (rawBody as any)?.sessionId,
+      }
+    );
+    console.log(
+      `[GEN] skillsAgent:complete duration=${Date.now() - skillsStart}ms source=${skillsAgentResult.source} skills=${skillsAgentResult.data?.selectedSkills.map((s) => s.skillId).join(",") || ""}`
+    );
 
-    const prompt = buildWebsitePrompt(websiteData, workspace ?? ({} as AiWorkspace));
+    const skillsData =
+      skillsAgentResult.success && skillsAgentResult.data
+        ? skillsAgentResult.data
+        : buildDeterministicSkillsFallback({
+            category: websiteData.category,
+            businessName: websiteData.businessName,
+            description: websiteData.description,
+            targetAudience: websiteData.targetAudience,
+            stylePreferences: websiteData.style ? [websiteData.style] : undefined,
+            primaryColor: websiteData.primaryColor,
+            recentProjects: recentFingerprints,
+            threeDPreference: websiteData.threeDPreference,
+          });
 
-    const activeSkillsList = skillSelection.systemPromptAdditions.join(", ");
+    const activeSkillIds = skillsData.selectedSkills.map((s) => s.skillId as SkillId);
+    const avoidPatterns = skillsData.variationStrategy?.avoidPatterns || [];
+    const designDirection = `Layout: ${skillsData.designDirection.layoutStrategy}; Hero: ${skillsData.designDirection.heroStrategy}; Style: ${skillsData.designDirection.visualStyle}; Typography: ${skillsData.designDirection.typographyDirection}; Section: ${skillsData.designDirection.sectionStrategy}`;
+
+    const prompt = buildWebsitePrompt(
+      {
+        ...websiteData,
+        avoidPatterns,
+        recentFingerprints,
+        designDirection,
+        selectedSkills: activeSkillIds,
+      },
+      workspace ?? ({} as AiWorkspace)
+    );
+
+    const activeSkillsList = activeSkillIds.join(", ");
 
     let parsedResult: Record<string, unknown> | null = null;
     let generationModelUsed = OPENAI_GENERATION_MODEL;
@@ -207,7 +255,7 @@ export async function POST(req: Request) {
       try {
         const skillsStart = Date.now();
         console.log("[GEN] skills:start");
-        const containerConfig = getHostedSkillContainerConfig(skillSelection.metadata.selectedIds);
+        const containerConfig = getHostedSkillContainerConfig(activeSkillIds);
         const instructions = `You are WebsiteBanja AI, an expert autonomous website designer, UI/UX architect, and conversion copywriter.
 You have access to authoritative WebsiteBanja Design Intelligence skills mounted in your container environment at /home/oai/skills/.
 Use the shell tool to inspect the mounted SKILL.md files (especially websitebanja-master-design-intelligence and the active skills: ${activeSkillsList}) to follow their design guidelines, motion choreography, typography standards, responsive reflow, and UX psychology.
@@ -286,7 +334,7 @@ Always prioritize explicit user requirements over general skill rules. Return va
     // Post-generation multi-skill design validation and sanitization
     const validationStart = Date.now();
     const designValidation = validateGeneratedWebsiteDesign(parsedResult, websiteData);
-    const { sanitized: result, warnings: uiUxWarnings } = validateGeneratedWebsiteUiUx(
+    let { sanitized: result, warnings: uiUxWarnings } = validateGeneratedWebsiteUiUx(
       designValidation.sanitized,
       websiteData
     );
@@ -296,16 +344,124 @@ Always prioritize explicit user requirements over general skill rules. Return va
       console.debug("[Design Intelligence Validation]", uiUxWarnings);
     }
 
+    // Phase 3: Post-Generation Uniqueness & Verification Agent
+    let uniquenessVerification: UniquenessAgentOutput | undefined;
+    let regenerationCount = 0;
+
+    try {
+      let currentResult = result;
+      let uniquenessCheck = await runUniquenessAgent(
+        {
+          newWebsite: currentResult as Record<string, unknown>,
+          businessName: websiteData.businessName,
+          category: websiteData.category,
+          description: websiteData.description,
+          explicitConstraints: (websiteData as any).prompt ? [(websiteData as any).prompt] : [],
+          regenerationAttempt: regenerationCount,
+          threeDPreference: websiteData.threeDPreference,
+        },
+        {
+          userId: user.id,
+        }
+      );
+
+      // Targeted Redesign & Regeneration Loop (Bounded: max 2 attempts, zero infinite loop)
+      while (
+        uniquenessCheck.data.status === "REGENERATE" &&
+        regenerationCount < MAX_UNIQUENESS_REGENERATIONS
+      ) {
+        regenerationCount++;
+        console.log(
+          `[GEN] uniqueness:regenerate attempt=${regenerationCount} score=${uniquenessCheck.data.similarityScore} candidate=${uniquenessCheck.data.closestCandidateName || "unknown"}`
+        );
+
+        const redesignDirectivesPrompt = `
+================================================================================
+CRITICAL UNIQUENESS & ANTI-COLLISION REDESIGN DIRECTIVES:
+================================================================================
+The previous draft was flagged as overly similar to another website (${uniquenessCheck.data.closestCandidateName || "in this industry"}).
+You MUST regenerate the website JSON with distinctive design differentiation:
+${uniquenessCheck.data.redesignDirectives.map((d) => `- ${d}`).join("\n")}
+
+Patterns to strictly avoid:
+${uniquenessCheck.data.issues.map((i) => `- ${i}`).join("\n")}
+
+Ensure a fresh visual rhythm, altered hero layout, different section sequencing, and distinctive card treatments while fulfilling all user business requirements.
+`;
+
+        const redesignPrompt = `${prompt}\n${redesignDirectivesPrompt}`;
+
+        let regenParsed: Record<string, unknown> | null = null;
+        try {
+          const regenChatResponse = await openai.chat.completions.create({
+            model: generationModelUsed,
+            response_format: { type: "json_object" },
+            messages: [
+              {
+                role: "system",
+                content: `You are WebsiteBanja AI. You are redesigning this website to make it distinctly unique, avoiding all reported pattern collisions. Return valid JSON only.`,
+              },
+              { role: "user", content: redesignPrompt },
+            ],
+          });
+          regenParsed = parseWebsiteJson(regenChatResponse.choices[0]?.message?.content ?? "{}");
+        } catch (regenErr) {
+          console.warn("[GEN] Uniqueness regeneration attempt failed; breaking loop:", regenErr);
+          break;
+        }
+
+        if (regenParsed && Object.keys(regenParsed).length > 0) {
+          const regenDesignVal = validateGeneratedWebsiteDesign(regenParsed, websiteData);
+          const regenUiUxVal = validateGeneratedWebsiteUiUx(regenDesignVal.sanitized, websiteData);
+          currentResult = regenUiUxVal.sanitized;
+          result = currentResult;
+
+          // Re-verify the redesigned website
+          uniquenessCheck = await runUniquenessAgent(
+            {
+              newWebsite: currentResult as Record<string, unknown>,
+              businessName: websiteData.businessName,
+              category: websiteData.category,
+              description: websiteData.description,
+              explicitConstraints: (websiteData as any).prompt ? [(websiteData as any).prompt] : [],
+              regenerationAttempt: regenerationCount,
+              threeDPreference: websiteData.threeDPreference,
+            },
+            {
+              userId: user.id,
+            }
+          );
+        } else {
+          break;
+        }
+      }
+
+      uniquenessVerification = uniquenessCheck.data;
+      console.log(
+        `[GEN] uniqueness:complete status=${uniquenessCheck.data.status} score=${uniquenessCheck.data.similarityScore} regenerations=${regenerationCount}`
+      );
+    } catch (uniquenessErr) {
+      console.warn("[GEN] Uniqueness verification error; proceeding safely:", uniquenessErr);
+    }
+
     await trackAnalyticsEvent({
       eventType: "ai_success",
       userId: user.id,
-      metadata: { category: websiteData.category, model: generationModelUsed, isHosted: isHostedExecution },
+      metadata: {
+        category: websiteData.category,
+        model: generationModelUsed,
+        isHosted: isHostedExecution,
+        uniquenessScore: uniquenessVerification?.similarityScore,
+        uniquenessStatus: uniquenessVerification?.status,
+        regenerationCount,
+      },
     });
 
     console.log("[GEN] total=" + (Date.now() - genStart) + "ms");
     return NextResponse.json({
       success: true,
       data: result,
+      uniqueness: uniquenessVerification,
     });
   } catch (err) {
     console.error("[GEN] error duration=" + (Date.now() - genStart) + "ms error:", err);

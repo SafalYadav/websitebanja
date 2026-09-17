@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 import { checkMemoryRateLimit } from "@/lib/rateLimit";
 import type { ExtractedUserNeeds, AgentTalkResponse } from "@/types/aiAgent";
-import { AgentProviderFactory } from "@/lib/ai/agentProviderFactory";
+import { ModelRouter } from "@/lib/ai/router/modelRouter";
+import { MODEL_CONFIG, sanitizeErrorOutput } from "@/lib/ai/router/modelConfig";
+import { recordAgentRun } from "@/lib/agents/telemetry";
 import { normalizeAgentResponse } from "@/lib/ai/agentNormalizer";
 import { setProjectKnowledge } from "@/lib/knowledge";
 import { getClientIp, authenticateRequest } from "@/lib/supabaseServer";
@@ -64,7 +66,10 @@ function buildFallbackResponse(
   if (score >= 65) {
     let reply = `Everything looks fantastic for ${mergedNeeds.businessName || "your business"}! Ready for me to build your website?`;
     let suggestedReplies = ["Yes, generate my website now!", "Let's tweak the colors first", "Add another service offering"];
-    if (userLanguage === "Hindi") {
+    if (userLanguage === "Marathi") {
+      reply = `${mergedNeeds.businessName || "तुमच्या व्यवसायाची"} सर्व माहिती उत्तम दिसत आहे! मी तुमची वेबसाईट तयार करू का?`;
+      suggestedReplies = ["होय, वेबसाईट आता बनवा!", "आधी रंग बदलूया", "आणखी एक सेवा जोडा"];
+    } else if (userLanguage === "Hindi") {
       reply = `${mergedNeeds.businessName || "आपके बिज़नेस"} की सभी डिटेल्स बहुत अच्छी लग रही हैं! क्या मैं आपकी वेबसाइट तैयार करूँ?`;
       suggestedReplies = ["हाँ, वेबसाइट अभी बनाओ!", "पहले कलर्स बदलते हैं", "एक और सर्विस जोड़ें"];
     } else if (userLanguage === "Hinglish") {
@@ -99,15 +104,38 @@ function buildFallbackResponse(
   }
 
   if (!mergedNeeds.businessName) {
-    const reply = `Ooh, a ${mergedNeeds.category}! Love that. What's the name of your ${mergedNeeds.category.toLowerCase()}, and who are your ideal customers?`;
+    let reply = `Ooh, a ${mergedNeeds.category}! Love that. What's the name of your ${mergedNeeds.category.toLowerCase()}, and who are your ideal customers?`;
+    let suggestedReplies = [
+      "It's called Prime Cafe for coffee lovers",
+      "We cater to local neighborhood families",
+      "High-growth startups and tech professionals"
+    ];
+    if (userLanguage === "Marathi") {
+      reply = `छान! ${mergedNeeds.category} व्यवसायासाठी वेबसाईट बनवूया. तुमच्या व्यवसायाचे नाव काय आहे आणि तुमचे ग्राहक कोण आहेत?`;
+      suggestedReplies = [
+        "स्थानिक ग्राहकांसाठी आमचा व्यवसाय आहे",
+        "आम्ही सर्वोत्तम सेवा देतो",
+        "आमचे नाव सांगा"
+      ];
+    } else if (userLanguage === "Hindi") {
+      reply = `अरे वाह, ${mergedNeeds.category}! आपके इस काम का क्या नाम है, और आपके मुख्य ग्राहक कौन हैं?`;
+      suggestedReplies = [
+        "यह स्थानीय परिवारों के लिए है",
+        "हम बेहतरीन सेवाएं देते हैं",
+        "बिजनेस का नाम बताएं"
+      ];
+    } else if (userLanguage === "Gujarati") {
+      reply = `સરસ, ${mergedNeeds.category}! તમારા વ્યવસાયનું નામ શું છે ಮತ್ತು તમારા ગ્રાહકો કોણ છે?`;
+      suggestedReplies = [
+        "સ્થાનિક ગ્રાહકો માટે",
+        "અમે શ્રેષ્ઠ સેવા આપીએ છીએ",
+        "નામ જણાવો"
+      ];
+    }
     return {
       reply,
       speechText: reply,
-      suggestedReplies: [
-        "It's called Prime Cafe for coffee lovers",
-        "We cater to local neighborhood families",
-        "High-growth startups and tech professionals"
-      ],
+      suggestedReplies,
       extractedNeeds: mergedNeeds,
       readinessScore: 45,
       isReadyToBuild: false,
@@ -115,31 +143,120 @@ function buildFallbackResponse(
   }
 
   if (!mergedNeeds.services || mergedNeeds.services.length === 0) {
-    const reply = `Love the name ${mergedNeeds.businessName}! What are your top 2 or 3 signature specialties or services we should showcase on the homepage?`;
+    let reply = `Love the name ${mergedNeeds.businessName}! What are your top 2 or 3 signature specialties or services we should showcase on the homepage?`;
+    let suggestedReplies = [
+      "Artisanal Coffee, Fresh Pastries & Breakfast",
+      "Personal Training, Group Classes & Nutrition",
+      "Brand Strategy, Web Design & Social Media"
+    ];
+    if (userLanguage === "Marathi") {
+      reply = `${mergedNeeds.businessName} नाव खूप छान आहे! तुमच्या मुख्य २-३ सेवा किंवा वैशिष्ट्ये कोणती आहेत जी आपण वेबसाईटवर दाखवायची?`;
+      suggestedReplies = [
+        "मुख्य सेवा आणि उत्पादने",
+        "आमची खास वैशिष्ट्ये",
+        "सविस्तर माहिती"
+      ];
+    } else if (userLanguage === "Hindi") {
+      reply = `${mergedNeeds.businessName} बहुत अच्छा नाम है! आपकी मुख्य 2-3 सेवाएं कौन सी हैं जो हम होमपेज पर दिखाएं?`;
+      suggestedReplies = [
+        "हमारी खास सेवाएं",
+        "प्रमुख प्रोडक्ट्स",
+        "विस्तृत जानकारी"
+      ];
+    } else if (userLanguage === "Gujarati") {
+      reply = `${mergedNeeds.businessName} સરસ નામ છે! તમારી મુખ્ય ૨-૩ સેવાઓ કઈ છે જે આપણે હોમપેજ પર બતાવવી જોઈએ?`;
+      suggestedReplies = [
+        "મુખ્ય સેવાઓ",
+        "અમારા ઉત્પાદનો",
+        "વિગતવાર માહિતી"
+      ];
+    }
     return {
       reply,
       speechText: reply,
-      suggestedReplies: [
-        "Artisanal Coffee, Fresh Pastries & Breakfast",
-        "Personal Training, Group Classes & Nutrition",
-        "Brand Strategy, Web Design & Social Media"
-      ],
+      suggestedReplies,
       extractedNeeds: mergedNeeds,
       readinessScore: 60,
       isReadyToBuild: false,
     };
   }
 
-  const reply = `Sounds great! For ${mergedNeeds.businessName}, what kind of brand vibe feels right? Warm and cozy, clean minimal, or bold and vibrant?`;
+  const userMentioned3D = /\b(?:3d|spatial|perspective|webgl|threejs|r3f|2d\s+only|flat\s+only|no\s+3d|simple\s+2d|keep\s+it\s+2d|keep\s+it\s+simple)\b/i.test(userText);
+  const has3DPreference = Boolean(priorNeeds.threeDPreference) || userMentioned3D;
+
+  let reply = has3DPreference
+    ? `Sounds great! For ${mergedNeeds.businessName}, what kind of brand vibe feels right? Warm and cozy, clean minimal, or bold and vibrant?`
+    : `Sounds great! For ${mergedNeeds.businessName}, what kind of brand vibe feels right, and do you want 3D animations on your website?`;
+  
+  let suggestedReplies = has3DPreference
+    ? [
+        "Warm, cozy & earthy tones",
+        "Modern minimalist with violet & blue",
+        "Luxury bold with obsidian & gold",
+        "Everything looks great, build the website now!"
+      ]
+    : [
+        "Yes, use 3D ✨",
+        "No, keep it simple",
+        "Warm & cozy modern 2D",
+        "Everything looks great, build the website now!"
+      ];
+  if (userLanguage === "Marathi") {
+    reply = has3DPreference
+      ? `उत्तम! ${mergedNeeds.businessName} साठी कोणती डिझाइन थीम किंवा रंग तुम्हाला आवडतील? आधुनिक आणि साधी, की आकर्षक आणि रंगीबेरंगी?`
+      : `उत्तम! ${mergedNeeds.businessName} साठी कोणती डिझाइन थीम आवडेल, आणि आपल्याला 3D ॲनिमेशन हवे आहे का?`;
+    suggestedReplies = has3DPreference
+      ? [
+          "आधुनिक आणि साधी थीम",
+          "आकर्षक आणि रंगीबेरंगी",
+          "क्लासिक आणि सोबर",
+          "सर्व छान आहे, वेबसाईट तयार करा!"
+        ]
+      : [
+          "होय, 3D वापरा ✨",
+          "नाही, साधी 2D ठेवा",
+          "आधुनिक आणि साधी थीम",
+          "सर्व छान आहे, वेबसाईट तयार करा!"
+        ];
+  } else if (userLanguage === "Hindi") {
+    reply = has3DPreference
+      ? `बहुत बढ़िया! ${mergedNeeds.businessName} के लिए आपको किस तरह का स्टाइल पसंद है? मॉडर्न और सिंपल, या ब्राइट और कलरफुल?`
+      : `बहुत बढ़िया! ${mergedNeeds.businessName} के लिए आपको किस तरह का स्टाइल पसंद है, और क्या आपको 3D एनिमेशन चाहिए?`;
+    suggestedReplies = has3DPreference
+      ? [
+          "मॉडर्न और मिनिमल",
+          "ब्राइट और कलरफुल",
+          "क्लासिक और एलिगेंट",
+          "सब कुछ तैयार है, वेबसाइट बनाओ!"
+        ]
+      : [
+          "हाँ, 3D यूज़ करो ✨",
+          "नहीं, 2D सिंपल रखो",
+          "मॉडर्न और मिनिमल",
+          "सब कुछ तैयार है, वेबसाइट बनाओ!"
+        ];
+  } else if (userLanguage === "Gujarati") {
+    reply = has3DPreference
+      ? `સરસ! ${mergedNeeds.businessName} માટે કઈ ડિઝાઇન થીમ ગમશે? આધુનિક અને સરળ, કે આકર્ષક અને તેજસ્વી?`
+      : `સરસ! ${mergedNeeds.businessName} માટે કઈ ડિઝાઇન થીમ ગમશે, અને શું તમને 3D એનિમેશન જોઈએ છે?`;
+    suggestedReplies = has3DPreference
+      ? [
+          "આધુનિક અને સરળ",
+          "આકર્ષક અને તેજસ્વી",
+          "ક્લાસિક અને સુંદર",
+          "બધું બરાबर છે, વેબસાઇટ બનાવો!"
+        ]
+      : [
+          "હા, 3D વાપરો ✨",
+          "ના, સાદી 2D રાખો",
+          "આધુનિક અને સરળ",
+          "બધું બરાबर છે, વેબસાઇટ બનાવો!"
+        ];
+  }
   return {
     reply,
     speechText: reply,
-    suggestedReplies: [
-      "Warm, cozy & earthy tones",
-      "Modern minimalist with violet & blue",
-      "Luxury bold with obsidian & gold",
-      "Everything looks great, build the website now!"
-    ],
+    suggestedReplies,
     extractedNeeds: mergedNeeds,
     readinessScore: 75,
     isReadyToBuild: true,
@@ -215,11 +332,10 @@ export async function POST(req: Request) {
       });
     }
 
-    // Use AgentProviderFactory (OpenAI primary -> Gemini fallback)
+    // Use ModelRouter with Mitra policy (Gemini primary -> OpenRouter fallback -> optional Groq -> zero OpenAI)
     try {
-      const primaryProvider = AgentProviderFactory.createPrimary();
-      const fallbackProvider = AgentProviderFactory.createFallback();
-      let provider = primaryProvider;
+      const router = new ModelRouter();
+      const policy = MODEL_CONFIG.agentPolicies.mitra();
 
       const systemPrompt = `You are Mitra, a warm, energetic, friendly AI Website Architect & Design Partner at WebsiteBanja.
 You speak like an enthusiastic, supportive creative designer chatting naturally with a friend.
@@ -258,6 +374,11 @@ CRITICAL RULES:
    - When the user asks to remove or exclude a feature or section (e.g., 'Remove the pricing section', 'Remove testimonials', 'without whatsapp'), remove it from "features" or "services".
    - When the user asks to keep or restore a feature (e.g., 'Wait, keep pricing but make it minimal'), include that feature in "features".
    - Never reset or forget previously confirmed business name, category, or location when the user requests a modification.
+9. 3D PREFERENCE (HARD CONSTRAINT):
+   - 3D is NEVER the default. If the user explicitly asks for 3D ("3D website", "3D animation", "3D scroll", "WebGL", "interactive 3D", "3D chahiye"), set "threeDPreference": "yes" in "extractedNeeds".
+   - If user explicitly says no 3D ("no 3D", "simple website", "2D only", "3D nahi chahiye", "keep it simple"), set "threeDPreference": "no" in "extractedNeeds".
+   - Words like "modern", "premium", "beautiful", "smooth animations" DO NOT mean 3D. "threeDPreference" must stay "no".
+   - If the user hasn't specified 3D and you are discussing style/readiness, offer clean options in "suggestedReplies": ["Yes, use 3D ✨", "No, keep it simple"].
 
 JSON Schema:
 {
@@ -276,31 +397,42 @@ JSON Schema:
   }
 }`;
 
-      const conversationForModel = [
-        { role: "system" as const, content: systemPrompt },
-        {
-          role: "system" as const,
-          content: `Prior accumulated extracted needs: ${JSON.stringify(currentNeeds)}`,
+      const conversationHistoryText = messages
+        .slice(-10)
+        .map((m) => `${m.role === "user" ? "User" : "Mitra"}: ${m.content}`)
+        .join("\n");
+
+      const userPrompt = conversationHistoryText
+        ? `Conversation History:\n${conversationHistoryText}\n\nLatest User Input: ${lastUserMessage}`
+        : `Latest User Input: ${lastUserMessage}`;
+
+      const routerResponse = await router.route({
+        systemPrompt: `${systemPrompt}\n\nPrior accumulated extracted needs: ${JSON.stringify(currentNeeds)}`,
+        userPrompt,
+        temperature: 0.7,
+        maxTokens: 1000,
+        timeoutMs: policy.timeoutMs,
+      }, policy);
+
+      // Record non-blocking telemetry
+      recordAgentRun({
+        agentName: "mitra",
+        userId: authenticatedUser?.id,
+        projectId: body.projectId,
+        status: routerResponse.success ? "success" : "failed",
+        modelProvider: routerResponse.provider,
+        modelName: routerResponse.model,
+        latencyMs: Math.round(routerResponse.latencyMs),
+        tokensUsed: {},
+        metadata: {
+          fallbackCount: routerResponse.fallbackCount,
+          language: userLanguage,
+          error: routerResponse.error?.message ? sanitizeErrorOutput(routerResponse.error.message) : undefined,
         },
-        ...messages.slice(-10).map((m) => ({
-          role: (m.role === "user" ? "user" : "assistant") as "user" | "assistant",
-          content: m.content,
-        })),
-      ];
+      }).catch(() => {});
 
-      let rawResponseText = "";
-      try {
-        const res = await provider.generate(conversationForModel, { jsonMode: true });
-        rawResponseText = res.text ?? "";
-      } catch (primaryErr) {
-        console.warn("[Agent Talk] Primary provider failed, attempting fallback provider:", primaryErr);
-        provider = fallbackProvider;
-        const res = await provider.generate(conversationForModel, { jsonMode: true });
-        rawResponseText = res.text ?? "";
-      }
-
-      if (rawResponseText) {
-        const normalized = normalizeAgentResponse(rawResponseText, currentNeeds, lastUserMessage);
+      if (routerResponse.success && routerResponse.rawText) {
+        const normalized = normalizeAgentResponse(routerResponse.rawText, currentNeeds, lastUserMessage);
 
         if (body.projectId && authenticatedUser) {
           try {
@@ -328,7 +460,7 @@ JSON Schema:
         });
       }
     } catch (agentErr) {
-      console.warn("[API /api/agent/talk] Provider call fallback to deterministic engine:", agentErr);
+      console.warn("[API /api/agent/talk] Model router call fallback to deterministic engine:", sanitizeErrorOutput(String(agentErr)));
     }
 
     // Fallback response engine

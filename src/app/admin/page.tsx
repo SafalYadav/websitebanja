@@ -26,6 +26,10 @@ import {
   Filter,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import AdminIntelligenceCenter from "@/components/admin/AdminIntelligenceCenter";
+import AdminUsersAccess from "@/components/admin/AdminUsersAccess";
+import AdminBossResearchPanel from "@/components/admin/AdminBossResearchPanel";
+import { Compass } from "lucide-react";
 
 interface AnalyticsData {
   adminUser: {
@@ -85,7 +89,7 @@ interface AnalyticsData {
   }>;
 }
 
-type TabType = "overview" | "usage" | "revenue" | "users" | "projects" | "activity";
+type TabType = "overview" | "ai_health" | "boss_research" | "usage" | "revenue" | "users" | "projects" | "activity";
 
 export default function AdminDashboardPage() {
   const router = useRouter();
@@ -97,13 +101,12 @@ export default function AdminDashboardPage() {
   const [activeTab, setActiveTab] = useState<TabType>("overview");
 
   // Filter & Search states
-  const [userSearch, setUserSearch] = useState("");
   const [projectSearch, setProjectSearch] = useState("");
-  const [planFilter, setPlanFilter] = useState<string>("all");
 
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [sessionToken, setSessionToken] = useState<string | undefined>(undefined);
 
   useEffect(() => {
     let isMounted = true;
@@ -111,6 +114,9 @@ export default function AdminDashboardPage() {
     async function fetchAnalytics() {
       try {
         const { data: { session } } = await supabase.auth.getSession();
+        if (session?.access_token) {
+          setSessionToken(session.access_token);
+        }
         if (session?.user?.email) {
           setUserEmail(session.user.email);
         }
@@ -175,6 +181,9 @@ export default function AdminDashboardPage() {
     setIsRefreshing(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
+      if (session?.access_token) {
+        setSessionToken(session.access_token);
+      }
       if (session?.user?.email) {
         setUserEmail(session.user.email);
       }
@@ -270,11 +279,6 @@ export default function AdminDashboardPage() {
 
   const { overview, timeSeries, usersDirectory, projectsDirectory, recentActivity } = data;
 
-  const filteredUsers = usersDirectory.filter((u) => {
-    const matchesSearch = u.userId.toLowerCase().includes(userSearch.toLowerCase());
-    const matchesPlan = planFilter === "all" || (planFilter === "paid" && u.status === "active_paid") || (planFilter === "free" && u.status !== "active_paid");
-    return matchesSearch && matchesPlan;
-  });
 
   const filteredProjects = projectsDirectory.filter((p) => {
     return (
@@ -338,9 +342,11 @@ export default function AdminDashboardPage() {
         <div className="flex overflow-x-auto gap-2 border-b border-zinc-200 pb-3 dark:border-white/10 text-xs font-bold no-scrollbar">
           {[
             { id: "overview" as TabType, label: "Overview KPI", icon: Activity },
+            { id: "ai_health" as TabType, label: "AI Health & Agents", icon: Sparkles },
+            { id: "boss_research" as TabType, label: "Boss Research & Skills", icon: Compass },
             { id: "usage" as TabType, label: "Usage & Telemetry", icon: TrendingUp },
             { id: "revenue" as TabType, label: "Revenue & Subscriptions", icon: DollarSign },
-            { id: "users" as TabType, label: `Users (${overview.totalUsers})`, icon: Users },
+            { id: "users" as TabType, label: `Users & Access (${overview.totalUsers})`, icon: Users },
             { id: "projects" as TabType, label: `Projects (${overview.totalProjects})`, icon: Layers },
             { id: "activity" as TabType, label: "Audit Stream", icon: ShieldAlert },
           ].map((tab) => {
@@ -520,6 +526,16 @@ export default function AdminDashboardPage() {
           </div>
         )}
 
+        {/* Tab: AI Health & Agents */}
+        {activeTab === "ai_health" && (
+          <AdminIntelligenceCenter sessionToken={sessionToken} />
+        )}
+
+        {/* Tab: Boss Research & Skill Discovery */}
+        {activeTab === "boss_research" && (
+          <AdminBossResearchPanel sessionToken={sessionToken} />
+        )}
+
         {/* Tab 2: Usage & Charts */}
         {activeTab === "usage" && (
           <div className="space-y-6">
@@ -605,71 +621,9 @@ export default function AdminDashboardPage() {
           </div>
         )}
 
-        {/* Tab 4: Users Directory */}
+        {/* Tab 4: Users & Access Management */}
         {activeTab === "users" && (
-          <div className="space-y-4">
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-              <div className="relative w-full sm:w-80">
-                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
-                <input
-                  type="text"
-                  placeholder="Search user ID..."
-                  value={userSearch}
-                  onChange={(e) => setUserSearch(e.target.value)}
-                  className="w-full rounded-xl border border-zinc-200 bg-white pl-9 pr-4 py-2 text-xs text-zinc-900 placeholder-zinc-400 outline-none focus:border-violet-500 dark:border-white/10 dark:bg-zinc-900 dark:text-white"
-                />
-              </div>
-
-              <div className="flex items-center gap-2">
-                <Filter className="h-3.5 w-3.5 text-zinc-400" />
-                <select
-                  value={planFilter}
-                  onChange={(e) => setPlanFilter(e.target.value)}
-                  className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-700 outline-none dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-200"
-                >
-                  <option value="all">All Plans</option>
-                  <option value="paid">Paid Pro Only</option>
-                  <option value="free">Free Starter Only</option>
-                </select>
-              </div>
-            </div>
-
-            <div className="rounded-3xl border border-zinc-200 bg-white shadow-xs overflow-hidden dark:border-white/10 dark:bg-zinc-900/60">
-              <table className="w-full text-left border-collapse text-xs">
-                <thead>
-                  <tr className="border-b border-zinc-200 bg-zinc-50 dark:border-white/10 dark:bg-zinc-950/40 text-zinc-500 uppercase tracking-wider font-bold text-[10px]">
-                    <th className="p-4">User Identifier</th>
-                    <th className="p-4">Plan / Tier</th>
-                    <th className="p-4">Websites</th>
-                    <th className="p-4">Published</th>
-                    <th className="p-4">Generations</th>
-                    <th className="p-4">Last Activity</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-zinc-200 dark:divide-white/5">
-                  {filteredUsers.map((u, i) => (
-                    <tr key={i} className="hover:bg-zinc-50/60 dark:hover:bg-white/5 transition">
-                      <td className="p-4 font-mono font-bold text-zinc-900 dark:text-white">{u.userId}</td>
-                      <td className="p-4">
-                        <span className={cn(
-                          "px-2.5 py-1 rounded-full text-[10px] font-bold inline-block",
-                          u.status === "active_paid"
-                            ? "bg-violet-100 text-violet-700 dark:bg-violet-950/60 dark:text-violet-300 border border-violet-200 dark:border-violet-800"
-                            : "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300"
-                        )}>
-                          {u.plan}
-                        </span>
-                      </td>
-                      <td className="p-4 font-semibold">{u.projectsCount}</td>
-                      <td className="p-4 font-semibold text-emerald-600">{u.publishedCount}</td>
-                      <td className="p-4 font-semibold">{u.generationsCount}</td>
-                      <td className="p-4 font-mono text-zinc-500">{new Date(u.lastActive).toLocaleDateString()}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
+          <AdminUsersAccess sessionToken={sessionToken} currentAdminEmail={userEmail} />
         )}
 
         {/* Tab 5: Projects Catalog */}

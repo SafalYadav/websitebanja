@@ -17,6 +17,7 @@ import {
   CloudUpload,
   AlertCircle,
   Share2,
+  Sparkles,
 } from "lucide-react";
 import { useGeneratedWebsiteStore, type ViewportMode } from "@/store/generatedWebsiteStore";
 import { useBuilderStore } from "@/store/builderStore";
@@ -48,7 +49,7 @@ export default function EditorTopBar({
 
   const { website, isPreviewMode, setIsPreviewMode, viewportMode, setViewportMode, undo, redo, history, historyIndex } =
     useGeneratedWebsiteStore();
-  const { projectId, businessName, setBusinessName, isPublished, setIsPublished, publicSlug, setPublicSlug } =
+  const { projectId, businessName, setBusinessName, isPublished, setIsPublished, publicSlug, setPublicSlug, threeDPreference } =
     useBuilderStore();
 
   const [isEditingTitle, setIsEditingTitle] = useState(false);
@@ -156,6 +157,24 @@ export default function EditorTopBar({
             <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 px-1.5 sm:px-2 py-0.5 text-[9px] sm:text-[10px] font-bold text-emerald-600 dark:text-emerald-400 flex-shrink-0">
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
               LIVE
+            </span>
+          )}
+
+          {/* 3D Indicator Badge */}
+          {website?.designStrategy?.threeDPreference === "yes" || website?.designStrategy?.spatial3d?.enabled || threeDPreference === "yes" ? (
+            <span
+              className="inline-flex items-center gap-1 rounded-full bg-violet-500/10 border border-violet-500/30 px-1.5 sm:px-2 py-0.5 text-[9px] sm:text-[10px] font-bold text-violet-600 dark:text-violet-400 flex-shrink-0"
+              title="Explicit 3D mode enabled"
+            >
+              <Sparkles className="h-2.5 w-2.5" />
+              <span>3D: ON</span>
+            </span>
+          ) : (
+            <span
+              className="inline-flex items-center gap-1 rounded-full bg-zinc-500/10 border border-zinc-500/20 px-1.5 sm:px-2 py-0.5 text-[9px] sm:text-[10px] font-medium text-zinc-500 dark:text-zinc-400 flex-shrink-0"
+              title="Standard clean 2D mode (3D disabled)"
+            >
+              <span>3D: OFF</span>
             </span>
           )}
 

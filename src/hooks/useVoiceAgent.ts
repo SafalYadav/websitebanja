@@ -38,13 +38,27 @@ declare global {
   }
 }
 
+export type TurnTakingState =
+  | "IDLE"
+  | "LISTENING"
+  | "USER_SPEAKING"
+  | "SILENCE_PENDING"
+  | "PROCESSING"
+  | "AI_SPEAKING"
+  | "ERROR";
+
+export const SILENCE_DURATION_MS = 2000;
+
 export type VoiceState = "idle" | "listening" | "thinking" | "speaking" | "ready" | "loading" | "error" | "unavailable";
 
 export function useVoiceAgent() {
+  const [turnTakingState, setTurnTakingState] = useState<TurnTakingState>("IDLE");
+  const turnTakingStateRef = useRef<TurnTakingState>("IDLE");
   const [voiceState, setVoiceState] = useState<VoiceState>("idle");
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isLoadingVoice, setIsLoadingVoice] = useState(false);
   const [isListening, setIsListening] = useState(false);
+  const isListeningRef = useRef<boolean>(false);
   const [isVoiceMuted, setIsVoiceMuted] = useState(false);
   const isVoiceSupported = useSyncExternalStore(
     emptySubscribe,
@@ -55,6 +69,31 @@ export function useVoiceAgent() {
   const [isLiveConnected] = useState(true);
   const [isContinuousMode, setIsContinuousMode] = useState(true);
   const [voiceLanguage, setVoiceLanguage] = useState<string>("en-IN");
+
+  // Synchronize TurnTakingState with legacy VoiceState for backward compatibility
+  const updateTurnTakingState = useCallback((nextState: TurnTakingState) => {
+    turnTakingStateRef.current = nextState;
+    setTurnTakingState(nextState);
+    switch (nextState) {
+      case "IDLE":
+        setVoiceState("idle");
+        break;
+      case "LISTENING":
+      case "USER_SPEAKING":
+      case "SILENCE_PENDING":
+        setVoiceState("listening");
+        break;
+      case "PROCESSING":
+        setVoiceState("thinking");
+        break;
+      case "AI_SPEAKING":
+        setVoiceState("speaking");
+        break;
+      case "ERROR":
+        setVoiceState("error");
+        break;
+    }
+  }, []);
 
   // Web Speech recognition refs
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
@@ -74,7 +113,6 @@ export function useVoiceAgent() {
   const onPlaybackStartCallbackRef = useRef<(() => void) | null>(null);
   const preloadedGreetingBufferRef = useRef<ArrayBuffer | null>(null);
 
-
   /**
    * Automatically mutes and stops the microphone:
    * Aborts active speech recognition, cancels silence timers, and sets isListening = false.
@@ -84,6 +122,7 @@ export function useVoiceAgent() {
       clearTimeout(silenceTimerRef.current);
       silenceTimerRef.current = null;
     }
+    isListeningRef.current = false;
     hasSubmittedRef.current = true;
     if (recognitionRef.current) {
       try {
@@ -98,7 +137,7 @@ export function useVoiceAgent() {
       recognitionRef.current = null;
     }
     setIsListening(false);
-    console.log("[VoiceTurn] 🔇 Mic automatically MUTED (Agent speaking/thinking)");
+    console.log("[VoiceTurn] 🔇 Mic automatically MUTED");
   }, []);
 
   /**
@@ -129,12 +168,13 @@ export function useVoiceAgent() {
             muteMic(); // Auto-mute mic the exact millisecond audio playback starts
             setIsSpeaking(true);
             setIsLoadingVoice(false);
-            setVoiceState("speaking");
+            updateTurnTakingState("AI_SPEAKING");
             onPlaybackStartCallbackRef.current?.();
           },
           onPlaybackEnd: () => {
             setIsSpeaking(false);
             setIsLoadingVoice(false);
+            updateTurnTakingState("IDLE");
           },
           onError: (err) => {
             console.warn("[VoiceAgent] LiveAudioStreamer warning:", err);
@@ -148,7 +188,7 @@ export function useVoiceAgent() {
     } catch (err) {
       console.warn("[VoiceAgent] AudioContext unlock warning:", err);
     }
-  }, [muteMic]);
+  }, [muteMic, updateTurnTakingState]);
 
   /**
    * Stops any currently playing audio immediately and cancels ongoing stream readers.
@@ -171,7 +211,8 @@ export function useVoiceAgent() {
 
     setIsSpeaking(false);
     setIsLoadingVoice(false);
-  }, []);
+    updateTurnTakingState("IDLE");
+  }, [updateTurnTakingState]);
 
   /**
    * Plays canonical Agent speechText by streaming real-time 24kHz PCM chunks
@@ -234,13 +275,14 @@ export function useVoiceAgent() {
       // Instant 0ms client-side playback of preloaded greeting buffer ONLY on exact match
       if (isGreeting && preloadedGreetingBufferRef.current && streamerRef.current) {
         console.log("[VoiceAgent] Instant 0ms playback of preloaded greeting buffer (exact match verified)!");
+        updateTurnTakingState("AI_SPEAKING");
         onPlaybackStartCallbackRef.current?.();
         await streamerRef.current.pushChunk(preloadedGreetingBufferRef.current);
         streamerRef.current.signalTurnComplete(() => {
           if (playId === activePlayIdRef.current) {
             setIsSpeaking(false);
             setIsLoadingVoice(false);
-            setVoiceState("idle");
+            updateTurnTakingState("IDLE");
             onPlaybackFinishedCallbackRef.current?.();
           }
         });
@@ -317,7 +359,7 @@ export function useVoiceAgent() {
               if (playId === activePlayIdRef.current) {
                 setIsSpeaking(false);
                 setIsLoadingVoice(false);
-                setVoiceState("idle");
+                updateTurnTakingState("IDLE");
                 resolvedOnEnd?.();
               }
             });
@@ -325,7 +367,7 @@ export function useVoiceAgent() {
             console.warn("[VoiceAgent] Google Voice returned zero audio bytes. Text mode active; zero browser synthesis fallback.");
             setIsSpeaking(false);
             setIsLoadingVoice(false);
-            setVoiceState("idle");
+            updateTurnTakingState("IDLE");
             resolvedOnStart?.();
             resolvedOnEnd?.();
           }
@@ -367,7 +409,7 @@ export function useVoiceAgent() {
           if (playId === activePlayIdRef.current) {
             setIsSpeaking(false);
             setIsLoadingVoice(false);
-            setVoiceState("idle");
+            updateTurnTakingState("IDLE");
             resolvedOnEnd?.();
           }
         };
@@ -376,20 +418,20 @@ export function useVoiceAgent() {
         source.start(0);
         setIsLoadingVoice(false);
         setIsSpeaking(true);
-        setVoiceState("speaking");
+        updateTurnTakingState("AI_SPEAKING");
         resolvedOnStart?.();
       } catch (err) {
         if (playId === activePlayIdRef.current) {
           console.warn("[VoiceAgent] Google Voice playback error (zero browser synthesis fallback):", err);
           setIsSpeaking(false);
           setIsLoadingVoice(false);
-          setVoiceState("idle");
+          updateTurnTakingState("IDLE");
           resolvedOnStart?.();
           resolvedOnEnd?.();
         }
       }
     },
-    [isVoiceMuted, voiceLanguage, muteMic, stopSpeaking, unlockAudio]
+    [isVoiceMuted, voiceLanguage, muteMic, stopSpeaking, unlockAudio, updateTurnTakingState]
   );
 
   const toggleMute = useCallback(() => {
@@ -404,8 +446,11 @@ export function useVoiceAgent() {
   /**
    * Speech-To-Text with turn-boundary control:
    * 1. Turns mic ON
-   * 2. When user stops speaking, turns mic OFF immediately (preventing feedback/self-capture)
-   * 3. Triggers auto-submission
+   * 2. Mandatory 2-SECOND CONTINUOUS SILENCE RULE:
+   *    - recognition.continuous = true (does NOT end on short pause)
+   *    - VAD timer resets on any speech activity (interim or final)
+   *    - Turn finishes ONLY after 2000ms of continuous silence
+   * 3. When silence timer fires, turns mic OFF and triggers auto-submission
    */
   const startListening = useCallback(
     (
@@ -418,6 +463,7 @@ export function useVoiceAgent() {
       const SpeechRecognitionClass = window.SpeechRecognition || window.webkitSpeechRecognition;
       if (!SpeechRecognitionClass) {
         setVoiceError("Voice speech recognition is not supported in your browser.");
+        updateTurnTakingState("ERROR");
         return;
       }
 
@@ -445,20 +491,18 @@ export function useVoiceAgent() {
         currentTranscriptRef.current = "";
         hasSubmittedRef.current = false;
         isCanceledRef.current = false;
+        isListeningRef.current = true;
 
-        recognition.continuous = false;
+        // Continuous recognition: prevents browser from prematurely stopping after short phrases
+        recognition.continuous = true;
         recognition.interimResults = true;
-        // Universal Indian multilingual speech recognition locale:
-        // 'en-IN' is natively supported on macOS/iOS Safari and Chrome.
-        // It recognizes all Indian accents, Hinglish, Gujarati, Tamil, Marathi, etc.
-        // without triggering Apple Speech server 'aborted' or 'service-not-allowed' errors.
         recognition.lang = voiceLanguage || "en-IN";
 
         recognition.onstart = () => {
           setIsListening(true);
-          setVoiceState("listening");
+          updateTurnTakingState("LISTENING");
           setVoiceError(null);
-          console.log(`[VoiceTurn] 🎙️ Mic automatically UNMUTED (${recognition.lang}) - User turn`);
+          console.log(`[VoiceTurn] 🎙️ Mic active (${recognition.lang}) - Listening`);
         };
 
         recognition.onresult = (event: SpeechRecognitionEvent) => {
@@ -474,41 +518,37 @@ export function useVoiceAgent() {
             currentTranscriptRef.current = clean;
             onTranscriptCallbackRef.current?.(clean);
 
-            // Reset silence VAD auto-submit timer
+            // User is actively speaking
+            updateTurnTakingState("USER_SPEAKING");
+
+            // Reset silence VAD auto-submit timer on ANY voice event
             if (silenceTimerRef.current) {
               clearTimeout(silenceTimerRef.current);
+              silenceTimerRef.current = null;
             }
 
-            const lastResult = event.results[event.results.length - 1];
-            const isFinal = Boolean(lastResult && (lastResult as any).isFinal);
-            const silenceDelay = isFinal ? 750 : 1200;
+            // Move to SILENCE_PENDING
+            updateTurnTakingState("SILENCE_PENDING");
 
+            // Mandatory 2-Second continuous silence rule
             silenceTimerRef.current = setTimeout(() => {
               if (hasSubmittedRef.current || isCanceledRef.current) return;
               const textToSubmit = currentTranscriptRef.current.trim();
               if (textToSubmit) {
                 hasSubmittedRef.current = true;
-                console.log(`[VoiceTurn] Silence detected (${silenceDelay}ms) -> Auto-submitting hands-free: "${textToSubmit}"`);
+                console.log(`[VoiceTurn] Continuous 2000ms silence detected -> Auto-submitting turn: "${textToSubmit}"`);
+                updateTurnTakingState("PROCESSING");
                 muteMic();
-                setVoiceState("thinking");
                 onFinalSubmitCallbackRef.current?.(textToSubmit);
               }
-            }, silenceDelay);
+            }, SILENCE_DURATION_MS);
           }
         };
 
         recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
-          if (silenceTimerRef.current) {
-            clearTimeout(silenceTimerRef.current);
-            silenceTimerRef.current = null;
-          }
-          setIsListening(false);
           console.warn(`[VoiceDebug] speech recognition event: ${event.error}`);
 
           // Benign / expected browser events that must NEVER show error:
-          // - 'aborted': Occurs when recognition stops, turn transitions, or old session cancels.
-          // - 'no-speech': Occurs when user pauses or doesn't speak.
-          // - 'service-not-allowed' / 'language-not-supported': Occurs on unsupported OS dictation locales.
           if (
             event.error === "aborted" ||
             event.error === "no-speech" ||
@@ -516,38 +556,53 @@ export function useVoiceAgent() {
             event.error === "language-not-supported"
           ) {
             console.log(`[VoiceDebug] Non-fatal speech event (${event.error}) handled cleanly.`);
-            setVoiceError(null);
-            setVoiceState("idle");
+            // If silence timer is running, let it complete rather than cutting off user
+            if (!silenceTimerRef.current) {
+              setVoiceError(null);
+              if (!hasSubmittedRef.current && currentTranscriptRef.current.trim() === "") {
+                updateTurnTakingState("IDLE");
+              }
+            }
             return;
           }
 
-          if (event.error === "not-allowed") {
-            setVoiceError("Microphone access was denied. Please allow mic permission in your browser.");
-            setVoiceState("error");
-          } else {
-            setVoiceError(`Voice input error: ${event.error}`);
-            setVoiceState("error");
-          }
-        };
-
-        // Turn boundary: User speech ends -> MIC OFF immediately (feedback prevention)
-        recognition.onend = () => {
           if (silenceTimerRef.current) {
             clearTimeout(silenceTimerRef.current);
             silenceTimerRef.current = null;
           }
           setIsListening(false);
-          console.log("[VoiceDebug] speech ended");
+          isListeningRef.current = false;
+
+          if (event.error === "not-allowed") {
+            setVoiceError("Microphone access was denied. Please allow mic permission in your browser.");
+            updateTurnTakingState("ERROR");
+          } else {
+            setVoiceError(`Voice input error: ${event.error}`);
+            updateTurnTakingState("ERROR");
+          }
+        };
+
+        // Turn boundary: If silenceTimerRef is still pending, do NOT abort!
+        recognition.onend = () => {
+          console.log("[VoiceDebug] speech recognition onend fired");
+          if (silenceTimerRef.current) {
+            console.log("[VoiceDebug] onend fired while silence timer is pending (preserving 2s silence rule)");
+            return;
+          }
+
+          setIsListening(false);
+          isListeningRef.current = false;
+
           const textToSubmit = currentTranscriptRef.current.trim();
           if (textToSubmit && !hasSubmittedRef.current && !isCanceledRef.current) {
             hasSubmittedRef.current = true;
+            updateTurnTakingState("PROCESSING");
             muteMic();
-            setVoiceState("thinking"); // Transition to thinking state immediately
             console.log(`[VoiceDebug] transcript submitted on speech end: "${textToSubmit}"`);
             onFinalSubmitCallbackRef.current?.(textToSubmit);
           } else if (!hasSubmittedRef.current) {
             muteMic();
-            setVoiceState("idle");
+            updateTurnTakingState("IDLE");
           }
         };
 
@@ -558,23 +613,25 @@ export function useVoiceAgent() {
           silenceTimerRef.current = null;
         }
         setIsListening(false);
+        isListeningRef.current = false;
         setVoiceError(err instanceof Error ? err.message : "Could not start microphone.");
-        setVoiceState("error");
+        updateTurnTakingState("ERROR");
       }
     },
-    [muteMic, stopSpeaking, unlockAudio]
+    [muteMic, stopSpeaking, unlockAudio, updateTurnTakingState, voiceLanguage]
   );
 
   const stopListening = useCallback(() => {
     muteMic();
-  }, [muteMic]);
+    updateTurnTakingState("IDLE");
+  }, [muteMic, updateTurnTakingState]);
 
   const cancelListening = useCallback(() => {
     muteMic();
     isCanceledRef.current = true;
     currentTranscriptRef.current = "";
-    setVoiceState("idle");
-  }, [muteMic]);
+    updateTurnTakingState("IDLE");
+  }, [muteMic, updateTurnTakingState]);
 
   // Preload canonical greeting audio buffer on mount for instant 0ms latency upon interaction
   useEffect(() => {
@@ -620,6 +677,8 @@ export function useVoiceAgent() {
   }, [muteMic, stopSpeaking]);
 
   return {
+    turnTakingState,
+    setTurnTakingState: updateTurnTakingState,
     voiceState,
     setVoiceState,
     isSpeaking,

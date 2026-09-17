@@ -1,6 +1,3 @@
-// src/lib/ai/agentProviderFactory.ts
-
-import { OpenAIProvider } from './openaiProvider';
 import { GeminiProvider } from './geminiProvider';
 import type { ModelProvider } from './provider';
 
@@ -10,10 +7,15 @@ import type { ModelProvider } from './provider';
  * Configuration is via environment variables so it does not interfere with the website generator
  * which still uses the original ProviderFactory (controlled by AI_PROVIDER if present).
  */
+/**
+ * Factory for the conversational Agent.
+ * Strict Policy: Agent systems do NOT use OpenAI.
+ * Defaults to GeminiProvider.
+ */
 export class AgentProviderFactory {
-  /** Create an instance of the primary provider (OpenAI by default). */
+  /** Create an instance of the primary provider (Gemini by default). */
   static createPrimary(): ModelProvider {
-    const primary = process.env.AGENT_PRIMARY_PROVIDER ?? 'openai';
+    const primary = process.env.AGENT_PRIMARY_PROVIDER ?? 'gemini';
     return this.createByName(primary);
   }
 
@@ -26,10 +28,11 @@ export class AgentProviderFactory {
   private static createByName(name: string): ModelProvider {
     switch (name.toLowerCase()) {
       case 'gemini':
+      default:
         return new GeminiProvider();
       case 'openai':
-      default:
-        return new OpenAIProvider();
+        console.warn('[AgentProviderFactory] OpenAI is prohibited for agent systems. Falling back to GeminiProvider.');
+        return new GeminiProvider();
     }
   }
 }

@@ -105,90 +105,20 @@ export function calculateDeterministicReadiness(needs: ExtractedUserNeeds): {
   };
 }
 
+import { detectLanguagePrecise, type SupportedLanguageCode } from "./mitraLanguageDetector";
+
 /**
- * Fast deterministic fallback detector for Indian languages and English.
- * Detects both native Indic Unicode scripts and common transliterated/phonetic phrases.
+ * Fast deterministic detector for Indian languages and English.
+ * Utilizes high-precision Marathi/Hindi grammatical signal analysis.
  */
-export function detectLanguageFast(text?: string): { code: string; name: string; nativeName: string } {
-  if (!text) {
-    return { code: "en-IN", name: "English / Hinglish", nativeName: "English / Hinglish" };
-  }
-
-  const lower = text.toLowerCase();
-
-  // Gujarati unicode or keywords (e.g. "mane cafe mate website barwani che")
-  if (
-    /[\u0A80-\u0AFF]/.test(text) ||
-    /\b(mane|tame|banvvu|banavvu|banavva|mate|che|nathi|chho|aavo|khammaghani|kem|kevu|barwani)\b/i.test(lower)
-  ) {
-    return { code: "gu-IN", name: "Gujarati", nativeName: "ગુજરાતી" };
-  }
-
-  // Hindi / Devanagari unicode or keywords (e.g. "mujhe gym ke liye website banani hai")
-  if (
-    /[\u0900-\u097F]/.test(text) ||
-    /\b(mujhe|humko|banaana|banani|chahiye|karna|hoga|kripya|namaste|shukriya|kaise|kaisa|kya|nahin)\b/i.test(lower)
-  ) {
-    return { code: "hi-IN", name: "Hindi", nativeName: "हिन्दी" };
-  }
-
-  // Marathi keywords
-  if (
-    /\b(aamhi|pahije|aahe|karaycha|aahet|kasa|kay|chhan|namaskar)\b/i.test(lower)
-  ) {
-    return { code: "mr-IN", name: "Marathi", nativeName: "मराठी" };
-  }
-
-  // Bengali unicode or keywords
-  if (
-    /[\u0980-\u09FF]/.test(text) ||
-    /\b(aami|aamader|chai|bhalo|hobe|korbo|nomoshkar)\b/i.test(lower)
-  ) {
-    return { code: "bn-IN", name: "Bengali", nativeName: "বাংলা" };
-  }
-
-  // Tamil unicode or keywords
-  if (
-    /[\u0B80-\u0BFF]/.test(text) ||
-    /\b(enakku|venum|nandri|vanakkam|pananum|thayavu|eppadi)\b/i.test(lower)
-  ) {
-    return { code: "ta-IN", name: "Tamil", nativeName: "தமிழ்" };
-  }
-
-  // Telugu unicode or keywords
-  if (
-    /[\u0C00-\u0C7F]/.test(text) ||
-    /\b(naku|kavali|namaskaram|cheyandi|ela|enti)\b/i.test(lower)
-  ) {
-    return { code: "te-IN", name: "Telugu", nativeName: "తెలుగు" };
-  }
-
-  // Kannada unicode or keywords
-  if (
-    /[\u0C80-\u0CFF]/.test(text) ||
-    /\b(nanage|beku|namaskara|hege|madabeku)\b/i.test(lower)
-  ) {
-    return { code: "kn-IN", name: "Kannada", nativeName: "ಕನ್ನಡ" };
-  }
-
-  // Malayalam unicode or keywords
-  if (
-    /[\u0D00-\u0D7F]/.test(text) ||
-    /\b(enikku|venam|namaskaram|cheyyanam|engane)\b/i.test(lower)
-  ) {
-    return { code: "ml-IN", name: "Malayalam", nativeName: "മലയാളം" };
-  }
-
-  // Punjabi unicode or keywords
-  if (
-    /[\u0A00-\u0A7F]/.test(text) ||
-    /\b(mainu|chahida|sat|sri|akal|hove|kiddan|karna)\b/i.test(lower)
-  ) {
-    return { code: "pa-IN", name: "Punjabi", nativeName: "ਪੰਜਾਬੀ" };
-  }
-
-  return { code: "en-IN", name: "English / Hinglish", nativeName: "English / Hinglish" };
+export function detectLanguageFast(
+  text?: string,
+  previousLanguageCode?: string
+): { code: string; name: string; nativeName: string } {
+  const result = detectLanguagePrecise(text, previousLanguageCode as SupportedLanguageCode | undefined);
+  return { code: result.code, name: result.name, nativeName: result.nativeName };
 }
+
 
 const RawAgentSchema = z.object({
   reply: z.string().optional(),
@@ -296,6 +226,86 @@ export function extractColorFromText(text: string): string | undefined {
   }
 
   return undefined;
+}
+
+export function extract3DPreferenceFromText(
+  userMessage: string,
+  priorPreference?: "yes" | "no"
+): "yes" | "no" {
+  if (!userMessage) return priorPreference || "no";
+  const lower = userMessage.toLowerCase();
+
+  // 1. Explicit Negation / NO Patterns (English & Hindi/Hinglish)
+  const explicitNoPatterns = [
+    /\bno\s+3d\b/i,
+    /\bwithout\s+3d\b/i,
+    /\b2d\s+only\b/i,
+    /\bflat\s+only\b/i,
+    /\bsimple\s+2d\b/i,
+    /\bkeep\s+it\s+2d\b/i,
+    /\bkeep\s+it\s+simple\b/i,
+    /\bno[,\s]+(?:keep\s+it\s+)?(?:2d|simple)\b/i,
+    /\b3d\s*(?:nahi|nhi|mat|hata|hatao|cancel|drop|nahi\s+chahiye|mat\s+rakh[oa]|mat\s+daal(?:na)?)\b/i,
+    /\b(?:nahi\s+chahiye|mat\s+rakhna|mat\s+daalo)\s+3d\b/i,
+    /\bdisable\s+3d\b/i,
+    /\bremove\s+3d\b/i,
+    /\b(?:just|purely)\s+2d\b/i,
+    /\bnormal\s+website\b/i,
+    /\blightweight\s+website\b/i,
+  ];
+
+  for (const pattern of explicitNoPatterns) {
+    if (pattern.test(lower)) {
+      return "no";
+    }
+  }
+
+  // 2. Explicit YES Patterns (English & Hindi/Hinglish)
+  const explicitYesPatterns = [
+    /\b3d\s+(?:website|animation|animat\w*|scroll\w*|hero|product|model|effect\w*|interaction\w*|experience)\b/i,
+    /\b(?:want|need|use|add|include|enable|make|with)\s+(?:a\s+)?3d\b/i,
+    /\b(?:interactive|spatial|perspective)\s+3d\b/i,
+    /\b(?:webgl|threejs|r3f|three\.js)\b/i,
+    /\b3d\s*(?:chahiye|bana(?:o|na)?|rakh(?:o|na)?|daal(?:o|na)?)\b/i,
+    /\bapple\s+(?:style|jaisi)\s+3d\b/i,
+    /\byes[,\s]+(?:use\s+)?3d\b/i,
+    /\buse\s+3d\b/i,
+    /\b3d\s+only\b/i,
+    /\b3d\s+website\b/i,
+    /\b3d\s*=\s*yes\b/i,
+  ];
+
+  for (const pattern of explicitYesPatterns) {
+    if (pattern.test(lower)) {
+      return "yes";
+    }
+  }
+
+  if (/\b(?:i\s+want\s+3d|3d\s+please|yes\s+to\s+3d)\b/i.test(lower)) {
+    return "yes";
+  }
+
+  // If user didn't mention 3D, retain prior preference if already established, else default "no"
+  return priorPreference || "no";
+}
+
+export function extractMotionPreferenceFromText(
+  userMessage: string,
+  priorPreference?: "none" | "subtle" | "high"
+): "none" | "subtle" | "high" {
+  if (!userMessage) return priorPreference || "subtle";
+  const lower = userMessage.toLowerCase();
+
+  if (/\b(no\s+animation|without\s+animation|static\s+only|disable\s+animation|no\s+motion)\b/i.test(lower)) {
+    return "none";
+  }
+  if (/\b(high\s+motion|heavy\s+animation|lots\s+of\s+animation|cinematic|interactive\s+motion)\b/i.test(lower)) {
+    return "high";
+  }
+  if (/\b(subtle\s+animation|smooth\s+animation|minimal\s+animation|gentle\s+animation)\b/i.test(lower)) {
+    return "subtle";
+  }
+  return priorPreference || "subtle";
 }
 
 export function extractFeaturesWithModifications(
@@ -443,10 +453,16 @@ export function normalizeAgentResponse(
 
   // Merge canonical facts: prior needs + fast extracted + model extracted
   const mergedNeeds: ExtractedUserNeeds = {
-    businessName:
-      (typeof rawExtracted.businessName === "string" && rawExtracted.businessName.trim()) ||
-      priorNeeds.businessName ||
-      (fastExtracted.businessName !== "My Business" ? fastExtracted.businessName : undefined),
+    businessName: (() => {
+      if (typeof rawExtracted.businessName === "string" && rawExtracted.businessName.trim()) {
+        return rawExtracted.businessName.trim();
+      }
+      const hasExplicitNameInMsg = /(?:called|named|known\s+as|(?:the\s+)?name\s+is|it\'?s\s+called)\s+([A-Za-z0-9\s'&]{3,30})/i.test(userMessage);
+      if (hasExplicitNameInMsg && fastExtracted.businessName && !fastExtracted.businessName.startsWith("Prime ") && fastExtracted.businessName !== "Apex Studio") {
+        return fastExtracted.businessName;
+      }
+      return priorNeeds.businessName || (fastExtracted.businessName !== "My Business" ? fastExtracted.businessName : undefined);
+    })(),
     category: normalizeCategory(
       (typeof rawExtracted.category === "string" && rawExtracted.category.trim()) ||
       (typeof rawExtracted.businessType === "string" && rawExtracted.businessType.trim()) ||
@@ -520,6 +536,31 @@ export function normalizeAgentResponse(
       (typeof rawExtracted.location === "string" && rawExtracted.location.trim()) ||
       priorNeeds.location ||
       fastExtracted.location,
+    threeDPreference: (() => {
+      // Deterministic 3D extraction:
+      // Current explicit message override > rawExtracted from LLM > priorNeeds > default "no"
+      const currentExplicit = extract3DPreferenceFromText(userMessage, undefined);
+      // If user's current message has explicit 3D request or negation, that MUST take precedence!
+      const hasExplicitInMsg = /\b(?:3d|spatial|perspective|webgl|threejs|r3f|2d\s+only|flat\s+only|no\s+3d|simple\s+2d|keep\s+it\s+2d)\b/i.test(userMessage) ||
+        /\b(?:3d\s*(?:nahi|nhi|mat|hata|hatao|cancel|drop|chahiye|banana|banao))\b/i.test(userMessage);
+      if (hasExplicitInMsg) {
+        return currentExplicit;
+      }
+      if (typeof rawExtracted.threeDPreference === "string") {
+        const val = rawExtracted.threeDPreference.toLowerCase();
+        if (val === "yes" || val === "no") return val as "yes" | "no";
+      }
+      return priorNeeds.threeDPreference || "no";
+    })(),
+    motionPreference: (() => {
+      const explicitMotion = extractMotionPreferenceFromText(userMessage, undefined);
+      if (explicitMotion && explicitMotion !== "subtle") return explicitMotion;
+      if (typeof rawExtracted.motionPreference === "string") {
+        const val = rawExtracted.motionPreference.toLowerCase();
+        if (val === "none" || val === "subtle" || val === "high") return val as "none" | "subtle" | "high";
+      }
+      return priorNeeds.motionPreference || "subtle";
+    })(),
   };
 
   // 4. Calculate deterministic readiness from Project Knowledge
@@ -539,32 +580,7 @@ export function normalizeAgentResponse(
       // Leave as is if not parseable
     }
   }
-  if (!cleanReply) {
-    if (mergedNeeds.businessName) {
-      cleanReply = `That sounds wonderful! Let's build out the perfect digital presence for ${mergedNeeds.businessName}. What key offerings or services should we highlight?`;
-    } else {
-      cleanReply = "I'd love to help design your website! What is your business name and what type of services do you offer?";
-    }
-  }
-
-  // 6. Canonical Speech: Single Source of Truth for both visible UI text and spoken audio
-  const canonicalSpeech = cleanSpeechText(cleanReply);
-
-  // 7. Filter suggested replies, with robust defaults if model produces none
-  const parsedReplies = Array.isArray(parsed.suggestedReplies)
-    ? parsed.suggestedReplies.filter((r): r is string => typeof r === "string" && r.trim().length > 0).slice(0, 4)
-    : [];
-  const defaultSuggestions = [
-    "Tell me about your services",
-    "Choose brand colors",
-    "Add contact & WhatsApp",
-    "Generate my website",
-  ];
-  const suggestedReplies = parsedReplies.length > 0 ? parsedReplies : defaultSuggestions;
-
-  const shouldTriggerImmediateBuild = Boolean(parsed.triggerImmediateBuild) || wantsToBuild;
-  const isReady = readiness.isReadyToBuild || shouldTriggerImmediateBuild;
-
+  // 6. Language detection early so fallback text respects user's language
   const fallbackLang = detectLanguageFast(userMessage || cleanReply);
   const detectedLanguage = parsed.detectedLanguage?.name
     ? {
@@ -573,6 +589,68 @@ export function normalizeAgentResponse(
         nativeName: parsed.detectedLanguage.nativeName || parsed.detectedLanguage.name,
       }
     : fallbackLang;
+
+  if (!cleanReply) {
+    const langCode = detectedLanguage.code;
+    if (langCode === "mr") {
+      if (mergedNeeds.businessName) {
+        cleanReply = `खूप छान! चला ${mergedNeeds.businessName} साठी एक सुंदर वेबसाईट तयार करूया. आपल्या व्यवसायाची प्रमुख वैशिष्ट्ये किंवा सेवा कोणती आहेत?`;
+      } else {
+        cleanReply = "नमस्कार! मी मित्रा आहे. तुमच्या व्यवसायासाठी वेबसाईट बनवायला मला आनंद होईल. तुमच्या व्यवसायाचे नाव काय आहे?";
+      }
+    } else if (langCode === "hi") {
+      if (mergedNeeds.businessName) {
+        cleanReply = `बहुत बढ़िया! चलिए ${mergedNeeds.businessName} के लिए एक शानदार वेबसाइट बनाते हैं। आपके व्यवसाय की मुख्य सेवाएं या उत्पाद क्या हैं?`;
+      } else {
+        cleanReply = "नमस्ते! मैं मित्रा हूँ। आपकी वेबसाइट बनाने में मुझे बहुत खुशी होगी। आपके बिजनेस का क्या नाम है?";
+      }
+    } else if (langCode === "gu") {
+      if (mergedNeeds.businessName) {
+        cleanReply = `ખૂબ સરસ! ચાલો ${mergedNeeds.businessName} માટે એક સરસ વેબસાઇટ બનાવીએ. તમારા વ્યવસાયની મુખ્ય સેવાઓ કઈ છે?`;
+      } else {
+        cleanReply = "નમસ્તે! હું મિત્રા છું. તમારા વ્યવસાય માટે વેબસાઇટ બનાવવામાં મને આનંદ થશે. તમારા વ્યવસાયનું નામ શું છે?";
+      }
+    } else {
+      if (mergedNeeds.businessName) {
+        cleanReply = `That sounds wonderful! Let's build out the perfect digital presence for ${mergedNeeds.businessName}. What key offerings or services should we highlight?`;
+      } else {
+        cleanReply = "I'd love to help design your website! What is your business name and what type of services do you offer?";
+      }
+    }
+  }
+
+  // 7. Canonical Speech: Single Source of Truth for both visible UI text and spoken audio
+  const canonicalSpeech = cleanSpeechText(cleanReply);
+
+  // 8. Filter suggested replies, with robust localized defaults if model produces none
+  const parsedReplies = Array.isArray(parsed.suggestedReplies)
+    ? parsed.suggestedReplies.filter((r): r is string => typeof r === "string" && r.trim().length > 0).slice(0, 4)
+    : [];
+  let defaultSuggestions = [
+    "Tell me about your services",
+    "Choose brand colors",
+    "Add contact & WhatsApp",
+    "Generate my website",
+  ];
+  if (detectedLanguage.code === "mr") {
+    defaultSuggestions = [
+      "आमच्या सेवांबद्दल सांगा",
+      "ब्रँड रंग निवडा",
+      "संपर्क आणि व्हॉट्सॲप जोडा",
+      "माझी वेबसाईट बनवा",
+    ];
+  } else if (detectedLanguage.code === "hi") {
+    defaultSuggestions = [
+      "सेवाओं के बारे में बताएं",
+      "ब्रांड कलर्स चुनें",
+      "कांटेक्ट और व्हाट्सएप जोड़ें",
+      "मेरी वेबसाइट बनाएं",
+    ];
+  }
+  const suggestedReplies = parsedReplies.length > 0 ? parsedReplies : defaultSuggestions;
+
+  const shouldTriggerImmediateBuild = Boolean(parsed.triggerImmediateBuild) || wantsToBuild;
+  const isReady = readiness.isReadyToBuild || shouldTriggerImmediateBuild;
 
   return {
     reply: canonicalSpeech,
@@ -586,3 +664,21 @@ export function normalizeAgentResponse(
     detectedLanguage,
   };
 }
+
+/**
+ * Convenience helper to merge prior needs, incoming needs, and latest user message
+ * with strict deterministic precedence.
+ */
+export function mergeAgentExtractedNeeds(
+  priorNeeds: ExtractedUserNeeds = {},
+  incomingNeeds: ExtractedUserNeeds = {},
+  userMessage: string = ""
+): ExtractedUserNeeds {
+  const simulatedJson = JSON.stringify({
+    reply: "OK",
+    extractedNeeds: incomingNeeds,
+  });
+  const normalized = normalizeAgentResponse(simulatedJson, priorNeeds, userMessage);
+  return normalized.extractedNeeds;
+}
+

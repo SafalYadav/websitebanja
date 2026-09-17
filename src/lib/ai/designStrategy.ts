@@ -18,15 +18,25 @@
 
 import type {
   BackgroundStyleConfig,
+  BackgroundType,
   DesignStrategyData,
   ImageIntentConfig,
   Spatial3dConfig,
   CardFamily,
+  CardColorTreatment,
+  CardFamilyStrategyConfig,
   SkillExecutionPlan,
   SkillExecutionSectionPlan,
   HeroBackgroundConfig,
+  FeaturesLayoutStrategyConfig,
+  FeaturesLayoutVariant,
+  FeaturesCardGeometry,
+  FeaturesAnimationStrategy,
+  FeaturesIconTreatment,
 } from "@/types/website";
 import { getHeroAtmosphereImage } from "@/lib/categoryImages";
+import { resolveCardColorTreatment } from "@/lib/cardStyles";
+import { resolveSemanticImage } from "@/lib/images/semanticImageSourcing";
 
 export interface StrategyInputContext {
   category?: string;
@@ -38,7 +48,21 @@ export interface StrategyInputContext {
   secondaryColor?: string;
   prompt?: string;
   requirements?: string;
+  seed?: string | number;
   requestedFeatures?: string[];
+  avoidPatterns?: string[];
+  recentFingerprints?: any[];
+  threeDPreference?: "yes" | "no";
+  motionPreference?: "none" | "subtle" | "high";
+}
+
+function stringToSeed(str: string): number {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = (hash << 5) - hash + str.charCodeAt(i);
+    hash |= 0;
+  }
+  return Math.abs(hash);
 }
 
 export type VisualArchetype =
@@ -55,6 +79,7 @@ export interface ComputedDesignStrategy extends DesignStrategyData {
   sectionSequence: string[];
   imageIntents: Record<string, ImageIntentConfig>;
   skillExecutionPlan: SkillExecutionPlan;
+  cardFamilyStrategy: CardFamilyStrategyConfig;
   typographyTokens: {
     headingFont: string;
     bodyFont: string;
@@ -137,7 +162,32 @@ export function deriveVisualArchetype(context: StrategyInputContext): VisualArch
     combined.includes("culinary") ||
     combined.includes("food")
   ) {
-    return "warm_artisanal";
+    const avoidList = (Array.isArray(context.avoidPatterns) ? context.avoidPatterns : []).map((p) => p.toLowerCase());
+    const recentArchetypes = (Array.isArray(context.recentFingerprints) ? context.recentFingerprints : []).map(
+      (fp: any) => String(fp.visualArchetype || "").toLowerCase()
+    );
+
+    const candidates: VisualArchetype[] = [
+      "warm_artisanal",
+      "minimal_editorial",
+      "luxury_bespoke",
+      "expressive_creative",
+      "bold_brutalist",
+    ];
+
+    const seedNum = typeof context.seed === "number"
+      ? Math.abs(context.seed)
+      : (context.seed ? Math.abs(stringToSeed(String(context.seed))) : 0);
+
+    const uncollided = candidates.filter(
+      (c) => !avoidList.some((a) => a.includes(c)) && !recentArchetypes.includes(c)
+    );
+
+    if (uncollided.length > 0) {
+      return uncollided[seedNum % uncollided.length];
+    }
+
+    return candidates[seedNum % candidates.length];
   }
 
   if (
@@ -376,13 +426,42 @@ export function deriveSectionSequence(archetype: VisualArchetype, context: Strat
   }
 
   if (!sequence.includes("footer")) sequence.push("footer");
+
+  // Anti-Repetition: safely vary interior section order if collision detected
+  const avoidList = (Array.isArray(context.avoidPatterns) ? context.avoidPatterns : []).map((p) => p.toLowerCase());
+  const hasSequenceCollision =
+    avoidList.some((p) => p.includes("section_order") || p.includes("order") || p.includes("reorder")) ||
+    (Array.isArray(context.recentFingerprints) ? context.recentFingerprints : []).some(
+      (fp: any) => Array.isArray(fp.sectionOrder) && JSON.stringify(fp.sectionOrder) === JSON.stringify(sequence)
+    );
+
+  if (hasSequenceCollision && sequence.length >= 5) {
+    // Preserve hero as first and contact/footer as last, swap/rotate interior sections
+    const interior = sequence.slice(1, -2);
+    if (interior.length >= 2) {
+      const swapped = [interior[1], interior[0], ...interior.slice(2)];
+      sequence = [sequence[0], ...swapped, sequence[sequence.length - 2], sequence[sequence.length - 1]];
+    }
+  }
+
   return sequence;
 }
 
 /**
  * Computes Spatial 3D eligibility according to category, brand goals, and device constraints.
+ * 3D IS NOT THE DEFAULT. 3D/WebGL/R3F MUST NEVER be automatically added without explicit user consent.
  */
 export function deriveSpatial3dConfig(archetype: VisualArchetype, context: StrategyInputContext): Spatial3dConfig {
+  // 1. Explicit NO preference has absolute priority
+  if (context.threeDPreference === "no") {
+    return {
+      enabled: false,
+      level: "NONE",
+      targetSection: "hero",
+      mobileFallback: "flat",
+    };
+  }
+
   const combined = [
     context.category || "",
     context.prompt || "",
@@ -395,10 +474,12 @@ export function deriveSpatial3dConfig(archetype: VisualArchetype, context: Strat
       combined
     );
 
-  const hasExplicit3DRequest =
-    /\b(3d|spatial|perspective|tilt|depth|interactive\s+hero|parallax|floating\s+cards)\b/i.test(combined);
+  const hasExplicitNo3D =
+    /\b(no\s+3d|without\s+3d|2d\s+only|simple\s+2d|normal\s+website|flat\s+website|3d\s+nahi|no\s+webgl)\b/i.test(
+      combined
+    );
 
-  if (hasExplicitNoAnimation) {
+  if (hasExplicitNoAnimation || hasExplicitNo3D) {
     return {
       enabled: false,
       level: "NONE",
@@ -407,110 +488,259 @@ export function deriveSpatial3dConfig(archetype: VisualArchetype, context: Strat
     };
   }
 
-  if (hasExplicit3DRequest) {
+  // 2. Explicit 3D request check
+  const hasExplicit3DRequest =
+    context.threeDPreference === "yes" ||
+    /\b(3d\s*(?:website|model|models|canvas|animation|animations|effect|effects|scroll|scene|hero|product\s+viewer|view)|three\.?js|webgl|r3f|react\s+three\s+fiber|spline|spatial\s+3d|3d\s+chahiye)\b/i.test(
+      combined
+    );
+
+  // 3. 3D IS NOT THE DEFAULT: Return NONE for all archetypes unless explicitly requested
+  if (!hasExplicit3DRequest) {
     return {
-      enabled: true,
-      level: "ADVANCED_CSS_3D",
+      enabled: false,
+      level: "NONE",
       targetSection: "hero",
-      perspective: 1200,
-      tiltMaxDeg: 12,
-      zSeparationPx: 32,
-      mobileFallback: "2.5d",
+      mobileFallback: "flat",
     };
   }
 
-  switch (archetype) {
-    case "dark_technical": // SaaS / AI
-    case "expressive_creative": // Creative Agency
-    case "minimal_editorial": // Architecture
-      return {
-        enabled: true,
-        level: "ADVANCED_CSS_3D",
-        targetSection: "hero",
-        perspective: 1200,
-        tiltMaxDeg: 10,
-        zSeparationPx: 24,
-        mobileFallback: "2.5d",
-      };
-
-    case "luxury_bespoke": // Luxury DTC
-      return {
-        enabled: true,
-        level: "SUBTLE_2_5D",
-        targetSection: "hero",
-        perspective: 1400,
-        tiltMaxDeg: 5,
-        zSeparationPx: 12,
-        mobileFallback: "flat",
-      };
-
-    case "clean_clinical": // Dental / Healthcare
-    case "high_trust_service": // Trades / Plumbing
-    case "warm_artisanal": // Restaurant / Cafe
-    default:
-      return {
-        enabled: false,
-        level: "NONE",
-        targetSection: "hero",
-        mobileFallback: "flat",
-      };
-  }
+  // 4. Explicit 3D requested: configure spatial depth
+  return {
+    enabled: true,
+    level: "ADVANCED_CSS_3D",
+    targetSection: "hero",
+    perspective: 1200,
+    tiltMaxDeg: 12,
+    zSeparationPx: 32,
+    mobileFallback: "2.5d",
+  };
 }
 
 /**
- * Computes Background Strategy (Textures, dot-grids, technical grids, noise, tonal fields, warm glow, clinical calm, luxury noir).
+ * Computes Background Strategy (Textures, dot-grids, technical grids, noise, tonal fields, warm glow, clinical calm, luxury noir, mesh gradient, paper texture, organic warmth, architectural plane, cinematic dark, layered fields, spatial depth mesh).
+ * 
+ * Rules:
+ * 1. User Prompt Overrides ALWAYS Win ("minimal white" -> solid #FFF; "dark cinematic" -> cinematic_dark; "nature/organic" -> organic_warmth).
+ * 2. If 3D is ON, select spatial depth backdrops (e.g. spatial_depth_mesh).
+ * 3. Dynamic Archetype Candidates with Anti-Repetition Rotation (never repeat the exact same backdrop across successive runs of the same business).
  */
-export function deriveBackgroundStrategy(archetype: VisualArchetype, isDark: boolean): BackgroundStyleConfig {
-  switch (archetype) {
-    case "warm_artisanal": // Cafe, Restaurant, Bakery
+export function deriveBackgroundStrategy(
+  archetype: VisualArchetype,
+  isDark: boolean,
+  context?: StrategyInputContext,
+  spatial3d?: Spatial3dConfig
+): BackgroundStyleConfig {
+  const prompt = [
+    context?.prompt || "",
+    context?.requirements || "",
+    context?.style || "",
+    context?.description || "",
+  ]
+    .join(" ")
+    .toLowerCase();
+
+  // 1. Explicit user prompt overrides ALWAYS take absolute precedence
+  if (
+    prompt.includes("minimal white") ||
+    prompt.includes("clean white") ||
+    prompt.includes("pure white") ||
+    prompt.includes("crisp white") ||
+    prompt.includes("clean whitespace")
+  ) {
+    return {
+      type: "solid",
+      color: "#FFFFFF",
+      patternOpacity: 0,
+    };
+  }
+
+  if (prompt.includes("dark cinematic") || prompt.includes("cinematic dark") || prompt.includes("midnight noir")) {
+    return {
+      type: "cinematic_dark",
+      color: "#070A0F",
+      accentColor: "rgba(56, 189, 248, 0.12)",
+      patternOpacity: 0.2,
+    };
+  }
+
+  if (prompt.includes("nature") || prompt.includes("organic warmth") || prompt.includes("terracotta") || prompt.includes("earthy")) {
+    return {
+      type: "organic_warmth",
+      color: isDark ? "#140E0A" : "#FDFBF7",
+      accentColor: "rgba(217, 119, 6, 0.12)",
+      patternOpacity: 0.16,
+    };
+  }
+
+  if (prompt.includes("paper") || prompt.includes("craft") || prompt.includes("textured paper") || prompt.includes("print magazine")) {
+    return {
+      type: "paper_texture",
+      color: isDark ? "#121214" : "#FAF8F5",
+      accentColor: "rgba(120, 53, 15, 0.08)",
+      patternOpacity: 0.14,
+    };
+  }
+
+  if (prompt.includes("architectural") || prompt.includes("geometry") || prompt.includes("concrete")) {
+    return {
+      type: "architectural_plane",
+      color: isDark ? "#0F0F12" : "#F8F8FA",
+      accentColor: "rgba(99, 102, 241, 0.08)",
+      patternOpacity: 0.15,
+    };
+  }
+
+  if (prompt.includes("mesh gradient") || prompt.includes("aurora") || prompt.includes("ambient glow")) {
+    return {
+      type: "mesh_gradient",
+      color: isDark ? "#0A0D14" : "#F8FAFC",
+      accentColor: isDark ? "rgba(99, 102, 241, 0.20)" : "rgba(56, 189, 248, 0.18)",
+      patternOpacity: 0.22,
+    };
+  }
+
+  if (prompt.includes("tech grid") || prompt.includes("matrix") || prompt.includes("cyber") || prompt.includes("terminal")) {
+    return {
+      type: "tech_grid",
+      color: isDark ? "#080C14" : "#0F172A",
+      accentColor: "rgba(56, 189, 248, 0.10)",
+      patternOpacity: 0.15,
+    };
+  }
+
+  // 2. Spatial 3D Enabled Specifics
+  if (spatial3d?.enabled) {
+    return {
+      type: "spatial_depth_mesh",
+      color: isDark ? "#05070B" : "#F4F6FB",
+      accentColor: isDark ? "rgba(56, 189, 248, 0.18)" : "rgba(79, 70, 229, 0.12)",
+      patternOpacity: 0.25,
+    };
+  }
+
+  // 3. Dynamic Archetype Candidates with Anti-Repetition Rotation
+  const seedNum = typeof context?.seed === "number"
+    ? Math.abs(context.seed)
+    : (context?.seed ? Math.abs(stringToSeed(String(context.seed))) : 0);
+
+  const avoidList = (Array.isArray(context?.avoidPatterns) ? context.avoidPatterns : []).map((p) => p.toLowerCase());
+  const recentBgTypes = (Array.isArray(context?.recentFingerprints) ? context.recentFingerprints : []).map(
+    (fp: any) => String(fp.backgroundType || fp.backgroundStrategy?.type || "").toLowerCase()
+  );
+
+  const archetypeBgCandidates: Record<VisualArchetype, BackgroundType[]> = {
+    warm_artisanal: ["organic_warmth", "warm_glow", "paper_texture", "layered_fields", "mesh_gradient", "subtle_grain"],
+    clean_clinical: ["clinical_calm", "solid", "subtle_grain", "layered_fields", "mesh_gradient"],
+    luxury_bespoke: [isDark ? "luxury_noir" : "editorial_whitespace", "architectural_plane", "layered_fields", "mesh_gradient", "paper_texture"],
+    dark_technical: ["tech_grid", "cinematic_dark", "mesh_gradient", "noise", "layered_fields"],
+    minimal_editorial: ["editorial_whitespace", "paper_texture", "architectural_plane", "solid", "subtle_grain"],
+    bold_brutalist: ["dot_grid", "layered_fields", "solid", "tech_grid", "mesh_gradient"],
+    expressive_creative: ["mesh_gradient", "layered_fields", "dot_grid", "cinematic_dark", "noise"],
+    high_trust_service: ["solid", "subtle_grain", "layered_fields", "warm_glow"],
+  };
+
+  const pool = archetypeBgCandidates[archetype] || ["solid", "layered_fields", "mesh_gradient"];
+  const uncollided = pool.filter(
+    (bg) => !avoidList.some((a) => a.includes(bg.toLowerCase())) && !recentBgTypes.includes(bg.toLowerCase())
+  );
+
+  const chosenType = uncollided.length > 0
+    ? uncollided[seedNum % uncollided.length]
+    : pool[seedNum % pool.length];
+
+  switch (chosenType) {
+    case "organic_warmth":
+      return {
+        type: "organic_warmth",
+        color: isDark ? "#140E0A" : "#FDFBF7",
+        accentColor: "rgba(217, 119, 6, 0.12)",
+        patternOpacity: 0.15,
+      };
+    case "warm_glow":
       return {
         type: "warm_glow",
         color: isDark ? "#140E0A" : "#FBF7F0",
         accentColor: "rgba(217, 119, 6, 0.12)",
         patternOpacity: 0.15,
       };
-
-    case "clean_clinical": // Dental, Medical Clinic
+    case "paper_texture":
       return {
-        type: "clinical_calm",
-        color: isDark ? "#0A131F" : "#F8FAFC",
-        accentColor: "rgba(2, 132, 199, 0.08)",
-        patternOpacity: 0.06,
+        type: "paper_texture",
+        color: isDark ? "#121214" : "#FAF8F5",
+        accentColor: "rgba(120, 53, 15, 0.08)",
+        patternOpacity: 0.12,
       };
-
-    case "luxury_bespoke": // Luxury Fashion, High-End DTC
+    case "mesh_gradient":
       return {
-        type: isDark ? "luxury_noir" : "editorial_whitespace",
-        color: isDark ? "#0B0A09" : "#FAF9F6",
-        accentColor: "rgba(212, 175, 55, 0.08)",
-        patternOpacity: 0.05,
+        type: "mesh_gradient",
+        color: isDark ? "#090D16" : "#F8FAFC",
+        accentColor: isDark ? "rgba(99, 102, 241, 0.20)" : "rgba(217, 119, 6, 0.14)",
+        patternOpacity: 0.20,
       };
-
-    case "dark_technical": // SaaS, AI Platform
+    case "cinematic_dark":
+      return {
+        type: "cinematic_dark",
+        color: "#070A0F",
+        accentColor: "rgba(56, 189, 248, 0.12)",
+        patternOpacity: 0.18,
+      };
+    case "architectural_plane":
+      return {
+        type: "architectural_plane",
+        color: isDark ? "#0F0F12" : "#F8F8FA",
+        accentColor: "rgba(99, 102, 241, 0.08)",
+        patternOpacity: 0.12,
+      };
+    case "layered_fields":
+      return {
+        type: "layered_fields",
+        color: isDark ? "#0D111A" : "#FAFBFD",
+        accentColor: isDark ? "rgba(56, 189, 248, 0.10)" : "rgba(217, 119, 6, 0.08)",
+        patternOpacity: 0.14,
+      };
+    case "tech_grid":
       return {
         type: "tech_grid",
         color: isDark ? "#080C14" : "#0F172A",
         accentColor: "rgba(56, 189, 248, 0.08)",
         patternOpacity: 0.14,
       };
-
-    case "minimal_editorial": // Architecture, Fine Art
+    case "clinical_calm":
+      return {
+        type: "clinical_calm",
+        color: isDark ? "#0A131F" : "#F8FAFC",
+        accentColor: "rgba(2, 132, 199, 0.08)",
+        patternOpacity: 0.06,
+      };
+    case "luxury_noir":
+      return {
+        type: "luxury_noir",
+        color: "#0B0A09",
+        accentColor: "rgba(212, 175, 55, 0.08)",
+        patternOpacity: 0.05,
+      };
+    case "editorial_whitespace":
       return {
         type: "editorial_whitespace",
         color: isDark ? "#101012" : "#FDFCFA",
         patternOpacity: 0,
       };
-
-    case "expressive_creative": // Creative Agency, Studio
-    case "bold_brutalist":
+    case "dot_grid":
       return {
         type: "dot_grid",
         color: isDark ? "#0D0D11" : "#F8F8FA",
         accentColor: "rgba(168, 85, 247, 0.12)",
         patternOpacity: 0.15,
       };
-
-    case "high_trust_service": // Trades, Plumber, Electrician
+    case "subtle_grain":
+      return {
+        type: "subtle_grain",
+        color: isDark ? "#121316" : "#FBFBFC",
+        accentColor: "rgba(0, 0, 0, 0.05)",
+        patternOpacity: 0.08,
+      };
+    case "solid":
     default:
       return {
         type: "solid",
@@ -518,6 +748,370 @@ export function deriveBackgroundStrategy(archetype: VisualArchetype, isDark: boo
         patternOpacity: 0.03,
       };
   }
+}
+
+/**
+ * Derives coordinated Card Family strategy with anti-repetition avoidance and intra-page specialization.
+ * Ensures the website does NOT reuse a single monolithic card pattern for every section.
+ */
+export function deriveCardFamilyStrategy(
+  archetype: VisualArchetype,
+  context: StrategyInputContext,
+  primaryColor: string,
+  secondaryColor: string,
+  isDark: boolean,
+  colorOverrides?: {
+    accentColor?: string;
+    surfaceColor?: string;
+    borderColor?: string;
+    textColor?: string;
+  }
+): CardFamilyStrategyConfig {
+  const seedNum = typeof context.seed === "number"
+    ? Math.abs(context.seed)
+    : (context.seed ? Math.abs(stringToSeed(String(context.seed))) : 0);
+
+  const avoidList = (Array.isArray(context.avoidPatterns) ? context.avoidPatterns : []).map((p) => p.toLowerCase());
+  const recentCards = (Array.isArray(context.recentFingerprints) ? context.recentFingerprints : []).map(
+    (fp: any) => String(fp.cardFamily || fp.primaryCardFamily || fp.cardStyle || "").toLowerCase()
+  );
+
+  // Diverse pools of primary card families per visual archetype
+  const familyPools: Record<VisualArchetype, CardFamily[]> = {
+    warm_artisanal: ["organic", "elevated", "bordered", "asymmetric", "soft-surface", "editorial"],
+    clean_clinical: ["minimal-flat", "bordered", "soft-surface", "elevated", "technical"],
+    luxury_bespoke: ["luxury", "editorial", "image-led", "glass-layered", "asymmetric"],
+    dark_technical: ["technical", "glass-layered", "bento", "oversized-typography", "bordered"],
+    minimal_editorial: ["editorial", "minimal-flat", "bordered", "asymmetric", "oversized-typography"],
+    bold_brutalist: ["brutalist", "bordered", "oversized-typography", "minimal-flat"],
+    expressive_creative: ["asymmetric", "brutalist", "image-led", "glass-layered", "oversized-typography"],
+    high_trust_service: ["elevated", "bordered", "minimal-flat", "soft-surface"],
+  };
+
+  const pool = familyPools[archetype] || ["elevated", "bordered", "minimal-flat"];
+
+  // Anti-repetition: avoid recently used card families
+  const uncollided = pool.filter(
+    (f) => !avoidList.some((a) => a.includes(f.toLowerCase())) && !recentCards.includes(f.toLowerCase())
+  );
+
+  const primaryCardFamily: CardFamily = uncollided.length > 0
+    ? uncollided[seedNum % uncollided.length]
+    : pool[seedNum % pool.length];
+
+  // Intra-page specialization:
+  // Services: media-rich, image-led, horizontal, luxury, or organic
+  const servicesCandidates: CardFamily[] = [
+    "image-led",
+    "horizontal-media",
+    "elevated",
+    "luxury",
+    "organic",
+    "soft-surface",
+  ];
+  const filteredServices = servicesCandidates.filter((c) => c !== primaryCardFamily);
+  const servicesCardFamily = filteredServices[seedNum % filteredServices.length] || "image-led";
+
+  // Features: technical, minimal, bordered, brutalist, or bento
+  const featuresCandidates: CardFamily[] = [
+    "minimal-flat",
+    "bordered",
+    "bento",
+    "technical",
+    "brutalist",
+    "soft-surface",
+  ];
+  const filteredFeatures = featuresCandidates.filter((c) => c !== primaryCardFamily && c !== servicesCardFamily);
+  const featuresCardFamily = filteredFeatures[(seedNum + 1) % filteredFeatures.length] || "bordered";
+
+  // Reviews: editorial quote, testimonial stack, soft-surface, or asymmetric
+  const reviewsCandidates: CardFamily[] = [
+    "editorial",
+    "testimonial-stack",
+    "soft-surface",
+    "asymmetric",
+    "stacked",
+  ];
+  const filteredReviews = reviewsCandidates.filter((c) => c !== primaryCardFamily && c !== servicesCardFamily && c !== featuresCardFamily);
+  const reviewsCardFamily = filteredReviews[(seedNum + 2) % filteredReviews.length] || "editorial";
+
+  const cardTreatment = resolveCardColorTreatment({
+    archetype,
+    cardFamily: primaryCardFamily,
+    primaryColor,
+    secondaryColor,
+    accentColor: colorOverrides?.accentColor,
+    surfaceColor: colorOverrides?.surfaceColor,
+    borderColor: colorOverrides?.borderColor,
+    textColor: colorOverrides?.textColor,
+    isDark,
+  });
+
+  return {
+    primaryCardFamily,
+    servicesCardFamily,
+    featuresCardFamily,
+    reviewsCardFamily,
+    cardTreatment,
+  };
+}
+
+/**
+ * Derives a rich, dedicated layout and presentation strategy for the Features / "Why Choose Us" section.
+ * Enforces at least 8 distinct layout archetypes, dynamic card geometries, animation systems,
+ * and contextual non-telemetry metric badges.
+ */
+export function deriveFeaturesLayoutStrategy(
+  archetype: VisualArchetype,
+  category: string | undefined,
+  context: StrategyInputContext,
+  isDark: boolean,
+  spatial3d: Spatial3dConfig,
+  seedNum: number,
+  recentFingerprints?: string[]
+): FeaturesLayoutStrategyConfig {
+  const cat = (category || "").toLowerCase();
+
+  // 1. Determine candidate layout variants tailored to industry & visual archetype
+  let candidates: FeaturesLayoutVariant[] = [];
+  if (
+    cat.includes("restaurant") ||
+    cat.includes("cafe") ||
+    cat.includes("coffee") ||
+    cat.includes("dining") ||
+    cat.includes("bistro") ||
+    cat.includes("bakery") ||
+    archetype === "warm_artisanal"
+  ) {
+    candidates = [
+      "horizontal-story",
+      "feature-timeline",
+      "image-led-features",
+      "asymmetric-editorial",
+      "three-column-grid",
+      "oversized-typographic",
+    ];
+  } else if (
+    archetype === "luxury_bespoke" ||
+    cat.includes("couture") ||
+    cat.includes("fashion") ||
+    cat.includes("jewelry") ||
+    cat.includes("hotel")
+  ) {
+    candidates = [
+      "editorial-split",
+      "image-led-features",
+      "asymmetric-editorial",
+      "horizontal-story",
+      "three-column-grid",
+    ];
+  } else if (
+    archetype === "dark_technical" ||
+    cat.includes("saas") ||
+    cat.includes("software") ||
+    cat.includes("tech") ||
+    cat.includes("ai")
+  ) {
+    candidates = [
+      "bento-features",
+      "three-column-grid",
+      "oversized-typographic",
+      "asymmetric-editorial",
+      "feature-timeline",
+    ];
+  } else if (
+    archetype === "minimal_editorial" ||
+    cat.includes("architect") ||
+    cat.includes("interior") ||
+    cat.includes("design")
+  ) {
+    candidates = [
+      "oversized-typographic",
+      "editorial-split",
+      "three-column-grid",
+      "horizontal-story",
+      "asymmetric-editorial",
+    ];
+  } else if (
+    archetype === "bold_brutalist" ||
+    cat.includes("gym") ||
+    cat.includes("fitness") ||
+    cat.includes("crossfit")
+  ) {
+    candidates = [
+      "oversized-typographic",
+      "asymmetric-editorial",
+      "three-column-grid",
+      "bento-features",
+      "horizontal-story",
+    ];
+  } else if (
+    archetype === "expressive_creative" ||
+    cat.includes("agency") ||
+    cat.includes("studio")
+  ) {
+    candidates = [
+      "bento-features",
+      "horizontal-story",
+      "image-led-features",
+      "asymmetric-editorial",
+      "editorial-split",
+    ];
+  } else if (
+    archetype === "clean_clinical" ||
+    cat.includes("dental") ||
+    cat.includes("clinic") ||
+    cat.includes("medical")
+  ) {
+    candidates = [
+      "three-column-grid",
+      "editorial-split",
+      "asymmetric-editorial",
+      "horizontal-story",
+      "feature-timeline",
+    ];
+  } else {
+    candidates = [
+      "three-column-grid",
+      "horizontal-story",
+      "asymmetric-editorial",
+      "feature-timeline",
+      "editorial-split",
+      "oversized-typographic",
+      "image-led-features",
+      "bento-features",
+    ];
+  }
+
+  // 2. Anti-Repetition Filter against recent fingerprints
+  const recentLayouts = new Set<string>();
+  const recentGeometries = new Set<string>();
+  (recentFingerprints || []).forEach((fp: any) => {
+    const str = typeof fp === "string" ? fp : (fp?.antiRepetitionFingerprint || "");
+    if (typeof str === "string" && str) {
+      const matchLayout = str.match(/feat-layout:([a-z-]+)/);
+      if (matchLayout) recentLayouts.add(matchLayout[1]);
+      const matchGeom = str.match(/feat-geom:([a-z-]+)/);
+      if (matchGeom) recentGeometries.add(matchGeom[1]);
+    }
+    if (fp && typeof fp === "object") {
+      if (fp.featuresLayoutVariant) recentLayouts.add(fp.featuresLayoutVariant);
+      if (fp.featuresGeometry) recentGeometries.add(fp.featuresGeometry);
+    }
+  });
+
+  const availableLayouts = candidates.filter((c) => !recentLayouts.has(c));
+  const pool = availableLayouts.length > 0 ? availableLayouts : candidates;
+  const layoutVariant = pool[seedNum % pool.length];
+
+  // 3. Determine Card Geometry
+  let geometryCandidates: FeaturesCardGeometry[] = [];
+  if (archetype === "bold_brutalist") {
+    geometryCandidates = ["sharp", "bordered-flat"];
+  } else if (archetype === "luxury_bespoke") {
+    geometryCandidates = ["sharp", "rounded-standard"];
+  } else if (archetype === "warm_artisanal") {
+    geometryCandidates = ["rounded-heavy", "rounded-standard", "asymmetric-squircle"];
+  } else if (archetype === "clean_clinical") {
+    geometryCandidates = ["rounded-standard", "pill-subtle"];
+  } else if (archetype === "expressive_creative") {
+    geometryCandidates = ["asymmetric-squircle", "rounded-heavy", "pill-subtle"];
+  } else {
+    geometryCandidates = ["rounded-standard", "rounded-heavy", "sharp", "pill-subtle", "asymmetric-squircle", "bordered-flat"];
+  }
+
+  const filteredGeom = geometryCandidates.filter((g) => !recentGeometries.has(g));
+  const geomPool = filteredGeom.length > 0 ? filteredGeom : geometryCandidates;
+  const cardGeometry = geomPool[(seedNum + 1) % geomPool.length];
+
+  // 4. Determine Density & Divider Style
+  const densityList: Array<"compact" | "standard" | "spacious"> = ["standard", "spacious", "compact"];
+  const density = densityList[seedNum % densityList.length];
+
+  const dividerList: Array<"none" | "subtle-border" | "dashed" | "accent-solid"> =
+    archetype === "bold_brutalist"
+      ? ["accent-solid", "subtle-border"]
+      : archetype === "luxury_bespoke"
+      ? ["subtle-border", "none"]
+      : ["subtle-border", "none", "dashed", "accent-solid"];
+  const dividerStyle = dividerList[(seedNum + 2) % dividerList.length];
+
+  // 5. Determine Icon Treatment based on layoutVariant & archetype
+  let iconTreatment: FeaturesIconTreatment = "inline-icon";
+  if (layoutVariant === "oversized-typographic") {
+    const opts: FeaturesIconTreatment[] = ["numbered-feature", "no-icon", "decorative-glyph"];
+    iconTreatment = opts[seedNum % opts.length];
+  } else if (layoutVariant === "horizontal-story") {
+    const opts: FeaturesIconTreatment[] = ["numbered-feature", "oversized-icon", "icon-and-label"];
+    iconTreatment = opts[seedNum % opts.length];
+  } else if (layoutVariant === "feature-timeline") {
+    const opts: FeaturesIconTreatment[] = ["numbered-feature", "abstract-shape", "inline-icon"];
+    iconTreatment = opts[seedNum % opts.length];
+  } else if (layoutVariant === "image-led-features") {
+    const opts: FeaturesIconTreatment[] = ["image-thumbnail", "icon-and-label", "inline-icon"];
+    iconTreatment = opts[seedNum % opts.length];
+  } else if (layoutVariant === "editorial-split") {
+    const opts: FeaturesIconTreatment[] = ["icon-and-label", "numbered-feature", "decorative-glyph", "inline-icon"];
+    iconTreatment = opts[seedNum % opts.length];
+  } else {
+    const opts: FeaturesIconTreatment[] = ["oversized-icon", "inline-icon", "abstract-shape", "numbered-feature"];
+    iconTreatment = opts[seedNum % opts.length];
+  }
+
+  // 6. Animation Strategy
+  const animationCandidates: FeaturesAnimationStrategy[] =
+    archetype === "bold_brutalist"
+      ? ["clip-path-reveal", "editorial-slide", "horizontal-reveal"]
+      : archetype === "luxury_bespoke"
+      ? ["masked-text-reveal", "fade-up-stagger", "scale-reveal"]
+      : archetype === "dark_technical"
+      ? ["horizontal-reveal", "scale-reveal", "fade-up-stagger"]
+      : archetype === "warm_artisanal"
+      ? ["fade-up-stagger", "subtle-parallax", "editorial-slide"]
+      : ["fade-up-stagger", "horizontal-reveal", "scale-reveal", "editorial-slide"];
+  const animationStrategy = animationCandidates[seedNum % animationCandidates.length];
+
+  // 7. Metric Treatment (Strictly Non-Telemetry)
+  const metricOptions: Array<"badge" | "highlight-stat" | "editorial-quote" | "contextual-tag" | "none"> = [
+    "contextual-tag",
+    "badge",
+    "highlight-stat",
+    "editorial-quote",
+  ];
+  const metricTreatment = metricOptions[(seedNum + 3) % metricOptions.length];
+
+  // 8. Header Alignment
+  const headerOptions: Array<"center" | "left" | "split"> =
+    layoutVariant === "editorial-split"
+      ? ["split", "left"]
+      : layoutVariant === "asymmetric-editorial"
+      ? ["left", "center"]
+      : ["center", "left", "split"];
+  const headerAlignment = headerOptions[seedNum % headerOptions.length];
+
+  // 9. Spatial 3D Composition (Strictly conditioned on 3D eligibility)
+  let spatialComposition: "layered-depth" | "floating-planes" | "depth-separated" | "none" = "none";
+  if (spatial3d.enabled && spatial3d.level !== "NONE") {
+    const spatialOpts: Array<"layered-depth" | "floating-planes" | "depth-separated"> = [
+      "layered-depth",
+      "floating-planes",
+      "depth-separated",
+    ];
+    spatialComposition = spatialOpts[seedNum % spatialOpts.length];
+  }
+
+  return {
+    layoutVariant,
+    cardGeometry,
+    density,
+    dividerStyle,
+    iconTreatment,
+    animationStrategy,
+    metricTreatment,
+    headerAlignment,
+    spatialComposition,
+    mediaPlacement: seedNum % 2 === 0 ? "left" : "right",
+  };
 }
 
 /**
@@ -529,7 +1123,15 @@ export function deriveHeroBackground(
   context: StrategyInputContext,
   isDark: boolean
 ): HeroBackgroundConfig {
-  const imageUrl = getHeroAtmosphereImage(context.category, archetype);
+  const semanticImg = resolveSemanticImage({
+    category: context.category,
+    businessName: context.businessName,
+    archetype,
+    role: "heroBackground",
+    seed: context.seed,
+    avoidImages: (context.avoidPatterns || []).filter((p) => p.startsWith("http")),
+  });
+  const imageUrl = semanticImg.imageUrl || getHeroAtmosphereImage(context.category, archetype, context.seed || context.businessName);
 
   switch (archetype) {
     case "warm_artisanal": // Restaurant, Cafe, Bakery, Bistro, Ceramics
@@ -667,38 +1269,40 @@ export function deriveHeroLayout(
   if (combined.includes("bento hero") || combined.includes("bento grid")) return "bento_grid_hero";
   if (combined.includes("split hero") || combined.includes("split showcase")) return "split_showcase";
 
-  if (spatial3d.enabled && spatial3d.level === "ADVANCED_CSS_3D") {
-    return "spatial_depth_hero";
+  const candidateOptions: Record<VisualArchetype, Array<"split_showcase" | "fullscreen_visual" | "minimal_editorial" | "spatial_depth_hero" | "bento_grid_hero" | "action_focused">> = {
+    warm_artisanal: ["fullscreen_visual", "split_showcase", "minimal_editorial", "spatial_depth_hero"],
+    clean_clinical: ["action_focused", "split_showcase", "minimal_editorial", "spatial_depth_hero"],
+    minimal_editorial: ["fullscreen_visual", "minimal_editorial", "split_showcase", "spatial_depth_hero"],
+    luxury_bespoke: ["minimal_editorial", "fullscreen_visual", "split_showcase", "spatial_depth_hero"],
+    high_trust_service: ["action_focused", "split_showcase", "minimal_editorial", "spatial_depth_hero"],
+    expressive_creative: ["bento_grid_hero", "split_showcase", "fullscreen_visual", "spatial_depth_hero"],
+    dark_technical: ["spatial_depth_hero", "split_showcase", "bento_grid_hero"],
+    bold_brutalist: ["minimal_editorial", "split_showcase", "bento_grid_hero", "spatial_depth_hero"],
+  };
+
+  type HeroLayoutType = "split_showcase" | "fullscreen_visual" | "minimal_editorial" | "spatial_depth_hero" | "bento_grid_hero" | "action_focused";
+  const rawList: HeroLayoutType[] = candidateOptions[archetype] || ["split_showcase", "minimal_editorial", "fullscreen_visual"];
+  const validList: HeroLayoutType[] = spatial3d.enabled ? rawList : rawList.filter((cand): cand is HeroLayoutType => cand !== "spatial_depth_hero");
+  const list: HeroLayoutType[] = validList.length > 0 ? validList : ["split_showcase", "bento_grid_hero", "fullscreen_visual"];
+
+  // Anti-repetition: check if candidate should be avoided
+  const avoidList = (Array.isArray(context.avoidPatterns) ? context.avoidPatterns : []).map((p) => p.toLowerCase());
+  const recentLayouts = (Array.isArray(context.recentFingerprints) ? context.recentFingerprints : []).map((fp: any) =>
+    String(fp.layoutType || fp.heroType || fp.layoutVariant || "").toLowerCase()
+  );
+
+  const shouldAvoid = (cand: string) =>
+    avoidList.some((p) => p.includes(cand) || p.includes(`hero:${cand}`)) ||
+    recentLayouts.includes(cand);
+
+  const preferred = list[0];
+  if (shouldAvoid(preferred)) {
+    const alternateCandidate = list.find((cand) => !shouldAvoid(cand)) || list[1] || list[0];
+    return alternateCandidate;
   }
 
-  switch (archetype) {
-    case "warm_artisanal": // Restaurant / Cafe: cinematic atmosphere, sensory immersion
-      return "fullscreen_visual";
-
-    case "clean_clinical": // Dental / Healthcare: reassurance, appointment CTA, doctor trust
-      return "action_focused";
-
-    case "minimal_editorial": // Architecture: spatial grandeur, gallery photography
-      return "fullscreen_visual";
-
-    case "luxury_bespoke": // Fashion: high-fashion editorial typography, refined framing
-      return "minimal_editorial";
-
-    case "high_trust_service": // Plumber / Emergency: rapid call CTA, trust badges
-      return "action_focused";
-
-    case "expressive_creative": // Agency: creative showcase, bold hierarchy
-      return "bento_grid_hero";
-
-    case "dark_technical": // SaaS / AI: interactive software preview, feature depth
-      return "spatial_depth_hero";
-
-    case "bold_brutalist":
-      return "minimal_editorial";
-
-    default:
-      return "split_showcase";
-  }
+  const alternateCandidate = list.find((cand) => !shouldAvoid(cand)) || list[0];
+  return alternateCandidate;
 }
 
 /**
@@ -912,7 +1516,8 @@ export function deriveImageIntents(
 export function deriveSkillExecutionPlan(
   archetype: VisualArchetype,
   context: StrategyInputContext,
-  sectionSequence: string[]
+  sectionSequence: string[],
+  cardFamilyStrategy?: CardFamilyStrategyConfig
 ): SkillExecutionPlan {
   const cat = (context.category || "").toLowerCase();
   const desc = (context.description || "").toLowerCase();
@@ -999,18 +1604,24 @@ export function deriveSkillExecutionPlan(
       }
     );
   } else if (archetype === "minimal_editorial" || combined.includes("architect")) {
-    selectedSkills.push(
-      {
-        skillId: "creative-art-direction",
-        reason: "Disciplined negative space, refined serif hierarchy, and spatial project framing",
-        instructionsApplied: ["Generous editorial whitespace", "Architectural blueprint layout", "Curated work showcase"],
-      },
-      {
+    selectedSkills.push({
+      skillId: "creative-art-direction",
+      reason: "Disciplined negative space, refined serif hierarchy, and spatial project framing",
+      instructionsApplied: ["Generous editorial whitespace", "Architectural blueprint layout", "Curated work showcase"],
+    });
+    if (context.threeDPreference === "yes") {
+      selectedSkills.push({
         skillId: "spatial-interaction",
         reason: "Perspective depth and spatial layering honoring architectural physical space",
         instructionsApplied: ["Subtle CSS 3D tilt", "Multi-plane project cards", "Tactile hover inspection"],
-      }
-    );
+      });
+    } else {
+      selectedSkills.push({
+        skillId: "interaction-design",
+        reason: "Refined 2D editorial transitions, interactive gallery filters, and high-elegance micro-interactions",
+        instructionsApplied: ["Tactile hover inspection", "Editorial gallery transition", "Refined negative space"],
+      });
+    }
   } else if (archetype === "luxury_bespoke" || combined.includes("fashion") || combined.includes("couture")) {
     selectedSkills.push(
       {
@@ -1092,7 +1703,9 @@ export function deriveSkillExecutionPlan(
     const motionPattern = "spring_reveal";
 
     if (secKey === "features" || secKey === "trust_proof" || secKey === "trust_guarantees") {
-      if (archetype === "dark_technical") {
+      if (cardFamilyStrategy?.featuresCardFamily) {
+        cardFamily = cardFamilyStrategy.featuresCardFamily;
+      } else if (archetype === "dark_technical") {
         cardFamily = "bento";
         interactionPattern = "CommandPalette";
       } else if (archetype === "clean_clinical") {
@@ -1123,7 +1736,9 @@ export function deriveSkillExecutionPlan(
       secKey === "emergency_services" ||
       secKey === "creative_capabilities"
     ) {
-      if (archetype === "clean_clinical") {
+      if (cardFamilyStrategy?.servicesCardFamily) {
+        cardFamily = cardFamilyStrategy.servicesCardFamily;
+      } else if (archetype === "clean_clinical") {
         cardFamily = "perspective";
       } else if (archetype === "warm_artisanal") {
         cardFamily = "service";
@@ -1147,7 +1762,9 @@ export function deriveSkillExecutionPlan(
         cardFamily = "expandable";
       }
     } else if (secKey === "reviews" || secKey === "testimonials" || secKey === "patient_reviews" || secKey === "guest_reviews") {
-      if (archetype === "minimal_editorial" || archetype === "luxury_bespoke") {
+      if (cardFamilyStrategy?.reviewsCardFamily) {
+        cardFamily = cardFamilyStrategy.reviewsCardFamily;
+      } else if (archetype === "minimal_editorial" || archetype === "luxury_bespoke") {
         cardFamily = "stacked";
       } else {
         cardFamily = "testimonial-stack";
@@ -1198,10 +1815,411 @@ export function generateDesignStrategy(context: StrategyInputContext): ComputedD
 
   const sectionSequence = deriveSectionSequence(archetype, context);
   const spatial3d = deriveSpatial3dConfig(archetype, context);
-  const backgroundStrategy = deriveBackgroundStrategy(archetype, isDark);
+  const backgroundStrategy = deriveBackgroundStrategy(archetype, isDark, context, spatial3d);
   const heroBackground = deriveHeroBackground(archetype, context, isDark);
   const imageIntents = deriveImageIntents(archetype, context);
-  const skillExecutionPlan = deriveSkillExecutionPlan(archetype, context, sectionSequence);
+
+  const seedNum = typeof context.seed === "number"
+    ? Math.abs(context.seed)
+    : (context.seed ? Math.abs(stringToSeed(String(context.seed))) : 0);
+
+  // Color system with anti-repetition rotation if no explicit user override
+  interface PaletteSpec {
+    name: string;
+    p: string;
+    s: string;
+    accent: string;
+    bg: string;
+    surface: string;
+    surfaceAlt: string;
+    text: string;
+    muted: string;
+    border: string;
+    shadow: string;
+    isDark: boolean;
+  }
+
+  const palettes: Record<VisualArchetype, Array<PaletteSpec>> = {
+    clean_clinical: [
+      {
+        name: "cerulean_cyan_mist",
+        p: "#0284C7",
+        s: "#0D9488",
+        accent: "#38BDF8",
+        bg: "#F8FAFC",
+        surface: "#FFFFFF",
+        surfaceAlt: "#F1F5F9",
+        text: "#0F172A",
+        muted: "#64748B",
+        border: "rgba(2, 132, 199, 0.14)",
+        shadow: "0 16px 36px -10px rgba(2, 132, 199, 0.08)",
+        isDark: false,
+      },
+      {
+        name: "teal_emerald_light",
+        p: "#0D9488",
+        s: "#0284C7",
+        accent: "#10B981",
+        bg: "#F6FBF9",
+        surface: "#FFFFFF",
+        surfaceAlt: "#E6F4F1",
+        text: "#0F2824",
+        muted: "#5E7C77",
+        border: "rgba(13, 148, 136, 0.14)",
+        shadow: "0 16px 36px -10px rgba(13, 148, 136, 0.08)",
+        isDark: false,
+      },
+      {
+        name: "sapphire_azure_clean",
+        p: "#2563EB",
+        s: "#0284C7",
+        accent: "#60A5FA",
+        bg: "#FFFFFF",
+        surface: "#F8FAFC",
+        surfaceAlt: "#EFF6FF",
+        text: "#1E293B",
+        muted: "#64748B",
+        border: "rgba(37, 99, 235, 0.12)",
+        shadow: "0 16px 36px -10px rgba(37, 99, 235, 0.07)",
+        isDark: false,
+      },
+      {
+        name: "clinical_nordic_slate",
+        p: "#059669",
+        s: "#10B981",
+        accent: "#34D399",
+        bg: "#FDFDFD",
+        surface: "#FFFFFF",
+        surfaceAlt: "#F2FBF7",
+        text: "#064E3B",
+        muted: "#4B7C6E",
+        border: "rgba(5, 150, 105, 0.14)",
+        shadow: "0 16px 36px -10px rgba(5, 150, 105, 0.08)",
+        isDark: false,
+      },
+    ],
+    warm_artisanal: [
+      {
+        name: "warm_cream_copper",
+        p: "#C2410C", // Copper/Terracotta
+        s: "#451A03", // Espresso
+        accent: "#D97706", // Amber gold
+        bg: "#FDFBF7", // Warm cream
+        surface: "#FFFFFF",
+        surfaceAlt: "#F8F4EE",
+        text: "#292524",
+        muted: "#78716C",
+        border: "rgba(120, 53, 15, 0.12)",
+        shadow: "0 18px 40px -12px rgba(120, 53, 15, 0.08)",
+        isDark: false,
+      },
+      {
+        name: "charcoal_amber_ivory",
+        p: "#F59E0B", // Amber Gold
+        s: "#1C1917", // Deep Charcoal
+        accent: "#EA580C", // Burnt Orange
+        bg: "#18181B", // Dark charcoal
+        surface: "#27272A",
+        surfaceAlt: "#202023",
+        text: "#FAF5EE",
+        muted: "#A1A1AA",
+        border: "rgba(245, 158, 11, 0.20)",
+        shadow: "0 20px 45px -10px rgba(0, 0, 0, 0.6)",
+        isDark: true,
+      },
+      {
+        name: "sage_parchment_earth",
+        p: "#2D5A43", // Forest Sage
+        s: "#1C2E24", // Deep Pine
+        accent: "#854D0E", // Earthy Hazelnut
+        bg: "#F7F8F4", // Parchment Mist
+        surface: "#FFFFFF",
+        surfaceAlt: "#EFF2EA",
+        text: "#1F2923",
+        muted: "#5F7065",
+        border: "rgba(45, 90, 67, 0.12)",
+        shadow: "0 16px 36px -10px rgba(45, 90, 67, 0.07)",
+        isDark: false,
+      },
+      {
+        name: "terracotta_sand_navy",
+        p: "#EA580C", // Terracotta Fire
+        s: "#0F172A", // Midnight Navy
+        accent: "#0284C7", // Sky Cerulean
+        bg: "#FFFDF9", // Sand Dunes
+        surface: "#FFFFFF",
+        surfaceAlt: "#F8F3EB",
+        text: "#0F172A",
+        muted: "#64748B",
+        border: "rgba(234, 88, 12, 0.14)",
+        shadow: "0 18px 42px -12px rgba(15, 23, 42, 0.08)",
+        isDark: false,
+      },
+      {
+        name: "monochrome_editorial_stone",
+        p: "#18181B", // Obsidian Ink
+        s: "#3F3F46", // Slate Zinc
+        accent: "#71717A", // Muted Nickel
+        bg: "#FAFAFA", // Pure Editorial
+        surface: "#FFFFFF",
+        surfaceAlt: "#F4F4F5",
+        text: "#09090B",
+        muted: "#71717A",
+        border: "rgba(0, 0, 0, 0.08)",
+        shadow: "0 14px 30px -8px rgba(0, 0, 0, 0.05)",
+        isDark: false,
+      },
+    ],
+    dark_technical: [
+      {
+        name: "cyan_telemetry",
+        p: "#38BDF8",
+        s: "#818CF8",
+        accent: "#06B6D4",
+        bg: "#0B0F19",
+        surface: "rgba(15, 23, 42, 0.85)",
+        surfaceAlt: "rgba(30, 41, 59, 0.70)",
+        text: "#F8FAFC",
+        muted: "#94A3B8",
+        border: "rgba(56, 189, 248, 0.22)",
+        shadow: "0 0 30px -5px rgba(56, 189, 248, 0.15)",
+        isDark: true,
+      },
+      {
+        name: "emerald_matrix",
+        p: "#10B981",
+        s: "#06B6D4",
+        accent: "#34D399",
+        bg: "#0A1015",
+        surface: "rgba(11, 24, 25, 0.85)",
+        surfaceAlt: "rgba(18, 38, 40, 0.70)",
+        text: "#F0FDF4",
+        muted: "#86EFAC",
+        border: "rgba(16, 185, 129, 0.22)",
+        shadow: "0 0 30px -5px rgba(16, 185, 129, 0.15)",
+        isDark: true,
+      },
+      {
+        name: "violet_cyber",
+        p: "#A855F7",
+        s: "#6366F1",
+        accent: "#EC4899",
+        bg: "#0F0D1B",
+        surface: "rgba(24, 18, 43, 0.85)",
+        surfaceAlt: "rgba(39, 30, 68, 0.70)",
+        text: "#FAF5FF",
+        muted: "#D8B4FE",
+        border: "rgba(168, 85, 247, 0.22)",
+        shadow: "0 0 30px -5px rgba(168, 85, 247, 0.15)",
+        isDark: true,
+      },
+    ],
+    minimal_editorial: [
+      {
+        name: "slate_noir_clean",
+        p: "#1E293B",
+        s: "#475569",
+        accent: "#0F172A",
+        bg: "#FAFAFA",
+        surface: "#FFFFFF",
+        surfaceAlt: "#F1F5F9",
+        text: "#0F172A",
+        muted: "#64748B",
+        border: "rgba(0, 0, 0, 0.08)",
+        shadow: "none",
+        isDark: false,
+      },
+      {
+        name: "warm_parchment_black",
+        p: "#18181B",
+        s: "#3F3F46",
+        accent: "#A16207",
+        bg: "#FDFDFD",
+        surface: "#FFFFFF",
+        surfaceAlt: "#F5F5F4",
+        text: "#1C1917",
+        muted: "#78716C",
+        border: "rgba(0, 0, 0, 0.06)",
+        shadow: "none",
+        isDark: false,
+      },
+    ],
+    luxury_bespoke: [
+      {
+        name: "gilded_noir",
+        p: "#18181B",
+        s: "#D4AF37",
+        accent: "#F5E0A3",
+        bg: "#0D0D10",
+        surface: "#18181D",
+        surfaceAlt: "#222228",
+        text: "#FAF5E9",
+        muted: "#A1A1AA",
+        border: "rgba(212, 175, 55, 0.25)",
+        shadow: "0 20px 40px -10px rgba(0, 0, 0, 0.7)",
+        isDark: true,
+      },
+      {
+        name: "champagne_ivory",
+        p: "#78350F",
+        s: "#B45309",
+        accent: "#D4AF37",
+        bg: "#FCFBF8",
+        surface: "#FFFFFF",
+        surfaceAlt: "#F7F5EE",
+        text: "#1C1917",
+        muted: "#78716C",
+        border: "rgba(180, 140, 40, 0.20)",
+        shadow: "0 15px 35px -8px rgba(180, 140, 40, 0.08)",
+        isDark: false,
+      },
+    ],
+    bold_brutalist: [
+      {
+        name: "industrial_international_orange",
+        p: "#000000",
+        s: "#FF5E00",
+        accent: "#FF5E00",
+        bg: "#F4F4F4",
+        surface: "#FFFFFF",
+        surfaceAlt: "#ECECEC",
+        text: "#000000",
+        muted: "#444444",
+        border: "2px solid #000000",
+        shadow: "4px 4px 0px 0px #000000",
+        isDark: false,
+      },
+      {
+        name: "electric_volt_black",
+        p: "#111111",
+        s: "#FFE600",
+        accent: "#FFE600",
+        bg: "#FAFAFA",
+        surface: "#FFFFFF",
+        surfaceAlt: "#F2F2F2",
+        text: "#000000",
+        muted: "#555555",
+        border: "2px solid #111111",
+        shadow: "4px 4px 0px 0px #FFE600",
+        isDark: false,
+      },
+    ],
+    expressive_creative: [
+      {
+        name: "indigo_sunset",
+        p: "#6366F1",
+        s: "#EC4899",
+        accent: "#F43F5E",
+        bg: "#FAF5FF",
+        surface: "#FFFFFF",
+        surfaceAlt: "#F3E8FF",
+        text: "#1E1B4B",
+        muted: "#6B7280",
+        border: "rgba(99, 102, 241, 0.15)",
+        shadow: "0 18px 40px -10px rgba(99, 102, 241, 0.08)",
+        isDark: false,
+      },
+      {
+        name: "magenta_electric",
+        p: "#8B5CF6",
+        s: "#F43F5E",
+        accent: "#06B6D4",
+        bg: "#FFFFFF",
+        surface: "#FAF5FF",
+        surfaceAlt: "#EDE9FE",
+        text: "#2E1065",
+        muted: "#7C3AED",
+        border: "rgba(139, 92, 246, 0.15)",
+        shadow: "0 18px 40px -10px rgba(139, 92, 246, 0.08)",
+        isDark: false,
+      },
+    ],
+    high_trust_service: [
+      {
+        name: "pacific_navy",
+        p: "#0284C7",
+        s: "#0369A1",
+        accent: "#0284C7",
+        bg: "#FFFFFF",
+        surface: "#F8FAFC",
+        surfaceAlt: "#F1F5F9",
+        text: "#0F172A",
+        muted: "#64748B",
+        border: "rgba(2, 132, 199, 0.12)",
+        shadow: "0 16px 36px -10px rgba(2, 132, 199, 0.06)",
+        isDark: false,
+      },
+      {
+        name: "trusted_forest",
+        p: "#059669",
+        s: "#047857",
+        accent: "#10B981",
+        bg: "#F6FBF9",
+        surface: "#FFFFFF",
+        surfaceAlt: "#E6F4F1",
+        text: "#064E3B",
+        muted: "#4B7C6E",
+        border: "rgba(5, 150, 105, 0.12)",
+        shadow: "0 16px 36px -10px rgba(5, 150, 105, 0.06)",
+        isDark: false,
+      },
+    ],
+  };
+
+  const avoidList = (Array.isArray(context.avoidPatterns) ? context.avoidPatterns : []).map((p) => p.toLowerCase());
+  const recentColors = (Array.isArray(context.recentFingerprints) ? context.recentFingerprints : []).map((fp: any) =>
+    String(fp.colorDirection || fp.primaryColor || fp.paletteName || "").toLowerCase()
+  );
+
+  const isCollided = (key: string) =>
+    avoidList.some((p) => p.includes(key.toLowerCase())) ||
+    recentColors.some((rc: string) => rc.includes(key.toLowerCase()));
+
+  const options = palettes[archetype] || palettes.clean_clinical;
+  const uncollided = options.filter(
+    (opt) => !isCollided(opt.p) && !isCollided(opt.name)
+  );
+  const chosenPalette: PaletteSpec = uncollided.length > 0
+    ? uncollided[seedNum % uncollided.length]
+    : options[seedNum % options.length];
+
+  let defaultPrimary = chosenPalette.p;
+  let defaultSecondary = chosenPalette.s;
+
+  const hasColorCollision = isCollided(chosenPalette.p) || isCollided(chosenPalette.name);
+  if (hasColorCollision && uncollided.length === 0) {
+    if (archetype === "clean_clinical") {
+      defaultPrimary = "#0D9488";
+    } else if (archetype === "warm_artisanal") {
+      defaultPrimary = "#B45309";
+    } else if (archetype === "dark_technical") {
+      defaultPrimary = "#818CF8";
+    }
+  }
+
+  const resolvedPrimary = context.primaryColor || defaultPrimary;
+  const resolvedSecondary = context.secondaryColor || defaultSecondary;
+
+  const cardFamilyStrategy = deriveCardFamilyStrategy(
+    archetype,
+    context,
+    resolvedPrimary,
+    resolvedSecondary,
+    isDark,
+    {
+      accentColor: chosenPalette.accent,
+      surfaceColor: chosenPalette.surface,
+      borderColor: chosenPalette.border,
+      textColor: chosenPalette.text,
+    }
+  );
+
+  const skillExecutionPlan = deriveSkillExecutionPlan(
+    archetype,
+    context,
+    sectionSequence,
+    cardFamilyStrategy
+  );
 
   // Hero layout variant matching archetype and business domain
   const heroType = deriveHeroLayout(archetype, context, spatial3d);
@@ -1220,33 +2238,62 @@ export function generateDesignStrategy(context: StrategyInputContext): ComputedD
   // Typography tokens
   const typographyTokens = {
     headingFont:
-      archetype === "minimal_editorial" || archetype === "luxury_bespoke"
+      archetype === "minimal_editorial"
         ? "Playfair Display, serif"
+        : archetype === "luxury_bespoke"
+        ? "Cinzel, serif"
         : archetype === "dark_technical"
         ? "Space Grotesk, sans-serif"
+        : archetype === "expressive_creative"
+        ? "Syne, sans-serif"
+        : archetype === "bold_brutalist"
+        ? "Outfit, sans-serif"
+        : archetype === "warm_artisanal"
+        ? "Fraunces, serif"
         : "Plus Jakarta Sans, sans-serif",
-    bodyFont: "Inter, sans-serif",
+    bodyFont:
+      archetype === "dark_technical"
+        ? "JetBrains Mono, monospace"
+        : archetype === "minimal_editorial" || archetype === "luxury_bespoke"
+        ? "Inter, sans-serif"
+        : archetype === "warm_artisanal"
+        ? "Plus Jakarta Sans, sans-serif"
+        : "DM Sans, sans-serif",
     headingScale: archetype === "minimal_editorial" ? 1.55 : 1.4,
     letterSpacing: archetype === "dark_technical" ? "-0.03em" : "-0.015em",
     lineHeight: 1.15,
     headingStyle: (archetype === "bold_brutalist" ? "uppercase" : "normal") as "uppercase" | "normal" | "serif" | "geometric",
   };
 
-  // Color system
   const colorSystem = {
-    primary: context.primaryColor || (archetype === "clean_clinical" ? "#0284C7" : archetype === "warm_artisanal" ? "#D97706" : archetype === "dark_technical" ? "#38BDF8" : "#2563EB"),
-    secondary: context.secondaryColor || (archetype === "clean_clinical" ? "#0D9488" : archetype === "warm_artisanal" ? "#78350F" : archetype === "dark_technical" ? "#818CF8" : "#60A5FA"),
-    accent: archetype === "warm_artisanal" ? "#F59E0B" : "#F43F5E",
-    bg: backgroundStrategy.color || (isDark ? "#090D16" : "#FFFFFF"),
-    surface: isDark ? "rgba(255, 255, 255, 0.05)" : "#FFFFFF",
-    text: isDark ? "#F8FAFC" : "#0F172A",
-    muted: isDark ? "#94A3B8" : "#64748B",
-    border: isDark ? "rgba(255, 255, 255, 0.1)" : "rgba(0, 0, 0, 0.08)",
+    primary: resolvedPrimary,
+    secondary: resolvedSecondary,
+    accent: chosenPalette.accent || (archetype === "warm_artisanal" ? "#F59E0B" : "#F43F5E"),
+    bg: backgroundStrategy.color || chosenPalette.bg || (isDark ? "#090D16" : "#FFFFFF"),
+    surface: chosenPalette.surface || (isDark ? "rgba(255, 255, 255, 0.05)" : "#FFFFFF"),
+    surfaceAlt: chosenPalette.surfaceAlt || (isDark ? "rgba(255, 255, 255, 0.08)" : "#F8FAFC"),
+    text: chosenPalette.text || (isDark ? "#F8FAFC" : "#0F172A"),
+    muted: chosenPalette.muted || (isDark ? "#94A3B8" : "#64748B"),
+    border: chosenPalette.border || (isDark ? "rgba(255, 255, 255, 0.1)" : "rgba(0, 0, 0, 0.08)"),
+    shadow: chosenPalette.shadow || (isDark ? "0 20px 40px -10px rgba(0,0,0,0.6)" : "0 16px 35px -8px rgba(0,0,0,0.07)"),
+    cardAccent: chosenPalette.accent || resolvedPrimary,
+    sectionAccent: resolvedSecondary,
     contrastRatio: archetype === "clean_clinical" ? 7.0 : 4.5,
-    mood: archetype,
+    mood: chosenPalette.name,
+    paletteName: chosenPalette.name,
   };
 
-  const antiRepetitionFingerprint = `${archetype}_${heroType}_${backgroundStrategy.type}_${typographyTokens.headingFont.split(",")[0].trim().replace(/\s+/g, "")}_${colorSystem.primary.replace("#", "")}`;
+  const featuresLayoutStrategy = deriveFeaturesLayoutStrategy(
+    archetype,
+    context.category,
+    context,
+    isDark,
+    spatial3d,
+    seedNum,
+    context.recentFingerprints
+  );
+
+  const antiRepetitionFingerprint = `${archetype}_${heroType}_${cardFamilyStrategy.primaryCardFamily}_${backgroundStrategy.type}_${typographyTokens.headingFont.split(",")[0].trim().replace(/\s+/g, "")}_pal:${colorSystem.paletteName}_${colorSystem.primary.replace("#", "")}_feat-layout:${featuresLayoutStrategy.layoutVariant}_feat-geom:${featuresLayoutStrategy.cardGeometry}`;
 
   return {
     visualArchetype: archetype,
@@ -1254,6 +2301,8 @@ export function generateDesignStrategy(context: StrategyInputContext): ComputedD
     colorMood: archetype,
     typographyStyle: typographyTokens.headingFont,
     cardTreatment,
+    cardFamilyStrategy,
+    featuresLayoutStrategy,
     backgroundStrategy,
     spatial3d,
     heroBackground,
@@ -1266,5 +2315,6 @@ export function generateDesignStrategy(context: StrategyInputContext): ComputedD
     artDirectionSummary: visualConceptData.summary,
     antiRepetitionFingerprint,
     motionStrategy,
+    threeDPreference: spatial3d.enabled ? "yes" : "no",
   };
 }

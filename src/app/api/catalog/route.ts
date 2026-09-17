@@ -8,6 +8,7 @@ import {
   dbGetCatalogItems,
   dbCreateCatalogItem,
   dbUpdateCatalogOrder,
+  dbGetProjectOwnership,
 } from "@/lib/db/queries";
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -27,6 +28,18 @@ export async function GET(request: Request) {
 
     if (!UUID_REGEX.test(projectId)) {
       return NextResponse.json({ success: true, data: [] });
+    }
+
+    const ownership = await dbGetProjectOwnership(projectId);
+    if (!ownership) {
+      return NextResponse.json({ success: false, error: "Project not found" }, { status: 404 });
+    }
+
+    // Check if project is published or caller is the owner
+    const auth = await validateUserAuth(request);
+    const isOwner = Boolean(auth.user && auth.user.id === ownership.user_id);
+    if (!ownership.is_published && !isOwner) {
+      return NextResponse.json({ success: false, error: "Unauthorized access to unpublished catalog" }, { status: 403 });
     }
 
     const rows = await dbGetCatalogItems(projectId);
@@ -56,6 +69,11 @@ export async function POST(request: Request) {
 
     if (!item?.project_id) {
       return NextResponse.json({ success: false, error: "Missing project_id for catalog item" }, { status: 400 });
+    }
+
+    const ownership = await dbGetProjectOwnership(item.project_id);
+    if (!ownership || ownership.user_id !== auth.user.id) {
+      return NextResponse.json({ success: false, error: "Project not found or unauthorized" }, { status: 403 });
     }
 
     const row = await dbCreateCatalogItem(item as Record<string, unknown>, auth.user.id);

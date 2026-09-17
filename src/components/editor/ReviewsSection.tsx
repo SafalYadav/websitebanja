@@ -4,7 +4,7 @@ import React from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { Star, Quote, CheckCircle } from "lucide-react";
 import EditableElement from "@/components/editor/EditableElement";
-import type { CardFamily } from "@/types/website";
+import type { CardFamily, CardColorTreatment } from "@/types/website";
 import { CardRenderer } from "@/components/registry/cardRendererRegistry";
 
 export interface ReviewItem {
@@ -28,6 +28,8 @@ interface ReviewsSectionProps {
   badge?: string;
   category?: string;
   cardFamily?: CardFamily;
+  cardTreatment?: CardColorTreatment | string;
+  visualArchetype?: string;
 }
 
 function getCategoryReviewsCopy(category?: string) {
@@ -147,6 +149,8 @@ export default function ReviewsSection({
   badge,
   category,
   cardFamily,
+  cardTreatment,
+  visualArchetype,
 }: ReviewsSectionProps) {
   const shouldReduceMotion = useReducedMotion();
   const defaults = getCategoryReviewsCopy(category);
@@ -230,73 +234,25 @@ export default function ReviewsSection({
           </div>
         ) : (
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {safeReviews.map((item, index) => (
-              <motion.div
-                key={index}
-                initial={shouldReduceMotion ? { opacity: 1 } : { opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ duration: 0.35, delay: index * 0.07 }}
-                whileHover={shouldReduceMotion ? {} : { y: -5 }}
-                className="group relative rounded-3xl border p-8 backdrop-blur-xl transition-all duration-300 flex flex-col justify-between shadow-xl"
-                style={{
-                  backgroundColor: "var(--wb-surface)",
-                  borderColor: "var(--wb-border)",
-                }}
-              >
-                <div>
-                  {/* 5 Stars + Quote Icon */}
-                  <div className="flex items-center justify-between mb-6">
-                    <div className="flex items-center gap-1 text-amber-400">
-                      {[...Array(5)].map((_, i) => (
-                        <Star key={i} className="h-4 w-4 fill-amber-400 text-amber-400" />
-                      ))}
-                    </div>
-                    <Quote className="h-6 w-6 opacity-20" style={{ color: "var(--wb-muted)" }} />
-                  </div>
-
-                  <EditableElement
-                    sectionKey={sectionKey}
-                    elementPath={`${sectionKey}[${index}].text`}
-                    elementType="paragraph"
-                    label={`Review ${index + 1} Quote`}
-                  >
-                    <blockquote className="text-sm sm:text-base leading-relaxed italic" style={{ color: "var(--wb-fg)" }}>
-                      &ldquo;{item.text}&rdquo;
-                    </blockquote>
-                  </EditableElement>
+            {safeReviews.map((item, index) => {
+              const reviewFamily = cardFamily || "editorial";
+              return (
+                <div key={index} className="col-span-1">
+                  <CardRenderer
+                    cardFamily={reviewFamily}
+                    id={`${sectionKey}-${index}`}
+                    title={item.name}
+                    subtitle={item.role}
+                    description={item.text}
+                    tag="Verified"
+                    badge="5.0 ★"
+                    treatment={typeof cardTreatment === "object" ? cardTreatment : undefined}
+                    visualArchetype={visualArchetype}
+                    index={index}
+                  />
                 </div>
-
-                {/* Reviewer Meta */}
-                <div className="pt-6 mt-6 border-t border-[var(--wb-border)] flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div
-                      className="flex h-10 w-10 items-center justify-center rounded-full font-bold text-xs shadow-inner"
-                      style={{
-                        backgroundColor: "var(--wb-glow-secondary)",
-                        color: "var(--wb-secondary)",
-                        borderColor: "var(--wb-border)",
-                      }}
-                    >
-                      {item.name.charAt(0)}
-                    </div>
-                    <div>
-                      <h4 className="text-sm font-bold" style={{ color: "var(--wb-fg)" }}>
-                        {item.name}
-                      </h4>
-                      <p className="text-[11px]" style={{ color: "var(--wb-muted)" }}>
-                        {item.role}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-1 text-emerald-500 text-[11px] font-semibold">
-                    <CheckCircle className="h-3.5 w-3.5" />
-                    <span>Verified</span>
-                  </div>
-                </div>
-              </motion.div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

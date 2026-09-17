@@ -46,11 +46,20 @@ async function handleCheckExpiries(request: Request) {
       }
     }
 
+    const isProduction = process.env.NODE_ENV === "production";
+    if (isProduction && !cronSecret) {
+      console.error("[/api/billing/check-expiries] Rejecting: CRON_SECRET is not configured in production.");
+      return NextResponse.json(
+        { success: false, error: "CRON_SECRET is not configured on server." },
+        { status: 500 }
+      );
+    }
+
     if (cronSecret) {
       const isAuthorized =
         (bearerToken ? timingSafeMatch(bearerToken, cronSecret) : false) ||
-        (querySecret ? timingSafeMatch(querySecret, cronSecret) : false) ||
-        (xCronSecret ? timingSafeMatch(xCronSecret, cronSecret) : false);
+        (xCronSecret ? timingSafeMatch(xCronSecret, cronSecret) : false) ||
+        (!isProduction && querySecret ? timingSafeMatch(querySecret, cronSecret) : false);
 
       if (!isAuthorized) {
         return NextResponse.json(
@@ -58,6 +67,11 @@ async function handleCheckExpiries(request: Request) {
           { status: 401 }
         );
       }
+    } else if (isProduction) {
+      return NextResponse.json(
+        { success: false, error: "Unauthorized cron execution." },
+        { status: 401 }
+      );
     }
 
     const result = await dbCheckSubscriptionExpiries();

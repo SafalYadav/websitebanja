@@ -12,6 +12,8 @@ export interface ExtractedUserNeeds {
   email?: string;
   whatsappNumber?: string;
   location?: string;
+  threeDPreference?: "yes" | "no";
+  motionPreference?: "none" | "subtle" | "high";
 }
 
 export interface AgentMessage {

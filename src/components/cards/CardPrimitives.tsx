@@ -5,24 +5,58 @@ import { cn } from "@/lib/utils";
 
 import ImageWithFallback from "@/components/ui/ImageWithFallback";
 
+import type { CardColorTreatment } from "@/types/website";
+import { getCornerClassName } from "@/lib/cardStyles";
+
 // 1. Base Card Primitive
 export interface CardPrimitiveProps extends React.HTMLAttributes<HTMLDivElement> {
   as?: "article" | "div" | "section" | "li";
-  variant?: "default" | "glass" | "bordered" | "flat" | "elevated";
+  variant?:
+    | "default"
+    | "glass"
+    | "bordered"
+    | "flat"
+    | "elevated"
+    | "brutalist"
+    | "luxury"
+    | "organic"
+    | "technical"
+    | "editorial"
+    | "soft";
   padding?: "none" | "sm" | "md" | "lg" | "xl";
   interactive?: boolean;
+  treatment?: CardColorTreatment;
 }
 
 export const CardPrimitive = React.forwardRef<HTMLDivElement, CardPrimitiveProps>(
-  ({ as = "article", variant = "default", padding = "md", interactive = false, className, children, ...props }, ref) => {
+  (
+    {
+      as = "article",
+      variant = "default",
+      padding = "md",
+      interactive = false,
+      treatment,
+      className,
+      style,
+      children,
+      ...props
+    },
+    ref
+  ) => {
     const Component = as as any;
 
     const variantStyles = {
       default: "bg-[var(--wb-surface)] border border-[var(--wb-border)] text-[var(--wb-fg)] shadow-xs",
       glass: "bg-[var(--wb-surface)]/85 backdrop-blur-xl border border-[var(--wb-border)] text-[var(--wb-fg)] shadow-xl",
       bordered: "bg-transparent border-2 border-[var(--wb-border)] text-[var(--wb-fg)]",
-      flat: "bg-[var(--wb-surface)] text-[var(--wb-fg)] border-0",
-      elevated: "bg-[var(--wb-surface)] border border-[var(--wb-border)] shadow-[0_20px_50px_rgba(0,0,0,0.06)] dark:shadow-[0_20px_50px_rgba(0,0,0,0.6)] text-[var(--wb-fg)]",
+      flat: "bg-[var(--wb-surface)] text-[var(--wb-fg)] border-0 shadow-none",
+      elevated: "bg-[var(--wb-surface)] border border-[var(--wb-border)] shadow-[0_20px_50px_rgba(0,0,0,0.06)] dark:shadow-[0_20px_50px_rgba(0,0,0,0.6)] text-[var(--wb-fg)] hover:shadow-2xl",
+      brutalist: "bg-white dark:bg-zinc-950 border-2 border-black dark:border-white shadow-[4px_4px_0px_0px_#000] dark:shadow-[4px_4px_0px_0px_#fff] text-black dark:text-white",
+      luxury: "bg-[#FAF8F5] dark:bg-[#121215] border border-[rgba(212,175,55,0.25)] text-[#1C1917] dark:text-[#FAF5E9] shadow-[0_15px_35px_-8px_rgba(180,140,40,0.08)]",
+      organic: "bg-[#FDFBF7] dark:bg-[#1C1917] border border-[rgba(120,53,15,0.12)] text-[#292524] dark:text-[#FDF8F3] shadow-[0_18px_40px_-12px_rgba(120,53,15,0.07)]",
+      technical: "bg-[rgba(15,23,42,0.85)] border border-[rgba(56,189,248,0.22)] text-[#F8FAFC] shadow-[0_0_30px_-5px_rgba(56,189,248,0.12)]",
+      editorial: "bg-transparent text-[var(--wb-fg)] border-b border-[var(--wb-border)] shadow-none",
+      soft: "bg-[var(--wb-surface)] border border-[var(--wb-border)]/50 shadow-[0_10px_30px_rgba(0,0,0,0.04)]",
     };
 
     const paddingStyles = {
@@ -33,15 +67,27 @@ export const CardPrimitive = React.forwardRef<HTMLDivElement, CardPrimitiveProps
       xl: "p-10 sm:p-14",
     };
 
+    const cornerClass = treatment?.corner ? getCornerClassName(treatment.corner) : (variant === "brutalist" ? "rounded-none" : variant === "editorial" ? "rounded-sm" : variant === "luxury" ? "rounded-xl" : "rounded-3xl");
+
+    const dynamicStyle: React.CSSProperties = {
+      ...(treatment?.surface ? { backgroundColor: treatment.surface } : {}),
+      ...(treatment?.border ? { border: treatment.border } : {}),
+      ...(treatment?.shadow ? { boxShadow: treatment.shadow } : {}),
+      ...(treatment?.text ? { color: treatment.text } : {}),
+      ...style,
+    };
+
     return (
       <Component
         ref={ref}
         data-card-primitive={variant}
+        style={dynamicStyle}
         className={cn(
-          "rounded-3xl relative overflow-hidden transition-all duration-300",
+          "relative overflow-hidden transition-all duration-300",
+          cornerClass,
           variantStyles[variant],
           paddingStyles[padding],
-          interactive && "cursor-pointer focus-visible:ring-2 focus-visible:ring-[var(--wb-primary)] focus-visible:outline-none",
+          interactive && "cursor-pointer focus-visible:ring-2 focus-visible:ring-[var(--wb-primary)] focus-visible:outline-none hover:-translate-y-1",
           className
         )}
         {...props}

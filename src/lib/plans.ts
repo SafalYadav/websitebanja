@@ -1,4 +1,5 @@
 import type { PlanDefinition, PlanId, SubscriptionStatus } from "@/types/plans";
+export type { PlanDefinition, PlanId, SubscriptionStatus };
 
 /**
  * Format Indian Rupees with proper currency symbol and commas (e.g. ₹500)

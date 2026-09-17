@@ -17,6 +17,8 @@ export interface WebsiteThemeTokens {
   gradientHeroOverlay: string;
   isDark: boolean;
   fontFamily: string;
+  headingFont?: string;
+  bodyFont?: string;
 }
 
 interface ResolveThemeInput {
@@ -27,6 +29,10 @@ interface ResolveThemeInput {
   businessName?: string | null;
   archetype?: string | null;
   colorMode?: "dark" | "light" | null;
+  typography?: {
+    headingFont?: string;
+    bodyFont?: string;
+  } | null;
 }
 
 // Calculate relative luminance [0, 1] per WCAG 2.1
@@ -68,6 +74,7 @@ export function resolveWebsiteTheme({
   businessName,
   archetype,
   colorMode,
+  typography,
 }: ResolveThemeInput): WebsiteThemeTokens {
   const combinedContext = `${category || ""} ${businessName || ""}`.toLowerCase();
   const normalizedStyle = (style || "modern").toLowerCase();
@@ -227,6 +234,8 @@ export function resolveWebsiteTheme({
     gradientText,
     gradientHeroOverlay,
     isDark,
-    fontFamily: "var(--font-sans), system-ui, -apple-system, sans-serif",
+    fontFamily: typography?.bodyFont || "var(--font-sans), system-ui, -apple-system, sans-serif",
+    headingFont: typography?.headingFont || "var(--font-sans), system-ui, -apple-system, sans-serif",
+    bodyFont: typography?.bodyFont || "var(--font-sans), system-ui, -apple-system, sans-serif",
   };
 }

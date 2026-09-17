@@ -10,6 +10,26 @@ import { Eye, EyeOff } from "lucide-react";
 import ThemeToggle from "@/components/theme/ThemeToggle";
 import Logo from "@/components/brand/Logo";
 
+function getSafeRedirectUrl(target: string | null | undefined, fallback: string): string {
+  if (!target || typeof target !== "string") return fallback;
+  const trimmed = target.trim();
+  if (!trimmed.startsWith("/") || trimmed.startsWith("//") || trimmed.startsWith("/\\")) {
+    return fallback;
+  }
+  if (/[\r\n\t]/.test(trimmed) || /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(trimmed)) {
+    return fallback;
+  }
+  try {
+    const parsed = new URL(trimmed, "http://localhost");
+    if (parsed.origin !== "http://localhost" || !parsed.pathname.startsWith("/")) {
+      return fallback;
+    }
+    return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+  } catch {
+    return fallback;
+  }
+}
+
 export default function LoginPage() {
   const router = useRouter();
   const shouldReduceMotion = useReducedMotion();
@@ -39,8 +59,9 @@ export default function LoginPage() {
       return;
     }
 
-    const redirectTo = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("redirectTo") : null;
-    router.push(redirectTo || dashboardRoute());
+    const rawRedirectTo = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("redirectTo") : null;
+    const safeTarget = getSafeRedirectUrl(rawRedirectTo, dashboardRoute());
+    router.push(safeTarget);
   }
 
   async function handleGoogleLogin() {

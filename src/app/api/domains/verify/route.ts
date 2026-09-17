@@ -2,7 +2,9 @@ import { NextResponse } from "next/server";
 import { getAuthClient } from "@/lib/supabaseServer";
 import { normalizeDomain, isValidDomain, CNAME_TARGET, A_RECORD_IP } from "@/lib/domains";
 import { trackAnalyticsEvent } from "@/lib/analytics";
-import { dbGetProject, dbUpdateProjectCustomDomain } from "@/lib/db/queries";
+import { dbGetProject, dbUpdateProjectCustomDomain, dbGetUserSubscription } from "@/lib/db/queries";
+import { isProUser, type SubscriptionStatus } from "@/lib/plans";
+import { isUserAdmin } from "@/lib/adminAuth";
 import dns from "dns/promises";
 
 export async function POST(req: Request) {
@@ -16,6 +18,23 @@ export async function POST(req: Request) {
     const { data: { user }, error: authError } = await supabase.auth.getUser(token);
     if (authError || !user) {
       return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
+    }
+
+    // 0. Enforce server-side Pro entitlement check
+    const sub = await dbGetUserSubscription(user.id);
+    const isPro = isProUser(sub?.plan_id, sub?.status as SubscriptionStatus | null | undefined, sub?.current_period_end);
+    const isAdmin = isUserAdmin(user);
+    if (!isPro && !isAdmin) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "PRO_REQUIRED",
+          code: "CUSTOM_DOMAIN_PRO_REQUIRED",
+          message: "Connecting and verifying a custom domain requires an active Paid Pro subscription.",
+          cta: "Upgrade to Pro — ₹500/month",
+        },
+        { status: 403 }
+      );
     }
 
     const body: unknown = await req.json();

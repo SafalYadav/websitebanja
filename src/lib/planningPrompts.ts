@@ -15,6 +15,7 @@ Business details:
 - Description: ${data.description}
 - Audience: ${data.targetAudience}
 - Style: ${data.style}; colors: ${data.primaryColor}, ${data.secondaryColor}
+- 3D Preference: ${data.threeDPreference === "yes" ? "YES (Explicitly requested 3D capabilities)" : "NO (Hard constraint: Standard 2D layout only; zero 3D, WebGL, or R3F)"}
 - Contact: ${data.phone}, ${data.email}, ${data.website}, ${data.instagram}, ${data.facebook}, ${data.address}
 
 Create these documents:

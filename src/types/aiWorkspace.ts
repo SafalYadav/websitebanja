@@ -34,4 +34,5 @@ export interface PlanningInput {
   instagram: string;
   facebook: string;
   address: string;
+  threeDPreference?: "yes" | "no";
 }

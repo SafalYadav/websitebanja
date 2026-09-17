@@ -659,12 +659,12 @@ export async function dbDeleteProject(
 
 export async function dbGetProjectOwnership(
   projectId: string
-): Promise<{ id: string; user_id: string } | null> {
+): Promise<{ id: string; user_id: string; is_published?: boolean } | null> {
   if (!isAzureCircuitOpen()) {
     try {
       const result = await Promise.race([
         getPool().query(
-          `SELECT id, user_id FROM public.projects WHERE id = $1`,
+          `SELECT id, user_id, is_published FROM public.projects WHERE id = $1`,
           [projectId]
         ),
         new Promise<never>((_, reject) =>
@@ -673,7 +673,7 @@ export async function dbGetProjectOwnership(
       ]);
       markAzureSuccess();
       if (result.rows[0]) {
-        return result.rows[0] as { id: string; user_id: string };
+        return result.rows[0] as { id: string; user_id: string; is_published?: boolean };
       }
     } catch (err) {
       markAzureFailed(err);
@@ -683,7 +683,7 @@ export async function dbGetProjectOwnership(
   const supabase = getServiceRoleClient();
   const { data, error } = await supabase
     .from("projects")
-    .select("id, user_id")
+    .select("id, user_id, is_published")
     .eq("id", projectId)
     .maybeSingle();
 
@@ -980,6 +980,28 @@ export async function dbCreateCatalogItem(
   return result.rows[0] || null;
 }
 
+const VALID_CATALOG_COLUMNS = new Set([
+  "name",
+  "description",
+  "item_type",
+  "category",
+  "status",
+  "images",
+  "price",
+  "original_price",
+  "currency_code",
+  "show_discount_badge",
+  "hourly_price",
+  "daily_price",
+  "weekly_price",
+  "monthly_price",
+  "cta_text",
+  "cta_link",
+  "button_action",
+  "display_order",
+  "badge",
+]);
+
 export async function dbUpdateCatalogItem(
   itemId: string,
   userId: string,
@@ -992,6 +1014,8 @@ export async function dbUpdateCatalogItem(
   let paramIndex = 1;
 
   for (const [key, value] of Object.entries(updates)) {
+    if (!VALID_CATALOG_COLUMNS.has(key)) continue;
+
     setClauses.push(`"${key}" = $${paramIndex}`);
     values.push(
       (key === "images" || key === "button_action") && value !== null && typeof value === "object"
@@ -1000,6 +1024,8 @@ export async function dbUpdateCatalogItem(
     );
     paramIndex++;
   }
+
+  if (setClauses.length === 0) return null;
 
   values.push(itemId, userId);
 
@@ -1645,6 +1671,243 @@ export async function dbGetAdminSubscriptions(): Promise<Record<string, unknown>
     `SELECT id, user_id, plan_id, status, amount_inr, created_at FROM public.subscriptions`
   );
   return result.rows;
+}
+
+export interface AdminUserDirectoryItem {
+  userId: string;
+  email: string | null;
+  name: string | null;
+  plan: string;
+  planId: string;
+  status: string;
+  isAdmin: boolean;
+  isPro: boolean;
+  projectsCount: number;
+  publishedCount: number;
+  generationsCount: number;
+  createdAt: string;
+  lastActive: string;
+}
+
+/**
+ * Retrieves the administrative user directory merging real identity from auth.users,
+ * projects, and subscriptions.
+ */
+export async function dbGetAdminUsersDirectory(): Promise<AdminUserDirectoryItem[]> {
+  const usersMap = new Map<string, AdminUserDirectoryItem>();
+  const { isUserAdmin } = await import("@/lib/adminAuth");
+
+  // 1. Attempt to fetch real user identities from auth.users
+  if (!isAzureCircuitOpen()) {
+    try {
+      const authUsersRes = await getPool().query(
+        `SELECT id, email, raw_user_meta_data, raw_app_meta_data, created_at
+         FROM auth.users
+         ORDER BY created_at DESC
+         LIMIT 200`
+      );
+      for (const row of authUsersRes.rows) {
+        const meta = (row.raw_user_meta_data || {}) as Record<string, unknown>;
+        const name = (meta.full_name as string) || (meta.name as string) || null;
+        const isAdmin = isUserAdmin({ id: row.id, email: row.email, app_metadata: row.raw_app_meta_data });
+        usersMap.set(row.id, {
+          userId: row.id,
+          email: row.email || null,
+          name,
+          plan: "Free Starter",
+          planId: "free",
+          status: "free",
+          isAdmin,
+          isPro: false,
+          projectsCount: 0,
+          publishedCount: 0,
+          generationsCount: 0,
+          createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
+          lastActive: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
+        });
+      }
+    } catch {
+      // Azure auth.users query non-fatal fallback
+    }
+  }
+
+  // 2. Query projects summary
+  let projects: Record<string, unknown>[] = [];
+  try {
+    projects = await dbGetAdminProjectsSummary();
+  } catch {
+    projects = [];
+  }
+
+  for (const p of projects) {
+    const uid = p.user_id as string;
+    if (!uid) continue;
+    if (!usersMap.has(uid)) {
+      usersMap.set(uid, {
+        userId: uid,
+        email: null,
+        name: null,
+        plan: "Free Starter",
+        planId: "free",
+        status: "free",
+        isAdmin: isUserAdmin({ id: uid }),
+        isPro: false,
+        projectsCount: 0,
+        publishedCount: 0,
+        generationsCount: 0,
+        createdAt: (p.created_at as string) || new Date().toISOString(),
+        lastActive: (p.updated_at as string) || (p.created_at as string) || new Date().toISOString(),
+      });
+    }
+    const user = usersMap.get(uid)!;
+    user.projectsCount++;
+    if (p.is_published) user.publishedCount++;
+    if (p.updated_at && new Date(p.updated_at as string) > new Date(user.lastActive)) {
+      user.lastActive = p.updated_at as string;
+    }
+  }
+
+  // 3. Query subscriptions
+  let subs: Record<string, unknown>[] = [];
+  try {
+    subs = await dbGetAdminSubscriptions();
+  } catch {
+    subs = [];
+  }
+
+  for (const s of subs) {
+    const uid = s.user_id as string;
+    if (!uid) continue;
+    const isPaid = s.status === "active_paid" && s.plan_id === "paid_pro";
+    if (usersMap.has(uid)) {
+      const user = usersMap.get(uid)!;
+      user.planId = (s.plan_id as string) || "free";
+      user.status = (s.status as string) || "free";
+      user.isPro = isPaid;
+      user.plan = isPaid ? "Paid Pro (₹500/mo)" : "Free Starter";
+    } else {
+      usersMap.set(uid, {
+        userId: uid,
+        email: null,
+        name: null,
+        plan: isPaid ? "Paid Pro (₹500/mo)" : "Free Starter",
+        planId: (s.plan_id as string) || "free",
+        status: (s.status as string) || "free",
+        isAdmin: isUserAdmin({ id: uid }),
+        isPro: isPaid,
+        projectsCount: 0,
+        publishedCount: 0,
+        generationsCount: 0,
+        createdAt: (s.created_at as string) || new Date().toISOString(),
+        lastActive: (s.created_at as string) || new Date().toISOString(),
+      });
+    }
+  }
+
+  // 4. Merge fallback in-memory subscriptions
+  for (const [uid, memSub] of fallbackSubscriptions.entries()) {
+    const isPaid = memSub.status === "active_paid" && memSub.plan_id === "paid_pro";
+    if (usersMap.has(uid)) {
+      const user = usersMap.get(uid)!;
+      user.isPro = isPaid;
+      user.planId = memSub.plan_id;
+      user.status = memSub.status;
+      user.plan = isPaid ? "Paid Pro (₹500/mo)" : "Free Starter";
+    }
+  }
+
+  // 5. Update admin status from isUserAdmin
+  for (const user of usersMap.values()) {
+    user.isAdmin = isUserAdmin({ id: user.userId, email: user.email });
+  }
+
+  return Array.from(usersMap.values());
+}
+
+/**
+ * Grants Pro entitlement by updating user subscription in database and memory,
+ * and records an audit log event.
+ */
+export async function dbGrantPro(
+  targetUserId: string,
+  actorAdminId: string,
+  reason?: string
+): Promise<{ success: boolean; message: string }> {
+  if (!targetUserId || typeof targetUserId !== "string") {
+    throw new Error("Target user ID is required.");
+  }
+
+  const previousSub = await dbGetUserSubscription(targetUserId);
+  await dbUpsertUserSubscription(targetUserId, "paid_pro", "active_paid", 0);
+
+  const { recordPrivilegeAudit } = await import("@/lib/adminAuth");
+  await recordPrivilegeAudit({
+    actorAdminId,
+    targetUserId,
+    action: "PRO_GRANTED",
+    previousState: { planId: previousSub?.plan_id || "free", status: previousSub?.status || "free" },
+    newState: { planId: "paid_pro", status: "active_paid" },
+    reason,
+  });
+
+  return { success: true, message: `Pro entitlement granted to user ${targetUserId}.` };
+}
+
+/**
+ * Revokes Pro entitlement by reverting user subscription to Free Starter,
+ * and records an audit log event.
+ */
+export async function dbRevokePro(
+  targetUserId: string,
+  actorAdminId: string,
+  reason?: string
+): Promise<{ success: boolean; message: string }> {
+  if (!targetUserId || typeof targetUserId !== "string") {
+    throw new Error("Target user ID is required.");
+  }
+
+  const previousSub = await dbGetUserSubscription(targetUserId);
+  await dbUpsertUserSubscription(targetUserId, "free", "free", 0);
+
+  const { recordPrivilegeAudit } = await import("@/lib/adminAuth");
+  await recordPrivilegeAudit({
+    actorAdminId,
+    targetUserId,
+    action: "PRO_REVOKED",
+    previousState: { planId: previousSub?.plan_id || "paid_pro", status: previousSub?.status || "active_paid" },
+    newState: { planId: "free", status: "free" },
+    reason,
+  });
+
+  return { success: true, message: `Pro entitlement revoked from user ${targetUserId}.` };
+}
+
+/**
+ * Retrieves recent privilege audit events from database and memory.
+ */
+export async function dbGetAdminAuditLogs(limit: number = 50): Promise<Record<string, unknown>[]> {
+  const { getRecentAuditLogs } = await import("@/lib/adminAuth");
+  const memoryLogs = getRecentAuditLogs(limit);
+
+  if (!isAzureCircuitOpen()) {
+    try {
+      const result = await getPool().query(
+        `SELECT id, user_id as actor_admin_id, event_type as action, metadata, created_at
+         FROM public.analytics_events
+         WHERE event_type IN ('ADMIN_GRANTED', 'ADMIN_REVOKED', 'PRO_GRANTED', 'PRO_REVOKED')
+         ORDER BY created_at DESC
+         LIMIT $1`,
+        [limit]
+      );
+      if (result.rows.length > 0) {
+        return result.rows;
+      }
+    } catch {
+      // Fallback to memory
+    }
+  }
+
+  return memoryLogs as unknown as Record<string, unknown>[];
 }
 
 // ─── Website Member / Claim Queries ──────────────────────────────────────────

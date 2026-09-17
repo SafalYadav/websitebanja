@@ -20,6 +20,7 @@ import ContactSection from "./ContactSection";
 import FooterSection from "./FooterSection";
 import ProcessSection from "./ProcessSection";
 import ReviewsSection from "./ReviewsSection";
+import SpatialSectionWrapper from "./SpatialSectionWrapper";
 
 import { MessageCircle, Globe } from "lucide-react";
 
@@ -203,6 +204,7 @@ export default function WebsiteRenderer({
     website?.designStrategy?.backgroundStrategy?.color?.startsWith("#1") ||
     website?.designStrategy?.visualArchetype === "dark_technical"
   );
+  const websiteTypography = (website?.designStrategy as any)?.typography || (website as any)?.typography;
   const theme = resolveWebsiteTheme({
     style: resolvedStyle,
     primaryColor,
@@ -211,7 +213,21 @@ export default function WebsiteRenderer({
     businessName: resolvedBusinessName,
     archetype: website?.designStrategy?.visualArchetype,
     colorMode: isDarkCanvas ? "dark" : "light",
+    typography: websiteTypography,
   });
+
+  const fontImportUrl = React.useMemo(() => {
+    if (!websiteTypography) return null;
+    const cleanFont = (f?: string) => (f ? f.split(",")[0].replace(/['"]/g, "").trim() : "");
+    const hFamily = cleanFont(websiteTypography.headingFont);
+    const bFamily = cleanFont(websiteTypography.bodyFont);
+    const families = Array.from(new Set([hFamily, bFamily].filter(Boolean)));
+    if (families.length === 0) return null;
+    const query = families
+      .map((f) => `family=${encodeURIComponent(f)}:wght@300;400;500;600;700;800`)
+      .join("&");
+    return `https://fonts.googleapis.com/css2?${query}&display=swap`;
+  }, [websiteTypography]);
 
   if (!rawWebsite && !website) {
     return (
@@ -284,32 +300,54 @@ export default function WebsiteRenderer({
     }
   };
 
+  const stratColorSystem = website.designStrategy?.colorSystem;
+  const finalBg = stratColorSystem?.bg || theme.bg;
+  const finalSurface = stratColorSystem?.surface || theme.surface;
+  const finalSurfaceAlt = stratColorSystem?.surfaceAlt || theme.bgAlt || theme.surface;
+  const finalFg = stratColorSystem?.text || theme.fg;
+  const finalMuted = stratColorSystem?.muted || theme.muted;
+  const finalPrimary = stratColorSystem?.primary || theme.primary;
+  const finalSecondary = stratColorSystem?.secondary || theme.secondary;
+  const finalAccent = stratColorSystem?.accent || theme.accent;
+  const finalBorder = stratColorSystem?.border || theme.border;
+  const finalShadow = stratColorSystem?.shadow || "0 18px 40px -12px rgba(0,0,0,0.08)";
+  const finalCardAccent = stratColorSystem?.cardAccent || finalAccent;
+  const finalSectionAccent = stratColorSystem?.sectionAccent || finalSecondary;
+
   return (
     <WebsiteUIContext.Provider value={{ publicSlug, onSwitchPage: !isPublic ? handleSwitchPage : undefined, isPublic }}>
       <div
         className="wb-website-root min-h-full w-full transition-colors duration-300 relative"
-      style={{
-        backgroundColor: theme.bg,
-        color: theme.fg,
-        fontFamily: theme.fontFamily,
-        "--wb-primary": theme.primary,
-        "--wb-secondary": theme.secondary,
-        "--wb-accent": theme.accent,
-        "--wb-bg": theme.bg,
-        "--wb-bg-alt": theme.bgAlt,
-        "--wb-surface": theme.surface,
-        "--wb-surface-hover": theme.surfaceHover,
-        "--wb-fg": theme.fg,
-        "--wb-muted": theme.muted,
-        "--wb-border": theme.border,
-        "--wb-glow-primary": theme.glowPrimary,
-        "--wb-glow-secondary": theme.glowSecondary,
-        "--wb-gradient-primary": theme.gradientPrimary,
-        "--wb-gradient-secondary": theme.gradientSecondary,
-        "--wb-gradient-text": theme.gradientText,
-        "--wb-gradient-hero": theme.gradientHeroOverlay,
-      } as React.CSSProperties}
-    >
+        style={{
+          backgroundColor: finalBg,
+          color: finalFg,
+          fontFamily: theme.fontFamily,
+          "--wb-font-heading": theme.headingFont || "inherit",
+          "--wb-font-body": theme.bodyFont || theme.fontFamily,
+          "--wb-primary": finalPrimary,
+          "--wb-secondary": finalSecondary,
+          "--wb-accent": finalAccent,
+          "--wb-bg": finalBg,
+          "--wb-bg-alt": finalSurfaceAlt,
+          "--wb-surface": finalSurface,
+          "--wb-surface-alt": finalSurfaceAlt,
+          "--wb-surface-hover": theme.surfaceHover,
+          "--wb-fg": finalFg,
+          "--wb-text": finalFg,
+          "--wb-muted": finalMuted,
+          "--wb-border": finalBorder,
+          "--wb-shadow": finalShadow,
+          "--wb-card-accent": finalCardAccent,
+          "--wb-section-accent": finalSectionAccent,
+          "--wb-glow-primary": theme.glowPrimary,
+          "--wb-glow-secondary": theme.glowSecondary,
+          "--wb-gradient-primary": theme.gradientPrimary,
+          "--wb-gradient-secondary": theme.gradientSecondary,
+          "--wb-gradient-text": theme.gradientText,
+          "--wb-gradient-hero": theme.gradientHeroOverlay,
+        } as React.CSSProperties}
+      >
+      {fontImportUrl && <link rel="stylesheet" href={fontImportUrl} />}
       {/* Dynamic Background Texture Surfaces */}
       {(() => {
         const bgType = website.designStrategy?.backgroundStrategy?.type || (() => {
@@ -347,6 +385,84 @@ export default function WebsiteRenderer({
                   background: "radial-gradient(ellipse 75% 45% at 50% -5%, rgba(245, 158, 11, 0.22), transparent 75%), radial-gradient(circle at 90% 65%, rgba(217, 119, 6, 0.15), transparent 60%)",
                 }}
               />
+            )}
+            {bgType === "organic_warmth" && (
+              <>
+                <div
+                  className="pointer-events-none fixed inset-0 z-0 opacity-65 blur-3xl"
+                  style={{
+                    background: `radial-gradient(ellipse 65% 45% at 20% 10%, rgba(217, 119, 6, 0.16), transparent 70%), radial-gradient(ellipse 75% 55% at 85% 80%, rgba(180, 83, 9, 0.14), transparent 70%), radial-gradient(circle at 50% 50%, rgba(245, 158, 11, 0.06), transparent 60%)`,
+                  }}
+                />
+                <div className="pointer-events-none fixed inset-0 z-0 bg-[radial-gradient(rgba(180,83,9,0.08)_1px,transparent_1px)] [background-size:28px_28px] [mask-image:radial-gradient(ellipse_80%_70%_at_50%_40%,#000_60%,transparent_100%)]" />
+              </>
+            )}
+            {bgType === "paper_texture" && (
+              <>
+                <div className="pointer-events-none fixed inset-0 z-0 bg-[radial-gradient(rgba(120,53,15,0.06)_1px,transparent_1px)] [background-size:12px_12px] opacity-80" />
+                <div
+                  className="pointer-events-none fixed inset-0 z-0 opacity-40 mix-blend-multiply"
+                  style={{
+                    background: "linear-gradient(135deg, rgba(245, 240, 230, 0.5) 0%, rgba(255, 255, 255, 0) 50%, rgba(235, 225, 210, 0.4) 100%)",
+                  }}
+                />
+              </>
+            )}
+            {bgType === "mesh_gradient" && (
+              <>
+                <div
+                  className="pointer-events-none fixed inset-0 z-0 opacity-70 blur-3xl"
+                  style={{
+                    background: `radial-gradient(circle at 15% 25%, ${theme.primary}25, transparent 55%), radial-gradient(circle at 85% 75%, ${theme.secondary}22, transparent 55%), radial-gradient(circle at 50% 50%, ${theme.accent}15, transparent 65%)`,
+                  }}
+                />
+                <div className="pointer-events-none fixed inset-0 z-0 bg-[radial-gradient(rgba(255,255,255,0.04)_1px,transparent_1px)] [background-size:20px_20px]" />
+              </>
+            )}
+            {bgType === "cinematic_dark" && (
+              <>
+                <div className="pointer-events-none fixed inset-0 z-0 bg-[radial-gradient(circle_at_50%_0%,rgba(56,189,248,0.08)_0%,transparent_60%)]" />
+                <div className="pointer-events-none fixed top-1/3 left-0 right-0 h-px z-0 bg-gradient-to-r from-transparent via-cyan-500/20 to-transparent blur-[1px]" />
+                <div className="pointer-events-none fixed bottom-0 left-1/2 -translate-x-1/2 w-[800px] h-[300px] z-0 bg-gradient-to-t from-blue-950/20 to-transparent blur-3xl rounded-full" />
+              </>
+            )}
+            {bgType === "architectural_plane" && (
+              <>
+                <div className="pointer-events-none fixed inset-0 z-0 bg-[linear-gradient(to_right,rgba(100,116,139,0.07)_1px,transparent_1px),linear-gradient(to_bottom,rgba(100,116,139,0.07)_1px,transparent_1px)] bg-[size:64px_64px] [mask-image:radial-gradient(ellipse_90%_70%_at_50%_35%,#000_50%,transparent_100%)]" />
+                <div
+                  className="pointer-events-none fixed top-0 right-0 w-2/3 h-96 z-0 opacity-25 blur-2xl"
+                  style={{
+                    background: `linear-gradient(135deg, ${theme.primary}18, transparent 75%)`,
+                  }}
+                />
+              </>
+            )}
+            {bgType === "layered_fields" && (
+              <>
+                <div
+                  className="pointer-events-none fixed -top-24 -left-24 w-[500px] h-[500px] rounded-full z-0 opacity-40 blur-3xl"
+                  style={{ background: `${theme.primary}15` }}
+                />
+                <div
+                  className="pointer-events-none fixed top-1/2 -right-24 w-[600px] h-[600px] rounded-full z-0 opacity-35 blur-3xl"
+                  style={{ background: `${theme.secondary}14` }}
+                />
+                <div
+                  className="pointer-events-none fixed -bottom-24 left-1/3 w-[550px] h-[550px] rounded-full z-0 opacity-30 blur-3xl"
+                  style={{ background: `${theme.accent}12` }}
+                />
+              </>
+            )}
+            {bgType === "spatial_depth_mesh" && (
+              <>
+                <div
+                  className="pointer-events-none fixed inset-0 z-0 opacity-55 blur-2xl"
+                  style={{
+                    background: `radial-gradient(ellipse 80% 60% at 50% 20%, ${theme.primary}20, transparent 70%), radial-gradient(circle at 80% 80%, ${theme.secondary}18, transparent 60%)`,
+                  }}
+                />
+                <div className="pointer-events-none fixed inset-0 z-0 bg-[radial-gradient(rgba(99,102,241,0.15)_1.5px,transparent_1.5px)] [background-size:32px_32px] [mask-image:radial-gradient(ellipse_80%_80%_at_50%_40%,#000_50%,transparent_100%)]" />
+              </>
             )}
             {bgType === "clinical_calm" && (
               <div
@@ -471,11 +587,15 @@ export default function WebsiteRenderer({
         let content = null;
 
         if (key === "hero" || baseType === "hero") {
-          const heroData = (rawSectionData && typeof rawSectionData === "object" ? rawSectionData : website.hero) as Hero & { image?: string; imageFit?: any; imageFocalPoint?: string };
+          const heroData = (rawSectionData && typeof rawSectionData === "object" ? rawSectionData : website.hero) as Hero & { image?: string; imageFit?: any; imageFocalPoint?: string; layoutVariant?: any; layoutType?: any; heroType?: any; spatial3d?: any };
           content = (
             <HeroSection
               sectionKey={key}
               {...heroData}
+              spatial3d={heroData.spatial3d || (website as any).spatial3d || website.designStrategy?.spatial3d}
+              layoutVariant={heroData.layoutVariant || heroData.layoutType || heroData.heroType || (website.hero as any)?.layoutVariant || (website.hero as any)?.layoutType || (website.hero as any)?.heroType}
+              layoutType={heroData.layoutType || (website.hero as any)?.layoutType}
+              heroType={heroData.heroType || (website.hero as any)?.heroType}
               image={heroData.image || website.hero.image}
               imageFit={heroData.imageFit || (website.hero as any)?.imageFit}
               imageFocalPoint={heroData.imageFocalPoint || (website.hero as any)?.imageFocalPoint}
@@ -562,7 +682,13 @@ export default function WebsiteRenderer({
             const sectionPlan = (website as any).skillExecutionPlan?.sections?.find(
               (s: any) => s.sectionType === key || s.sectionType === baseType
             );
-            const resolvedCardFamily = (reviewsObj?.cardFamily as any) || sectionPlan?.cardFamily;
+            const resolvedCardFamily =
+              (reviewsObj?.cardFamily as any) ||
+              sectionPlan?.cardFamily ||
+              (website as any)?.designStrategy?.cardFamilyStrategy?.reviewsCardFamily ||
+              (website as any)?.designStrategy?.cardFamily ||
+              (website as any)?.cardFamily ||
+              (website as any)?.cardStyle;
             content = (
               <ReviewsSection
                 sectionKey={key}
@@ -572,6 +698,8 @@ export default function WebsiteRenderer({
                 subtitle={typeof reviewsObj?.subtitle === "string" ? reviewsObj.subtitle : undefined}
                 badge={typeof reviewsObj?.badge === "string" ? reviewsObj.badge : undefined}
                 cardFamily={resolvedCardFamily}
+                cardTreatment={(website as any).designStrategy?.cardFamilyStrategy?.cardTreatment || website.designStrategy?.cardTreatment}
+                visualArchetype={website.designStrategy?.visualArchetype}
               />
             );
           } else if (
@@ -602,7 +730,13 @@ export default function WebsiteRenderer({
             const sectionPlan = (website as any).skillExecutionPlan?.sections?.find(
               (s: any) => s.sectionType === key || s.sectionType === baseType
             );
-            const resolvedCardFamily = (sectionObj?.cardFamily as any) || sectionPlan?.cardFamily;
+            const resolvedCardFamily =
+              (sectionObj?.cardFamily as any) ||
+              sectionPlan?.cardFamily ||
+              (website as any)?.designStrategy?.cardFamilyStrategy?.servicesCardFamily ||
+              (website as any)?.designStrategy?.cardFamily ||
+              (website as any)?.cardFamily ||
+              (website as any)?.cardStyle;
             content = (
               <ServicesSection
                 sectionKey={key}
@@ -611,7 +745,7 @@ export default function WebsiteRenderer({
                 title={typeof sectionObj?.title === "string" ? sectionObj.title : undefined}
                 subtitle={typeof sectionObj?.subtitle === "string" ? sectionObj.subtitle : undefined}
                 badge={typeof sectionObj?.badge === "string" ? sectionObj.badge : undefined}
-                cardTreatment={website.designStrategy?.cardTreatment}
+                cardTreatment={(website as any).designStrategy?.cardFamilyStrategy?.cardTreatment || website.designStrategy?.cardTreatment}
                 visualArchetype={website.designStrategy?.visualArchetype}
                 cardFamily={resolvedCardFamily}
               />
@@ -651,7 +785,22 @@ export default function WebsiteRenderer({
             const sectionPlan = (website as any).skillExecutionPlan?.sections?.find(
               (s: any) => s.sectionType === key || s.sectionType === baseType
             );
-            const resolvedCardFamily = (sectionObj?.cardFamily as any) || sectionPlan?.cardFamily;
+            const resolvedCardFamily =
+              (sectionObj?.cardFamily as any) ||
+              sectionPlan?.cardFamily ||
+              (website as any)?.designStrategy?.cardFamilyStrategy?.featuresCardFamily ||
+              (website as any)?.designStrategy?.cardFamily ||
+              (website as any)?.cardFamily ||
+              (website as any)?.cardStyle;
+            const resolvedFeaturesLayoutStrategy =
+              (sectionObj?.featuresLayoutStrategy as any) ||
+              (website as any)?.designStrategy?.featuresLayoutStrategy ||
+              (website as any)?.featuresLayoutStrategy;
+            const isSpatialEnabled = Boolean(
+              website?.hero?.spatial3d?.enabled ||
+              website?.designStrategy?.spatial3d?.enabled ||
+              (website as any)?.spatial3d?.enabled
+            );
             content = (
               <FeaturesSection
                 sectionKey={key}
@@ -660,9 +809,11 @@ export default function WebsiteRenderer({
                 title={typeof sectionObj?.title === "string" ? sectionObj.title : undefined}
                 subtitle={typeof sectionObj?.subtitle === "string" ? sectionObj.subtitle : undefined}
                 badge={typeof sectionObj?.badge === "string" ? sectionObj.badge : undefined}
-                cardTreatment={website.designStrategy?.cardTreatment}
+                cardTreatment={(website as any).designStrategy?.cardFamilyStrategy?.cardTreatment || website.designStrategy?.cardTreatment}
                 visualArchetype={website.designStrategy?.visualArchetype}
                 cardFamily={resolvedCardFamily}
+                featuresLayoutStrategy={resolvedFeaturesLayoutStrategy}
+                is3d={isSpatialEnabled}
               />
             );
           } else if (key === "products" || key === "catalog" || key === "curated_collection" || baseType === "products" || baseType === "catalog" || baseType === "curated") {
@@ -709,10 +860,22 @@ export default function WebsiteRenderer({
 
           if (!content) return null;
 
+          const isSpatial3d = Boolean(website?.hero?.spatial3d?.enabled || website?.designStrategy?.spatial3d?.enabled);
+          const spatialConfig = website?.hero?.spatial3d || website?.designStrategy?.spatial3d;
+
+          const renderedContent =
+            isSpatial3d && key !== "footer" && key !== "hero" ? (
+              <SpatialSectionWrapper config={spatialConfig}>
+                {content}
+              </SpatialSectionWrapper>
+            ) : (
+              content
+            );
+
           if (!isInteractiveStudio) {
             return (
               <div key={key} id={`wb-section-${key}`}>
-                {content}
+                {renderedContent}
               </div>
             );
           }
@@ -744,7 +907,7 @@ export default function WebsiteRenderer({
                 </span>
               </div>
 
-              {content}
+              {renderedContent}
             </div>
           );
         })}

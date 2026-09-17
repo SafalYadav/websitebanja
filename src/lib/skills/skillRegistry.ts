@@ -574,6 +574,22 @@ export function generateSkillGuidance(skillId: SkillId, context: SkillSelectionC
 - Mobile & Reduced-Motion Fallback: On viewports < 768px or when prefers-reduced-motion is active, flatten rotation to 0deg and convert Z-depth to standard CSS box-shadow.
 `.trim();
 
+    case "component-variation":
+      return `
+[COMPONENT VARIATION & CARD DIVERSITY - skills/component-variation/skill.md]
+- Diverse Card Families: Never apply a single repetitive card box across the entire site. Choose distinct families (e.g. Image-Led / Horizontal for Services, Minimal Flat / Bordered / Bento for Features, Editorial / Testimonial Stack for Reviews).
+- Design Direction Binding: Derive card surfaces, borders, shadows, and corners dynamically from the Visual Archetype and Color System.
+- Anti-Repetition: Guarantee that subsequent generations of the same business use different card family combinations.
+`.trim();
+
+    case "background-art-direction":
+      return `
+[BACKGROUND ART DIRECTION & BACKDROPS - skills/background-art-direction/skill.md]
+- Prompt Override Supremacy: If the user requests "minimal white", force solid clean white. If "dark cinematic", force midnight noir. If "nature/organic", force warm terracotta organic warmth.
+- Atmospheric Harmony: Use subtle mesh gradients, paper textures, layered color fields, or dot/tech grids that enrich optical depth without competing with typography.
+- Spatial Alignment: If 3D is active, coordinate background with spatial depth mesh; if 3D is OFF, preserve pure performant 2D surfaces.
+`.trim();
+
     default: {
       const raw = loadSkillContent(skillId);
       if (!raw) return "";

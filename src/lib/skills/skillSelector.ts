@@ -51,8 +51,16 @@ export function selectSkillsForRequest(context: SkillSelectionContext): SkillSel
   const hasExplicitGsapRequest =
     /\b(gsap|scrolltrigger|scrollytelling|pinning|timeline|cinematic\s+scroll)\b/i.test(combinedText);
 
+  const hasExplicitNo3D =
+    context.threeDPreference === "no" ||
+    /\b(no\s+3d|without\s+3d|2d\s+only|simple\s+2d|normal\s+website|flat\s+website|3d\s+nahi|no\s+webgl)\b/i.test(combinedText);
+
   const hasExplicit3DRequest =
-    /\b(three\.?js|3d|webgl|shader\w*|particle\w*|3d\s+model|orbit\s+viewer)\b/i.test(combinedText);
+    !hasExplicitNo3D &&
+    (context.threeDPreference === "yes" ||
+      /\b(three\.?js|3d\s*(?:website|model|models|canvas|animation|animations|effect|effects|scroll|scene|hero|product\s+viewer|view)|webgl|r3f|react\s+three\s+fiber|spline|spatial\s+3d|3d\s+chahiye)\b/i.test(
+        combinedText
+      ));
 
   const hasExplicitDataVizRequest =
     /\b(chart\w*|dashboard|analytics|kpi|metrics|graph\w*|data\s+visualization|reporting)\b/i.test(
@@ -172,14 +180,10 @@ export function selectSkillsForRequest(context: SkillSelectionContext): SkillSel
         : "Advanced timeline choreography reserved for narrative scrollytelling experiences.",
     },
     threejs: {
-      score: hasExplicitNoAnimation || hasExplicitMinimalOrSimple
-        ? 0
-        : hasExplicit3DRequest
-        ? 0.95
-        : 0.05,
+      score: hasExplicit3DRequest ? 0.95 : 0,
       reason: hasExplicit3DRequest
         ? "User explicitly requested 3D WebGL scenes or interactive product inspection."
-        : "3D WebGL engine reserved for explicit hardware budgets and spatial showcases.",
+        : "3D WebGL engine disabled (3D is not the default).",
     },
 
     // Domain Specific
@@ -200,24 +204,27 @@ export function selectSkillsForRequest(context: SkillSelectionContext): SkillSel
       reason: "Product discovery, faceted filtering, PDP buy-box architecture, and guest checkout velocity.",
     },
     "spatial-interaction": {
-      score: hasExplicitNoAnimation || hasExplicitMinimalOrSimple
-        ? 0
-        : hasExplicit3DRequest
-        ? 0.96
-        : isSaaSOrTech || isCreativeOrPortfolio || combinedText.includes("architect") || combinedText.includes("luxury")
-        ? 0.94
-        : isLocalBusinessOrService
-        ? 0.1
-        : 0.35,
+      score: hasExplicit3DRequest ? 0.96 : 0,
       reason: hasExplicit3DRequest
         ? "User explicitly requested spatial 3D interactions."
-        : isSaaSOrTech || isCreativeOrPortfolio || combinedText.includes("architect") || combinedText.includes("luxury")
-        ? "CSS 3D perspective and multi-plane depth provide tactile storytelling for product or architectural visual hierarchy."
-        : "Spatial depth evaluated according to industry conversion goals.",
+        : "Spatial 3D disabled (3D is not the default; non-generic 2D design is default).",
+    },
+    "component-variation": {
+      score: 0.95,
+      reason: "Card family specialization avoiding visual homogenization across successive generations and sections.",
+    },
+    "background-art-direction": {
+      score: 0.95,
+      reason: "Intelligent background surfaces honoring prompt overrides, atmospheric gradients, and contrast preservation.",
     },
   };
 
   // Adjust scores based on explicit negative overrides
+  if (!hasExplicit3DRequest) {
+    skillScores.threejs.score = 0;
+    skillScores["spatial-interaction"].score = 0;
+  }
+
   if (hasExplicitNoAnimation) {
     skillScores["framer-motion"].score = 0;
     skillScores.gsap.score = 0;

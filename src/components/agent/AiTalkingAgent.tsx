@@ -294,6 +294,7 @@ export default function AiTalkingAgent({
   const setWhatsappNumber = useBuilderStore((state) => state.setWhatsappNumber);
   const setWhatsappEnabled = useBuilderStore((state) => state.setWhatsappEnabled);
   const setSelectedFeatures = useBuilderStore((state) => state.setSelectedFeatures);
+  const setThreeDPreference = useBuilderStore((state) => state.setThreeDPreference);
 
   // Voice Agent Hook
   const {
@@ -742,6 +743,7 @@ export default function AiTalkingAgent({
       const finalSecondaryColor = extractedNeeds.secondaryColor || "#2563EB";
       const finalPhone = (extractedNeeds.whatsappNumber || extractedNeeds.phone || "").trim();
       const finalEmail = (extractedNeeds.email || "").trim();
+      const finalThreeDPreference = extractedNeeds.threeDPreference === "yes" ? "yes" : "no";
       const finalFeatures =
         extractedNeeds.features && extractedNeeds.features.length > 0
           ? extractedNeeds.features
@@ -757,6 +759,7 @@ export default function AiTalkingAgent({
       setSecondaryColor(finalSecondaryColor);
       setPhone(finalPhone);
       setEmail(finalEmail);
+      setThreeDPreference(finalThreeDPreference);
       if (finalPhone) {
         setWhatsappNumber(finalPhone);
         setWhatsappEnabled(true);
@@ -764,7 +767,10 @@ export default function AiTalkingAgent({
       setSelectedFeatures(finalFeatures);
 
       if (onReadyToBuild) {
-        onReadyToBuild(extractedNeeds);
+        onReadyToBuild({
+          ...extractedNeeds,
+          threeDPreference: finalThreeDPreference,
+        });
         return;
       }
 
@@ -773,7 +779,10 @@ export default function AiTalkingAgent({
       if (!session) {
         setIsBuilding(false);
         if (typeof window !== "undefined") {
-          localStorage.setItem("wb_pending_project_needs", JSON.stringify(extractedNeeds));
+          localStorage.setItem("wb_pending_project_needs", JSON.stringify({
+            ...extractedNeeds,
+            threeDPreference: finalThreeDPreference,
+          }));
         }
         toast.info("Account Required", "Please sign in or create a free account to generate and save your website.");
         router.push(`${loginRoute()}?redirectTo=${encodeURIComponent("/agent?autoGenerate=true")}`);
@@ -796,6 +805,7 @@ export default function AiTalkingAgent({
           phone: finalPhone,
           email: finalEmail,
           selected_features: finalFeatures,
+          three_d_preference: finalThreeDPreference,
         });
       } else {
         const { data: newProj, error } = await createProject(finalBusinessName);
@@ -812,6 +822,7 @@ export default function AiTalkingAgent({
           phone: finalPhone,
           email: finalEmail,
           selected_features: finalFeatures,
+          three_d_preference: finalThreeDPreference,
         });
       }
 
@@ -1155,6 +1166,23 @@ export default function AiTalkingAgent({
                           {extractedNeeds.secondaryColor || "#2563EB"}
                         </span>
                       </div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-zinc-200/80 bg-zinc-50/50 p-2.5 dark:border-white/5 dark:bg-zinc-900/40">
+                    <div className="flex items-center justify-between">
+                      <span className="flex items-center gap-1 text-zinc-500 text-[10px] font-medium">
+                        <Sparkles className="h-3 w-3" />
+                        <span>3D Experience</span>
+                      </span>
+                      <span className={cn(
+                        "font-semibold text-[10px] px-2 py-0.5 rounded-md",
+                        extractedNeeds.threeDPreference === "yes"
+                          ? "bg-violet-500/10 text-violet-600 dark:text-violet-400 border border-violet-500/20"
+                          : "bg-zinc-500/10 text-zinc-600 dark:text-zinc-400"
+                      )}>
+                        {extractedNeeds.threeDPreference === "yes" ? "3D Enabled ✨" : "Standard 2D (No 3D)"}
+                      </span>
                     </div>
                   </div>
                 </motion.div>

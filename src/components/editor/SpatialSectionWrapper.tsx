@@ -62,6 +62,7 @@ export default function SpatialSectionWrapper({
     return (
       <div
         ref={containerRef}
+        data-wb-spatial="false"
         className={"wb-spatial-flat transition-transform duration-300 " + className}
       >
         {children}
@@ -72,12 +73,21 @@ export default function SpatialSectionWrapper({
   return (
     <div
       ref={containerRef}
+      data-wb-spatial="true"
+      data-spatial-level={config?.level || "3D_STAGE"}
       className={"wb-spatial-container relative " + className}
       style={{
         perspective: perspective + "px",
         perspectiveOrigin: "50% 40%",
       }}
     >
+      <div
+        className="pointer-events-none absolute inset-0 z-10 opacity-25 mix-blend-screen"
+        style={{
+          background: "radial-gradient(ellipse 70% 50% at 50% 25%, var(--wb-glow-primary, rgba(56, 189, 248, 0.18)), transparent 75%)",
+          transform: "translateZ(15px)",
+        }}
+      />
       <motion.div
         className="wb-spatial-stage will-change-transform"
         style={{

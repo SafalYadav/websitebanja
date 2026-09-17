@@ -53,7 +53,7 @@ export async function POST(req: NextRequest) {
     }
 
     // 1. Fetch project by slug or ID
-    let projectData: { id: string; user_id: string } | null = null;
+    let projectData: { id: string; user_id: string; is_published?: boolean } | null = null;
     if (slug) {
       projectData = await dbGetProjectByPublicSlug(slug);
     } else if (projectId) {
@@ -62,6 +62,10 @@ export async function POST(req: NextRequest) {
 
     if (!projectData) {
       return NextResponse.json({ success: false, message: "Website not found." }, { status: 404 });
+    }
+
+    if (projectData.is_published === false) {
+      return NextResponse.json({ success: false, message: "Website is not published." }, { status: 403 });
     }
 
     const newLead: SiteLead = {

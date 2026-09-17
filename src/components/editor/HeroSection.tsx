@@ -117,11 +117,66 @@ export function HeroBackgroundAtmosphere({
   );
 }
 
-interface HeroSectionProps extends Partial<Hero> {
+export type CanonicalHeroVariant =
+  | "split_showcase"
+  | "fullscreen_visual"
+  | "minimal_editorial"
+  | "spatial_depth_hero"
+  | "bento_grid_hero"
+  | "action_focused";
+
+export function normalizeHeroVariant(raw?: string): CanonicalHeroVariant {
+  if (!raw) return "split_showcase";
+  const clean = raw.toLowerCase().trim();
+  if (
+    clean === "fullscreen_visual" ||
+    clean === "fullscreen_immersive" ||
+    clean.includes("fullscreen") ||
+    clean.includes("cinematic")
+  ) {
+    return "fullscreen_visual";
+  }
+  if (
+    clean === "minimal_editorial" ||
+    clean === "centered_minimal" ||
+    clean === "editorial_hero" ||
+    clean === "asymmetric_split" ||
+    clean.includes("editorial") ||
+    clean.includes("centered")
+  ) {
+    return "minimal_editorial";
+  }
+  if (
+    clean === "action_focused" ||
+    clean.includes("action") ||
+    clean.includes("cta") ||
+    clean.includes("booking") ||
+    clean.includes("emergency")
+  ) {
+    return "action_focused";
+  }
+  if (
+    clean === "spatial_depth_hero" ||
+    clean === "bento_grid_hero" ||
+    clean.includes("spatial") ||
+    clean.includes("3d") ||
+    clean.includes("bento")
+  ) {
+    return "spatial_depth_hero";
+  }
+  if (clean === "split_screen" || clean === "split_showcase" || clean.includes("split")) {
+    return "split_showcase";
+  }
+  return "split_showcase";
+}
+
+interface HeroSectionProps extends Omit<Partial<Hero>, "layoutVariant"> {
   sectionKey?: string;
   image?: string;
   buttonAction?: ButtonActionConfig;
-  layoutVariant?: "split_showcase" | "fullscreen_visual" | "minimal_editorial" | "spatial_depth_hero" | "bento_grid_hero" | "action_focused";
+  layoutVariant?: CanonicalHeroVariant | string;
+  layoutType?: string;
+  heroType?: string;
   backgroundStyle?: BackgroundStyleConfig;
   spatial3d?: Spatial3dConfig;
   heroBackground?: HeroBackgroundConfig;
@@ -142,7 +197,9 @@ export default function HeroSection({
   button,
   image,
   buttonAction,
-  layoutVariant = "split_showcase",
+  layoutVariant,
+  layoutType,
+  heroType,
   backgroundStyle,
   spatial3d,
   heroBackground,
@@ -154,6 +211,7 @@ export default function HeroSection({
   imageFit,
   imageFocalPoint,
 }: HeroSectionProps) {
+  const effectiveLayoutVariant = normalizeHeroVariant(layoutVariant || layoutType || heroType);
   const shouldReduceMotion = useReducedMotion();
   const { publicSlug, onSwitchPage } = useWebsiteUI();
   const context = { siteSlug: publicSlug, onSwitchPage };
@@ -175,7 +233,7 @@ export default function HeroSection({
       : ["Verified Expertise", "Artisanal Precision", "Direct Communication"];
 
   // 1. Fullscreen Visual Layout (Architecture, Fine Dining, Luxury, Hospitality)
-  if (layoutVariant === "fullscreen_visual") {
+  if (effectiveLayoutVariant === "fullscreen_visual") {
     return (
       <section data-section="hero" className="relative overflow-hidden min-h-[92vh] flex flex-col justify-end pb-24 pt-36 px-6 sm:px-12 transition-colors duration-300 bg-zinc-950 isolate">
         <HeroBackgroundAtmosphere heroBackground={heroBackground} category={category} visualArchetype={visualArchetype} />
@@ -263,7 +321,7 @@ export default function HeroSection({
   }
 
   // 2. Minimal Editorial Layout (High-End Fashion, Architecture Essays)
-  if (layoutVariant === "minimal_editorial") {
+  if (effectiveLayoutVariant === "minimal_editorial") {
     return (
       <section
         data-section="hero"
@@ -321,7 +379,7 @@ export default function HeroSection({
   }
 
   // 3. Action Focused Layout (Dental Clinic, Emergency Plumber, Local Trades)
-  if (layoutVariant === "action_focused") {
+  if (effectiveLayoutVariant === "action_focused") {
     return (
       <section
         data-section="hero"
@@ -404,7 +462,7 @@ export default function HeroSection({
   }
 
   // 4. Default Showcase & Spatial Depth Layout (SaaS, AI, Creative)
-  const isSpatialHero = layoutVariant === "spatial_depth_hero" || Boolean(spatial3d?.enabled);
+  const isSpatialHero = effectiveLayoutVariant === "spatial_depth_hero" || Boolean(spatial3d?.enabled);
 
   const visualCardContent = (
     <div

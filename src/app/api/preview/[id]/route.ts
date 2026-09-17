@@ -4,25 +4,40 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
+import { checkMemoryRateLimit } from "@/lib/rateLimit";
+import { getClientIp } from "@/lib/supabaseServer";
 
 interface RouteContext {
   params: Promise<{ id: string }>;
 }
 
+const PREVIEWS_DIR = path.resolve(process.cwd(), "scratch/previews");
+const SAFE_ID_REGEX = /^[a-zA-Z0-9_-]{1,128}$/;
+const FORBIDDEN_KEYS = new Set(["__proto__", "constructor", "prototype"]);
+
 export async function POST(request: Request, context: RouteContext) {
   try {
-    const { id } = await context.params;
-    if (!id) {
-      return NextResponse.json({ success: false, error: "Preview ID is required" }, { status: 400 });
+    const ip = getClientIp(request);
+    const { success: allowed } = checkMemoryRateLimit(`preview_edit_${ip}`, 60, 60 * 1000);
+    if (!allowed) {
+      return NextResponse.json({ success: false, error: "Rate limit exceeded" }, { status: 429 });
     }
 
-    const body = await request.json().catch(() => ({}));
-    const previewFile = path.join(process.cwd(), "scratch/previews", `${id}.json`);
+    const { id } = await context.params;
+    if (!id || !SAFE_ID_REGEX.test(id)) {
+      return NextResponse.json({ success: false, error: "Invalid preview ID" }, { status: 400 });
+    }
+
+    const previewFile = path.resolve(PREVIEWS_DIR, `${id}.json`);
+    if (!previewFile.startsWith(PREVIEWS_DIR + path.sep)) {
+      return NextResponse.json({ success: false, error: "Access denied" }, { status: 403 });
+    }
 
     if (!fs.existsSync(previewFile)) {
       return NextResponse.json({ success: false, error: "Preview file not found" }, { status: 404 });
     }
 
+    const body = await request.json().catch(() => ({}));
     const currentData = JSON.parse(fs.readFileSync(previewFile, "utf-8"));
 
     if (body.websiteData) {
@@ -56,17 +71,33 @@ export async function POST(request: Request, context: RouteContext) {
         const parts = body.elementPath.split(".");
         let target: any = currentData;
         let valid = true;
-        for (let i = 0; i < parts.length - 1; i++) {
-          const part = parts[i];
-          if (target[part] === undefined) {
-            target[part] = {};
+
+        for (const p of parts) {
+          if (FORBIDDEN_KEYS.has(p) || p.startsWith("__")) {
+            valid = false;
+            break;
           }
-          target = target[part];
         }
-        if (valid && target) {
-          const lastKey = parts[parts.length - 1];
-          target[lastKey] = body.url;
-          updatedCount++;
+
+        if (valid) {
+          for (let i = 0; i < parts.length - 1; i++) {
+            const part = parts[i];
+            if (target[part] === undefined) {
+              target[part] = {};
+            }
+            target = target[part];
+            if (!target || typeof target !== "object") {
+              valid = false;
+              break;
+            }
+          }
+          if (valid && target) {
+            const lastKey = parts[parts.length - 1];
+            if (!FORBIDDEN_KEYS.has(lastKey)) {
+              target[lastKey] = body.url;
+              updatedCount++;
+            }
+          }
         }
       }
 

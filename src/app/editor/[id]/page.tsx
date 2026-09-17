@@ -50,11 +50,13 @@ export default function OnboardingStartPage() {
     category,
     description,
     targetAudience,
+    threeDPreference,
     setOnboardingMode,
     setBusinessName,
     setCategory,
     setDescription,
     setTargetAudience,
+    setThreeDPreference,
   } = useBuilderStore();
 
   const activeProjectId = params?.id || projectId;
@@ -69,6 +71,7 @@ export default function OnboardingStartPage() {
     category,
     description,
     target_audience: targetAudience,
+    three_d_preference: threeDPreference,
   });
 
   // Business Details Wizard Handler
@@ -324,6 +327,46 @@ export default function OnboardingStartPage() {
                 value={targetAudience}
                 onChange={(e) => setTargetAudience(e.target.value)}
               />
+
+              <div className="rounded-2xl border border-zinc-200/80 bg-zinc-50/50 p-4 dark:border-white/10 dark:bg-zinc-900/30">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <label className="text-xs font-semibold uppercase tracking-wider text-zinc-700 dark:text-zinc-300">
+                      3D Visual Experience
+                    </label>
+                    <p className="text-xs text-zinc-500 mt-0.5">
+                      Enable spatial 3D effects and interactive 3D hero elements (Default: Off).
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setThreeDPreference("no")}
+                      className={cn(
+                        "px-3 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer",
+                        threeDPreference === "no"
+                          ? "bg-zinc-900 text-white dark:bg-white dark:text-zinc-900 shadow-xs"
+                          : "bg-zinc-200/70 text-zinc-700 hover:bg-zinc-300/70 dark:bg-white/10 dark:text-zinc-300"
+                      )}
+                    >
+                      No (Standard 2D)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setThreeDPreference("yes")}
+                      className={cn(
+                        "px-3 py-1.5 rounded-lg text-xs font-medium transition flex items-center gap-1 cursor-pointer",
+                        threeDPreference === "yes"
+                          ? "bg-violet-600 text-white shadow-xs"
+                          : "bg-zinc-200/70 text-zinc-700 hover:bg-zinc-300/70 dark:bg-white/10 dark:text-zinc-300"
+                      )}
+                    >
+                      <span>Yes</span>
+                      <span>✨</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
 
             <StepNavigation onNext={handleDetailsNext} />

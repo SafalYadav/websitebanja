@@ -62,7 +62,14 @@ export type BackgroundType =
   | "subtle_grain"
   | "warm_glow"
   | "clinical_calm"
-  | "luxury_noir";
+  | "luxury_noir"
+  | "mesh_gradient"
+  | "paper_texture"
+  | "organic_warmth"
+  | "architectural_plane"
+  | "cinematic_dark"
+  | "layered_fields"
+  | "spatial_depth_mesh";
 
 export interface BackgroundStyleConfig {
   type: BackgroundType;
@@ -71,6 +78,7 @@ export interface BackgroundStyleConfig {
   patternOpacity?: number;
   imageUrl?: string;
   overlayOpacity?: number;
+  textureMode?: string;
 }
 
 export type Spatial3dLevel = "NONE" | "SUBTLE_2_5D" | "ADVANCED_CSS_3D" | "RICH_SPATIAL";
@@ -110,7 +118,90 @@ export type CardFamily =
   | "stat"
   | "service"
   | "feature-reveal"
-  | "floating";
+  | "floating"
+  | "minimal-flat"
+  | "elevated"
+  | "bordered"
+  | "asymmetric"
+  | "image-led"
+  | "soft-surface"
+  | "glass-layered"
+  | "brutalist"
+  | "luxury"
+  | "organic"
+  | "technical"
+  | "oversized-typography";
+
+export interface CardColorTreatment {
+  surface?: string;
+  border?: string;
+  shadow?: string;
+  accent?: string;
+  corner?: "none" | "sm" | "md" | "lg" | "xl" | "2xl" | "3xl" | "full";
+  text?: string;
+  badgeBg?: string;
+  badgeText?: string;
+}
+
+export interface CardFamilyStrategyConfig {
+  primaryCardFamily: CardFamily;
+  servicesCardFamily: CardFamily;
+  featuresCardFamily: CardFamily;
+  reviewsCardFamily: CardFamily;
+  cardTreatment?: CardColorTreatment;
+}
+
+export type FeaturesLayoutVariant =
+  | "asymmetric-editorial"
+  | "three-column-grid"
+  | "horizontal-story"
+  | "feature-timeline"
+  | "bento-features"
+  | "oversized-typographic"
+  | "image-led-features"
+  | "editorial-split";
+
+export type FeaturesCardGeometry =
+  | "sharp"
+  | "rounded-standard"
+  | "rounded-heavy"
+  | "pill-subtle"
+  | "asymmetric-squircle"
+  | "bordered-flat";
+
+export type FeaturesAnimationStrategy =
+  | "fade-up-stagger"
+  | "horizontal-reveal"
+  | "clip-path-reveal"
+  | "scale-reveal"
+  | "editorial-slide"
+  | "masked-text-reveal"
+  | "subtle-parallax"
+  | "minimal-motion";
+
+export type FeaturesIconTreatment =
+  | "inline-icon"
+  | "oversized-icon"
+  | "numbered-feature"
+  | "icon-and-label"
+  | "decorative-glyph"
+  | "no-icon"
+  | "image-thumbnail"
+  | "abstract-shape";
+
+export interface FeaturesLayoutStrategyConfig {
+  layoutVariant: FeaturesLayoutVariant;
+  cardGeometry: FeaturesCardGeometry;
+  aspectRatio?: "portrait" | "landscape" | "square" | "natural";
+  density: "compact" | "standard" | "spacious";
+  dividerStyle: "none" | "subtle-border" | "dashed" | "accent-solid";
+  iconTreatment: FeaturesIconTreatment;
+  animationStrategy: FeaturesAnimationStrategy;
+  metricTreatment: "badge" | "highlight-stat" | "editorial-quote" | "contextual-tag" | "none";
+  headerAlignment: "center" | "left" | "split";
+  mediaPlacement?: "left" | "right" | "top" | "integrated";
+  spatialComposition?: "layered-depth" | "floating-planes" | "depth-separated" | "none";
+}
 
 export interface SkillExecutionSectionPlan {
   sectionType: string;
@@ -181,7 +272,11 @@ export interface DesignStrategyData {
   artDirectionSummary?: string;
   antiRepetitionFingerprint?: string;
   motionStrategy?: "NONE" | "SUBTLE" | "MODERATE" | "CINEMATIC";
+  threeDPreference?: "yes" | "no";
   skillExecutionPlan?: SkillExecutionPlan;
+  cardFamilyStrategy?: CardFamilyStrategyConfig;
+  featuresLayoutStrategy?: FeaturesLayoutStrategyConfig;
+  colorSystem?: any;
 }
 
 export interface Hero {
@@ -362,7 +457,9 @@ export interface WebsiteData {
 
   // Design Intelligence Strategy & Spatial Configuration
   designStrategy?: DesignStrategyData;
+  featuresLayoutStrategy?: FeaturesLayoutStrategyConfig;
   skillExecutionPlan?: SkillExecutionPlan;
+  threeDPreference?: "yes" | "no";
 
   sectionOrder?: string[];
   [key: string]: unknown;

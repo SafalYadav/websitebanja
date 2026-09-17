@@ -172,6 +172,8 @@ export default function ServicesSection({
 
   return (
     <section
+      id={sectionKey}
+      data-section-type="services"
       className="relative py-24 sm:py-32 px-6 sm:px-10 overflow-hidden isolate"
       style={{
         backgroundColor: "var(--wb-bg)",
@@ -247,6 +249,8 @@ export default function ServicesSection({
                   image={service.image}
                   icon={<Icon className="h-5 w-5" />}
                   index={index}
+                  treatment={typeof cardTreatment === "object" ? cardTreatment : undefined}
+                  visualArchetype={visualArchetype}
                   ctaText={isFoodOrDining ? "Inquire / Reserve" : isTradeService ? "Request Immediate Dispatch" : isTechOrSaaS ? "Explore Architecture" : "Explore Offering"}
                 />
               </div>

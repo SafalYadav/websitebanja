@@ -15,6 +15,7 @@ import {
 } from "./CardPrimitives";
 import ImageWithFallback from "@/components/ui/ImageWithFallback";
 import { ArrowRight, Check, Sparkles, X, ChevronRight, Star, ExternalLink } from "lucide-react";
+import type { CardColorTreatment } from "@/types/website";
 
 // =============================================================================
 // 1. BENTO CARD (Asymmetric spans, content densities, embedded metric)
@@ -24,6 +25,7 @@ export function BentoCard({
   description,
   tag,
   metric,
+  metricLabel,
   span = "col-span-1",
   icon,
 }: {
@@ -31,6 +33,7 @@ export function BentoCard({
   description: string;
   tag?: string;
   metric?: string;
+  metricLabel?: string;
   span?: "col-span-1" | "col-span-2" | "col-span-3";
   icon?: React.ReactNode;
 }) {
@@ -66,7 +69,9 @@ export function BentoCard({
       {metric && (
         <div className="mt-6 pt-4 border-t border-[var(--wb-border)] flex items-baseline justify-between">
           <span className="text-2xl sm:text-3xl font-black text-[var(--wb-primary)] font-mono">{metric}</span>
-          <span className="text-xs text-[var(--wb-muted)] font-mono uppercase">Telemetry Target</span>
+          {metricLabel ? (
+            <span className="text-xs text-[var(--wb-muted)] font-mono uppercase">{metricLabel}</span>
+          ) : null}
         </div>
       )}
     </CardPrimitive>
@@ -722,10 +727,12 @@ export function FloatingCard({
   title,
   description,
   badge = "Floating Visual",
+  treatment,
 }: {
   title: string;
   description: string;
   badge?: string;
+  treatment?: CardColorTreatment;
 }) {
   const shouldReduceMotion = useReducedMotion();
 
@@ -734,11 +741,457 @@ export function FloatingCard({
       animate={shouldReduceMotion ? {} : { y: [-6, 6, -6] }}
       transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
     >
-      <CardPrimitive variant="elevated" padding="lg" className="border-[var(--wb-border)] shadow-xl">
+      <CardPrimitive variant="elevated" treatment={treatment} padding="lg" className="border-[var(--wb-border)] shadow-xl">
         <CardBadge variant="secondary" className="mb-4">{badge}</CardBadge>
         <CardHeader title={title} />
         <CardBody>{description}</CardBody>
       </CardPrimitive>
     </motion.div>
+  );
+}
+
+// =============================================================================
+// 16. MINIMAL FLAT CARD (Ultra-clean, zero shadow, pure typography)
+// =============================================================================
+export function MinimalFlatCard({
+  title,
+  description,
+  tag,
+  icon,
+  treatment,
+}: {
+  title: string;
+  description: string;
+  tag?: string;
+  icon?: React.ReactNode;
+  treatment?: CardColorTreatment;
+}) {
+  return (
+    <CardPrimitive variant="flat" treatment={treatment} padding="lg" interactive className="group border-0">
+      <div className="flex items-center justify-between mb-4">
+        {icon && <div className="text-[var(--wb-primary)] group-hover:scale-110 transition-transform">{icon}</div>}
+        {tag && <span className="text-xs font-mono uppercase tracking-widest text-[var(--wb-muted)] border-b border-[var(--wb-border)] pb-0.5">{tag}</span>}
+      </div>
+      <h3 className="text-xl sm:text-2xl font-semibold tracking-tight text-[var(--wb-fg)] group-hover:text-[var(--wb-primary)] transition-colors mb-2">
+        {title}
+      </h3>
+      <p className="text-sm text-[var(--wb-muted)] leading-relaxed">{description}</p>
+    </CardPrimitive>
+  );
+}
+
+// =============================================================================
+// 17. ELEVATED CARD (Tactile multi-layer drop shadow with smooth lift)
+// =============================================================================
+export function ElevatedCard({
+  title,
+  description,
+  tag,
+  icon,
+  image,
+  treatment,
+}: {
+  title: string;
+  description: string;
+  tag?: string;
+  icon?: React.ReactNode;
+  image?: string;
+  treatment?: CardColorTreatment;
+}) {
+  return (
+    <CardPrimitive variant="elevated" treatment={treatment} padding="none" interactive className="group flex flex-col justify-between">
+      {image && (
+        <CardMedia src={image} alt={title} aspectRatio="16/10" className="rounded-t-2xl rounded-b-none" />
+      )}
+      <div className="p-6 sm:p-8 flex-1 flex flex-col justify-between">
+        <div>
+          <div className="flex items-center justify-between mb-3">
+            {icon && <div className="p-2.5 rounded-xl bg-[var(--wb-primary)]/10 text-[var(--wb-primary)]">{icon}</div>}
+            {tag && <CardBadge variant="primary">{tag}</CardBadge>}
+          </div>
+          <CardHeader title={title} />
+          <CardBody>{description}</CardBody>
+        </div>
+        <div className="mt-6 pt-4 border-t border-[var(--wb-border)]/50 flex items-center justify-between text-xs font-semibold text-[var(--wb-primary)]">
+          <span>Explore Details</span>
+          <ArrowRight className="w-4 h-4 group-hover:translate-x-1.5 transition-transform" />
+        </div>
+      </div>
+    </CardPrimitive>
+  );
+}
+
+// =============================================================================
+// 18. BORDERED CARD (Crisp prominent outline with balanced interior)
+// =============================================================================
+export function BorderedCard({
+  title,
+  description,
+  tag,
+  metric,
+  treatment,
+}: {
+  title: string;
+  description: string;
+  tag?: string;
+  metric?: string;
+  treatment?: CardColorTreatment;
+}) {
+  return (
+    <CardPrimitive variant="bordered" treatment={treatment} padding="lg" interactive className="group hover:border-[var(--wb-primary)]">
+      <div className="flex items-center justify-between mb-4">
+        {tag && <CardBadge variant="outline">{tag}</CardBadge>}
+        {metric && <span className="text-sm font-mono text-[var(--wb-primary)] font-bold">{metric}</span>}
+      </div>
+      <h3 className="text-xl font-bold tracking-tight text-[var(--wb-fg)] mb-2 group-hover:text-[var(--wb-primary)] transition-colors">
+        {title}
+      </h3>
+      <p className="text-sm text-[var(--wb-muted)] leading-relaxed">{description}</p>
+    </CardPrimitive>
+  );
+}
+
+// =============================================================================
+// 19. ASYMMETRIC CARD (Offset layout, diagonal accent badge, dynamic spacing)
+// =============================================================================
+export function AsymmetricCard({
+  title,
+  description,
+  tag,
+  index = 0,
+  treatment,
+}: {
+  title: string;
+  description: string;
+  tag?: string;
+  index?: number;
+  treatment?: CardColorTreatment;
+}) {
+  const isEven = index % 2 === 0;
+  return (
+    <CardPrimitive
+      variant="default"
+      treatment={treatment}
+      padding="lg"
+      interactive
+      className={`group relative ${isEven ? "sm:translate-y-2" : "sm:-translate-y-2"}`}
+    >
+      <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-bl from-[var(--wb-primary)]/15 via-transparent to-transparent pointer-events-none rounded-tr-3xl" />
+      <div className="flex items-baseline justify-between mb-4">
+        <span className="text-xs font-mono font-bold text-[var(--wb-primary)] tracking-widest uppercase">
+          #{String(index + 1).padStart(2, "0")}
+        </span>
+        {tag && <span className="text-xs px-2.5 py-0.5 rounded-full bg-[var(--wb-surface)] border border-[var(--wb-border)] text-[var(--wb-fg)] font-medium">{tag}</span>}
+      </div>
+      <h3 className="text-2xl font-bold tracking-tight text-[var(--wb-fg)] mb-3 group-hover:text-[var(--wb-primary)] transition-colors">
+        {title}
+      </h3>
+      <p className="text-sm text-[var(--wb-muted)] leading-relaxed pl-3 border-l-2 border-[var(--wb-primary)]/40">{description}</p>
+    </CardPrimitive>
+  );
+}
+
+// =============================================================================
+// 20. IMAGE-LED CARD (Dominant 16:10 photo with gradient scrim and pinned content)
+// =============================================================================
+export function ImageLedCard({
+  title,
+  description,
+  image,
+  tag,
+  ctaText = "Discover More",
+  treatment,
+}: {
+  title: string;
+  description: string;
+  image?: string;
+  tag?: string;
+  ctaText?: string;
+  treatment?: CardColorTreatment;
+}) {
+  return (
+    <CardPrimitive variant="default" treatment={treatment} padding="none" interactive className="group overflow-hidden flex flex-col justify-between">
+      <div className="relative w-full aspect-[16/10] overflow-hidden">
+        <ImageWithFallback
+          src={image || "https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?w=800&q=80"}
+          alt={title}
+          className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent z-10" />
+        {tag && (
+          <div className="absolute top-4 left-4 z-20">
+            <span className="px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-white/90 text-black backdrop-blur-md shadow-sm">
+              {tag}
+            </span>
+          </div>
+        )}
+        <div className="absolute bottom-4 left-4 right-4 z-20 text-white">
+          <h3 className="text-xl sm:text-2xl font-bold tracking-tight drop-shadow-sm">{title}</h3>
+        </div>
+      </div>
+      <div className="p-6 flex-1 flex flex-col justify-between">
+        <p className="text-sm text-[var(--wb-muted)] leading-relaxed mb-4">{description}</p>
+        <div className="flex items-center gap-2 text-xs font-bold text-[var(--wb-primary)] group-hover:translate-x-1 transition-transform">
+          <span>{ctaText}</span>
+          <ArrowRight className="w-3.5 h-3.5" />
+        </div>
+      </div>
+    </CardPrimitive>
+  );
+}
+
+// =============================================================================
+// 21. SOFT SURFACE CARD (Plush pillowy background with gentle tonal wash)
+// =============================================================================
+export function SoftSurfaceCard({
+  title,
+  description,
+  tag,
+  icon,
+  treatment,
+}: {
+  title: string;
+  description: string;
+  tag?: string;
+  icon?: React.ReactNode;
+  treatment?: CardColorTreatment;
+}) {
+  return (
+    <CardPrimitive variant="soft" treatment={treatment} padding="lg" interactive className="group rounded-3xl">
+      <div className="flex items-center justify-between mb-4">
+        {icon && <div className="p-3 rounded-2xl bg-[var(--wb-primary)]/10 text-[var(--wb-primary)]">{icon}</div>}
+        {tag && <CardBadge variant="secondary">{tag}</CardBadge>}
+      </div>
+      <h3 className="text-xl font-bold tracking-tight text-[var(--wb-fg)] mb-2 group-hover:text-[var(--wb-primary)] transition-colors">
+        {title}
+      </h3>
+      <p className="text-sm text-[var(--wb-muted)] leading-relaxed">{description}</p>
+    </CardPrimitive>
+  );
+}
+
+// =============================================================================
+// 22. GLASS LAYERED CARD (Translucent backdrop blur, luminous border, spotlight)
+// =============================================================================
+export function GlassLayeredCard({
+  title,
+  description,
+  tag,
+  treatment,
+}: {
+  title: string;
+  description: string;
+  tag?: string;
+  treatment?: CardColorTreatment;
+}) {
+  return (
+    <CardPrimitive variant="glass" treatment={treatment} padding="lg" interactive className="group relative">
+      <CardSpotlight color="var(--wb-glow-primary)" size={400} />
+      <div className="flex items-center justify-between mb-4">
+        {tag && <CardBadge variant="primary">{tag}</CardBadge>}
+        <Sparkles className="w-4 h-4 text-[var(--wb-primary)] opacity-75" />
+      </div>
+      <CardHeader title={title} />
+      <CardBody>{description}</CardBody>
+    </CardPrimitive>
+  );
+}
+
+// =============================================================================
+// 23. BRUTALIST CARD (High-contrast 2px solid border, 4px solid shadow offset)
+// =============================================================================
+export function BrutalistCard({
+  title,
+  description,
+  tag,
+  index = 0,
+  treatment,
+}: {
+  title: string;
+  description: string;
+  tag?: string;
+  index?: number;
+  treatment?: CardColorTreatment;
+}) {
+  return (
+    <CardPrimitive variant="brutalist" treatment={treatment} padding="lg" interactive className="group rounded-none">
+      <div className="flex items-center justify-between mb-4 border-b-2 border-black dark:border-white pb-3">
+        <span className="font-mono text-sm font-black tracking-widest uppercase">
+          SEC_{String(index + 1).padStart(2, "0")}
+        </span>
+        {tag && (
+          <span className="bg-black dark:bg-white text-white dark:text-black px-2.5 py-0.5 text-xs font-mono font-bold uppercase">
+            {tag}
+          </span>
+        )}
+      </div>
+      <h3 className="text-2xl font-black uppercase tracking-tight mb-3 group-hover:translate-x-1 transition-transform">
+        {title}
+      </h3>
+      <p className="text-sm font-medium leading-relaxed opacity-90">{description}</p>
+    </CardPrimitive>
+  );
+}
+
+// =============================================================================
+// 24. LUXURY CARD (Ivory/obsidian surface, Roman numerals, champagne gold hairline)
+// =============================================================================
+const ROMAN_NUMERALS = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X"];
+
+export function LuxuryCard({
+  title,
+  description,
+  tag,
+  index = 0,
+  image,
+  treatment,
+}: {
+  title: string;
+  description: string;
+  tag?: string;
+  index?: number;
+  image?: string;
+  treatment?: CardColorTreatment;
+}) {
+  const roman = ROMAN_NUMERALS[index % ROMAN_NUMERALS.length];
+  return (
+    <CardPrimitive variant="luxury" treatment={treatment} padding="lg" interactive className="group rounded-xl relative">
+      <div className="flex items-center justify-between mb-4 border-b border-[rgba(212,175,55,0.2)] pb-3">
+        <span className="font-serif text-lg tracking-widest text-[#B48C28] dark:text-[#D4AF37]">{roman}</span>
+        {tag && (
+          <span className="text-[10px] uppercase font-serif tracking-[0.2em] text-[#854D0E] dark:text-[#F5E0A3] border border-[rgba(212,175,55,0.3)] px-2 py-0.5 rounded-sm">
+            {tag}
+          </span>
+        )}
+      </div>
+      {image && (
+        <div className="mb-4 overflow-hidden rounded-lg aspect-[16/10]">
+          <ImageWithFallback src={image} alt={title} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" />
+        </div>
+      )}
+      <h3 className="text-xl sm:text-2xl font-serif tracking-normal mb-2 text-[#1C1917] dark:text-[#FAF5E9] group-hover:text-[#B48C28] transition-colors">
+        {title}
+      </h3>
+      <p className="text-xs sm:text-sm font-normal leading-relaxed text-[#78716C] dark:text-[#A8A29E]">{description}</p>
+    </CardPrimitive>
+  );
+}
+
+// =============================================================================
+// 25. ORGANIC CARD (Earthy tones, natural fluid contours, botanical/terroir badge)
+// =============================================================================
+export function OrganicCard({
+  title,
+  description,
+  tag,
+  image,
+  treatment,
+}: {
+  title: string;
+  description: string;
+  tag?: string;
+  image?: string;
+  treatment?: CardColorTreatment;
+}) {
+  return (
+    <CardPrimitive variant="organic" treatment={treatment} padding="lg" interactive className="group rounded-3xl">
+      {image && (
+        <div className="mb-5 overflow-hidden rounded-2xl aspect-[4/3]">
+          <ImageWithFallback src={image} alt={title} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" />
+        </div>
+      )}
+      <div className="flex items-center justify-between mb-3">
+        {tag && (
+          <span className="text-xs font-semibold px-3 py-1 rounded-full bg-[var(--wb-primary)]/10 text-[var(--wb-primary)] border border-[var(--wb-primary)]/20">
+            {tag}
+          </span>
+        )}
+      </div>
+      <h3 className="text-xl sm:text-2xl font-bold tracking-tight text-[var(--wb-fg)] mb-2 group-hover:text-[var(--wb-primary)] transition-colors">
+        {title}
+      </h3>
+      <p className="text-sm text-[var(--wb-muted)] leading-relaxed">{description}</p>
+    </CardPrimitive>
+  );
+}
+
+// =============================================================================
+// 26. TECHNICAL CARD (Monospace telemetry, live status beacon, electric accent)
+// =============================================================================
+export function TechnicalCard({
+  title,
+  description,
+  tag,
+  metric,
+  statusLabel,
+  metricLabel,
+  treatment,
+}: {
+  title: string;
+  description: string;
+  tag?: string;
+  metric?: string;
+  statusLabel?: string;
+  metricLabel?: string;
+  treatment?: CardColorTreatment;
+}) {
+  return (
+    <CardPrimitive variant="technical" treatment={treatment} padding="lg" interactive className="group font-mono rounded-lg">
+      <div className="flex items-center justify-between mb-4 text-xs border-b border-sky-500/20 pb-3">
+        <div className="flex items-center gap-2 text-sky-400">
+          <span className="relative flex h-2 w-2">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-sky-400 opacity-75" />
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-sky-500" />
+          </span>
+          <span className="font-bold tracking-widest uppercase">{statusLabel || "ACTIVE"}</span>
+        </div>
+        {tag && <span className="text-sky-300/80 bg-sky-950/60 px-2 py-0.5 rounded text-[11px] border border-sky-500/30">{tag}</span>}
+      </div>
+      <h3 className="text-lg sm:text-xl font-bold font-sans tracking-tight text-slate-100 mb-2 group-hover:text-sky-400 transition-colors">
+        {title}
+      </h3>
+      <p className="text-xs text-slate-400 font-sans leading-relaxed mb-4">{description}</p>
+      {metric && (
+        <div className="pt-3 border-t border-sky-500/15 flex items-baseline justify-between">
+          <span className="text-2xl font-black text-sky-400">{metric}</span>
+          {metricLabel && <span className="text-[10px] text-slate-500 uppercase tracking-widest">{metricLabel}</span>}
+        </div>
+      )}
+    </CardPrimitive>
+  );
+}
+
+// =============================================================================
+// 27. OVERSIZED TYPOGRAPHY CARD (Giant 4xl-6xl numeral dominating card)
+// =============================================================================
+export function OversizedTypographyCard({
+  title,
+  description,
+  metric,
+  index = 0,
+  tag,
+  treatment,
+}: {
+  title: string;
+  description: string;
+  metric?: string;
+  index?: number;
+  tag?: string;
+  treatment?: CardColorTreatment;
+}) {
+  const displayNum = metric || String(index + 1).padStart(2, "0");
+  return (
+    <CardPrimitive variant="default" treatment={treatment} padding="lg" interactive className="group relative overflow-hidden flex flex-col justify-between min-h-[260px]">
+      <div className="flex items-center justify-between mb-2">
+        {tag && <CardBadge variant="outline">{tag}</CardBadge>}
+      </div>
+      <div>
+        <div className="text-6xl sm:text-7xl font-black tracking-tighter text-[var(--wb-primary)] mb-2 font-mono group-hover:scale-105 transition-transform origin-left">
+          {displayNum}
+        </div>
+        <h3 className="text-xl sm:text-2xl font-bold tracking-tight text-[var(--wb-fg)] mb-2">{title}</h3>
+        <p className="text-xs sm:text-sm text-[var(--wb-muted)] leading-relaxed">{description}</p>
+      </div>
+    </CardPrimitive>
   );
 }

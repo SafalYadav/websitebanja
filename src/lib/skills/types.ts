@@ -24,6 +24,8 @@ export type SkillId =
   | "saas-ux"
   | "ecommerce-ux"
   | "spatial-interaction"
+  | "component-variation"
+  | "background-art-direction"
   | (string & {});
 
 export type Spatial3dLevel = "NONE" | "SUBTLE_2_5D" | "ADVANCED_CSS_3D" | "RICH_SPATIAL";
@@ -74,6 +76,8 @@ export interface SkillSelectionContext {
   requirements?: string;
   prompt?: string;
   requestedFeatures?: string[];
+  threeDPreference?: "yes" | "no";
+  motionPreference?: "none" | "subtle" | "high";
   isPaidPro?: boolean;
 }
 

@@ -26,6 +26,7 @@ export interface Project {
   whatsapp_enabled?: boolean | null;
   onboarding_mode?: OnboardingMode | null;
   user_prompt?: string | null;
+  three_d_preference?: "yes" | "no" | null;
   selected_features?: string[] | null;
   json_data?: WebsiteData | Record<string, unknown> | null;
   is_published?: boolean;

@@ -114,6 +114,7 @@ export interface SanitizedBusinessInputs {
   instagram?: string;
   facebook?: string;
   address?: string;
+  threeDPreference?: "yes" | "no";
 }
 
 export function validateBusinessInputs(raw: unknown): { isValid: boolean; error?: string; data?: SanitizedBusinessInputs } {
@@ -155,6 +156,10 @@ export function validateBusinessInputs(raw: unknown): { isValid: boolean; error?
   const instagram = typeof obj.instagram === "string" ? obj.instagram.trim().slice(0, 100) : "";
   const facebook = typeof obj.facebook === "string" ? obj.facebook.trim().slice(0, 100) : "";
   const address = typeof obj.address === "string" ? obj.address.trim().slice(0, 500) : "";
+  const threeDPreference: "yes" | "no" =
+    typeof obj.threeDPreference === "string" && obj.threeDPreference.toLowerCase() === "yes"
+      ? "yes"
+      : "no";
 
   let normalizedPhone = "";
   if (typeof obj.phone === "string" && obj.phone.trim()) {
@@ -190,6 +195,7 @@ export function validateBusinessInputs(raw: unknown): { isValid: boolean; error?
       instagram,
       facebook,
       address,
+      threeDPreference,
     },
   };
 }

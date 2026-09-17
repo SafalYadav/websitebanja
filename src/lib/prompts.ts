@@ -7,6 +7,10 @@ export type WebsitePromptData = Partial<Omit<PlanningInput, "projectId">> & {
   businessName: string;
   category: string;
   description: string;
+  avoidPatterns?: string[];
+  recentFingerprints?: any[];
+  designDirection?: string;
+  selectedSkills?: string[];
 };
 
 export function buildWebsitePrompt(data: WebsitePromptData, workspace: AiWorkspace) {
@@ -19,6 +23,9 @@ export function buildWebsitePrompt(data: WebsitePromptData, workspace: AiWorkspa
     primaryColor: data.primaryColor,
     secondaryColor: data.secondaryColor,
     prompt: data.description,
+    avoidPatterns: data.avoidPatterns,
+    recentFingerprints: data.recentFingerprints,
+    threeDPreference: data.threeDPreference,
   });
 
   const uiUxGuidance = getUiUxSkillGuidance(data.category, data.style, {
@@ -58,6 +65,16 @@ Hero Atmosphere: ${strategy.heroBackground?.mode || "contextual_image"} (Opacity
 Spatial 3D Interaction: ${strategy.spatial3d.level} (Enabled: ${strategy.spatial3d.enabled}, Mobile fallback: ${strategy.spatial3d.mobileFallback})
 Typography Scale: ${strategy.typographyTokens.headingFont} with tight tracking
 
+==========================
+3D & SPATIAL CONTROL (HARD CONSTRAINT)
+==========================
+${strategy.spatial3d.enabled ? `3D PREFERENCE: YES. Spatial 3D is explicitly ENABLED (Level: ${strategy.spatial3d.level}, Perspective: ${strategy.spatial3d.perspective || 1200}px, Mobile Fallback: ${strategy.spatial3d.mobileFallback}).
+Generate interactive 3D hero card tilt, spatial perspective depth tokens, and multi-plane depth layering. Ensure reduced-motion media queries disable 3D on accessibility-sensitive client environments.` : `3D PREFERENCE: NO (HARD CONSTRAINT).
+DO NOT generate any Three.js, React Three Fiber (@react-three/fiber), Drei (@react-three/drei), WebGL canvases, GLSL shaders, 3D models (.gltf, .glb, .obj), 3D product viewers, Spline 3D embeds, 3D camera rigs, or 3D scroll effects.
+Spatial 3D is strictly disabled (Level: NONE).
+DO NOT simulate 3D scenes.
+Rely strictly on clean modern 2D layouts, responsive typography hierarchy, tactile borders, subtle glass or solid card treatments, and fluid CSS transitions.`}
+
 Style: ${data.style}
 Primary Color: ${strategy.colorSystem.primary}
 Secondary Color: ${strategy.colorSystem.secondary}
@@ -74,6 +91,19 @@ IMAGE INTENT SPECIFICATIONS
 ==========================
 ${imageIntentSummary}
 
+${data.avoidPatterns && data.avoidPatterns.length > 0 ? `
+==========================
+ANTI-REPETITION CONSTRAINTS (MANDATORY)
+==========================
+Do NOT reuse the following patterns or structures from recent/existing websites:
+${data.avoidPatterns.map((p) => `- ${p}`).join("\n")}
+Ensure the hero layout, section order, copy phrasing, and visual composition are distinctly differentiated.
+` : ""}${data.designDirection ? `
+==========================
+DESIGN DIRECTION GUIDELINES
+==========================
+${data.designDirection}
+` : ""}
 ${uiUxGuidance ? `${uiUxGuidance}\n` : ""}
 ==========================
 AI ENGINEERING WORKSPACE

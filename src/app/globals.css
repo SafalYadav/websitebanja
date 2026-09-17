@@ -79,6 +79,16 @@
     color: var(--foreground);
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   }
+  .wb-website-root {
+    font-family: var(--wb-font-body, var(--font-sans), system-ui, -apple-system, sans-serif);
+  }
+  .wb-website-root h1,
+  .wb-website-root h2,
+  .wb-website-root h3,
+  .wb-website-root h4,
+  .wb-website-root .wb-font-heading {
+    font-family: var(--wb-font-heading, var(--wb-font-body, var(--font-sans), system-ui, -apple-system, sans-serif));
+  }
 }
 
 /* Custom Studio Scrollbars */

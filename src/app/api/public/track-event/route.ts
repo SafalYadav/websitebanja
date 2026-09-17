@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { checkMemoryRateLimit } from "@/lib/rateLimit";
 import { getClientIp } from "@/lib/supabaseServer";
-import { dbGetProjectByPublicSlug, dbInsertAnalyticsEvent } from "@/lib/db/queries";
+import { dbGetProjectByPublicSlug, dbInsertAnalyticsEvent, dbGetProjectOwnership } from "@/lib/db/queries";
 
 export const dynamic = "force-dynamic";
 
@@ -51,6 +51,13 @@ export async function POST(req: NextRequest) {
       if (proj) {
         resolvedProjectId = proj.id;
         resolvedUserId = proj.user_id;
+      }
+    } else if (resolvedProjectId) {
+      const proj = await dbGetProjectOwnership(resolvedProjectId);
+      if (proj && proj.is_published !== false) {
+        resolvedUserId = proj.user_id;
+      } else {
+        resolvedProjectId = null;
       }
     }
 

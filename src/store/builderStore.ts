@@ -34,6 +34,10 @@ interface BuilderState {
   whatsappMessage: string;
   whatsappEnabled: boolean;
 
+  // 3D Preference
+  threeDPreference: "yes" | "no";
+  setThreeDPreference: (value: "yes" | "no") => void;
+
   // Publishing
   isPublished: boolean;
   publicSlug: string | null;
@@ -109,6 +113,10 @@ export const useBuilderStore = create<BuilderState>((set) => ({
   whatsappMessage: "Hi, I found your website and would like to know more about your services.",
   whatsappEnabled: true,
 
+  // 3D Preference (Default is strictly NO)
+  threeDPreference: "no",
+  setThreeDPreference: (value) => set({ threeDPreference: value }),
+
   // Publishing
   isPublished: false,
   publicSlug: null,
@@ -122,6 +130,7 @@ export const useBuilderStore = create<BuilderState>((set) => ({
       onboardingMode: (project.onboarding_mode === "details" ? "details" : "agent"),
       userPrompt: project.user_prompt ?? "",
       selectedFeatures: project.selected_features ?? ["whatsapp", "contact_form", "testimonials", "google_maps"],
+      threeDPreference: project.three_d_preference === "yes" ? "yes" : "no",
       businessName: project.business_name ?? "",
       category: project.category ?? "",
       description: project.description ?? "",
@@ -148,6 +157,7 @@ export const useBuilderStore = create<BuilderState>((set) => ({
       onboardingMode: "agent",
       userPrompt: "",
       selectedFeatures: ["whatsapp", "contact_form", "testimonials", "google_maps"],
+      threeDPreference: "no",
       businessName: "",
       category: "",
       description: "",

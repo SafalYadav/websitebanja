@@ -2,13 +2,13 @@ import type { NextConfig } from "next";
 
 const cspHeader = `
   default-src 'self';
-  script-src 'self' 'unsafe-eval' 'unsafe-inline' https://checkout.razorpay.com https://cdn.razorpay.com https://pagead2.googlesyndication.com https://*.googlesyndication.com https://tpc.googlesyndication.com https://adservice.google.com https://www.googletagservices.com;
+  script-src 'self' 'unsafe-eval' 'unsafe-inline' https://checkout.razorpay.com https://cdn.razorpay.com https://pagead2.googlesyndication.com https://*.googlesyndication.com https://tpc.googlesyndication.com https://adservice.google.com https://www.googletagservices.com https://*.adtrafficquality.google https://*.google;
   style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
   font-src 'self' https://fonts.gstatic.com;
-  connect-src 'self' https://*.supabase.co https://api.openai.com https://accounts.google.com https://generativelanguage.googleapis.com wss://generativelanguage.googleapis.com https://*.blob.core.windows.net https://*.microsoftonline.com https://*.ciamlogin.com https://lumberjack.razorpay.com https://api.razorpay.com https://*.razorpay.com https://pagead2.googlesyndication.com https://*.googlesyndication.com https://googleads.g.doubleclick.net https://*.doubleclick.net https://*.google.com;
+  connect-src 'self' https://*.supabase.co https://api.openai.com https://accounts.google.com https://generativelanguage.googleapis.com wss://generativelanguage.googleapis.com https://*.blob.core.windows.net https://*.microsoftonline.com https://*.ciamlogin.com https://lumberjack.razorpay.com https://api.razorpay.com https://*.razorpay.com https://pagead2.googlesyndication.com https://*.googlesyndication.com https://googleads.g.doubleclick.net https://*.doubleclick.net https://*.google.com https://*.adtrafficquality.google https://*.google;
   img-src 'self' blob: data: https: https://*.blob.core.windows.net https://*.razorpay.com https://*.googlesyndication.com https://*.doubleclick.net;
   media-src 'self' blob: data:;
-  frame-src 'self' https://accounts.google.com https://api.razorpay.com https://googleads.g.doubleclick.net https://*.googlesyndication.com https://*.doubleclick.net https://tpc.googlesyndication.com;
+  frame-src 'self' https://accounts.google.com https://api.razorpay.com https://googleads.g.doubleclick.net https://*.googlesyndication.com https://*.doubleclick.net https://tpc.googlesyndication.com https://*.google.com https://*.adtrafficquality.google https://*.google;
 `.replace(/\s{2,}/g, ' ').trim();
 
 const nextConfig: NextConfig = {

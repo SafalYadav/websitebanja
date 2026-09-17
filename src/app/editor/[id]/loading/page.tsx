@@ -154,6 +154,7 @@ export default function LoadingPage() {
       const curInstagram = curStore.instagram || instagram;
       const curFacebook = curStore.facebook || facebook;
       const curAddress = curStore.address || address;
+      let cur3DPreference: "yes" | "no" = curStore.threeDPreference || "no";
 
       if (!curBusinessName || !curCategory) {
         try {
@@ -168,6 +169,9 @@ export default function LoadingPage() {
             curAudience = projData.target_audience || curAudience || "";
             curPhone = projData.phone || curPhone || "";
             curEmail = projData.email || curEmail || "";
+            if (projData.three_d_preference === "yes" || projData.three_d_preference === "no") {
+              cur3DPreference = projData.three_d_preference;
+            }
 
             useBuilderStore.getState().setBusinessName(curBusinessName);
             useBuilderStore.getState().setCategory(curCategory);
@@ -175,6 +179,7 @@ export default function LoadingPage() {
             useBuilderStore.getState().setStyle(curStyle);
             useBuilderStore.getState().setPrimaryColor(curPColor);
             useBuilderStore.getState().setSecondaryColor(curSColor);
+            useBuilderStore.getState().setThreeDPreference(cur3DPreference);
           }
         } catch {
           // Proceed with fallback
@@ -206,6 +211,7 @@ export default function LoadingPage() {
         instagram: curInstagram,
         facebook: curFacebook,
         address: curAddress,
+        threeDPreference: cur3DPreference,
       };
 
       // Helper with client-side retry for transient network / 503 issues
@@ -307,6 +313,7 @@ export default function LoadingPage() {
         instagram: curInstagram,
         facebook: curFacebook,
         address: curAddress,
+        threeDPreference: cur3DPreference,
         workspace,
       });
 

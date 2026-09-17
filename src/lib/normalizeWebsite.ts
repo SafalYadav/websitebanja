@@ -49,16 +49,53 @@ export function normalizeWebsiteData(
   description?: string | null
 ): NormalizedWebsiteData {
   const data = raw || {};
-  const actualCategory = (typeof category === "object" && category !== null) ? category.category : category;
-  const actualBusinessName = (typeof category === "object" && category !== null) ? category.businessName : businessName;
-  const actualDescription = (typeof category === "object" && category !== null) ? category.description : description;
+  const isOptionsObj = typeof category === "object" && category !== null;
+  const actualCategory =
+    (isOptionsObj ? category.category : category) ||
+    data.category ||
+    data.brand?.industry ||
+    "";
+  const actualBusinessName =
+    (isOptionsObj ? category.businessName : businessName) ||
+    data.business_name ||
+    data.brand?.name ||
+    "";
+  const actualDescription =
+    (isOptionsObj ? category.description : description) ||
+    data.description ||
+    data.about?.description ||
+    "";
 
-  const strategy = data.designStrategy || generateDesignStrategy({
-    category: actualCategory ?? undefined,
-    businessName: actualBusinessName ?? undefined,
-    description: actualDescription ?? undefined,
+  const opts = (isOptionsObj ? category : {}) as Record<string, any>;
+  const strategy =
+    opts.strategy ||
+    data.designStrategy ||
+    generateDesignStrategy({
+      category: actualCategory || undefined,
+      businessName: actualBusinessName || undefined,
+      description: actualDescription || undefined,
+    });
+
+  const runSeed =
+    opts.runSeed ||
+    opts.seed ||
+    data.id ||
+    data.projectId ||
+    data.seed ||
+    (strategy as any)?.seed ||
+    (data.brand as any)?.seed ||
+    (data.hero as any)?.title;
+  const avoidImages =
+    opts.avoidImages ||
+    (strategy as any)?.avoidImages ||
+    (data.designStrategy as any)?.avoidImages ||
+    data.avoidImages;
+
+  const images = getCategoryImages(actualCategory, actualBusinessName, actualDescription, {
+    seed: runSeed,
+    avoidImages,
+    archetype: strategy?.visualArchetype,
   });
-  const images = getCategoryImages(actualCategory, actualBusinessName, actualDescription);
 
   // 1. Normalize Hero
   const rawHero = (data.hero && typeof data.hero === "object" ? data.hero : {}) as Partial<Hero>;

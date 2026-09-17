@@ -140,8 +140,8 @@ export function extractBusinessDetailsFast(
 
   // 5. Generate Business Name
   let businessName = "";
-  // Check if user specifically named it e.g. "called Apex Dental Care" or "named Apex Fitness" or "I run ZoomWheels Car Rental"
-  const namePattern = lower.match(/(?:called|named|known\s+as)\s+([A-Za-z0-9\s'&]{3,30})(?:\s+in|\s+with|\s+and|\.|$|,)/i);
+  // Check if user specifically named it e.g. "called Apex Dental Care" or "named Apex Fitness" or "The name is Delhi Zaika"
+  const namePattern = lower.match(/(?:called|named|known\s+as|(?:the\s+)?name\s+is|it\'?s\s+called)\s+([A-Za-z0-9\s'&]{3,30})(?:\s+in|\s+with|\s+and|\.|$|,)/i);
   const runPattern = lower.match(/\b(?:run|operate|own)\s+([A-Za-z0-9\s'&]{3,30})(?:\s+in|\s+with|\s+and|\.|$|,)/i);
   const forMatch = lower.match(/\bfor\s+([A-Za-z0-9\s'&]{3,30})(?:\s+in|\s+with|\s+and|\.|$|,)/i);
   const candidateMatch = namePattern || runPattern || (forMatch && !/\b(my|a|an|the|our)\b/i.test(forMatch[1]) ? forMatch : null);
