@@ -36,9 +36,18 @@ const RATE_LIMIT_FILE = path.resolve(process.cwd(), "scratch/integrations/rate_l
 const DEFAULT_MAX_HOURLY = 20;
 const DEFAULT_MAX_DAILY = 100;
 
+let memoryRateLimit: {
+  hourlyCount: number;
+  dailyCount: number;
+  lastResetHour: string;
+  lastResetDay: string;
+} | null = null;
+
 function ensureRateLimitStorage(): void {
-  const dir = path.dirname(RATE_LIMIT_FILE);
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  try {
+    const dir = path.dirname(RATE_LIMIT_FILE);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  } catch {}
 }
 
 export function getRateLimitState(): RateLimitState {
@@ -50,56 +59,59 @@ export function getRateLimitState(): RateLimitState {
   const currentHour = `${now.getUTCFullYear()}-${now.getUTCMonth()}-${now.getUTCDate()}:${now.getUTCHours()}`;
   const currentDay = `${now.getUTCFullYear()}-${now.getUTCMonth()}-${now.getUTCDate()}`;
 
-  if (!fs.existsSync(RATE_LIMIT_FILE)) {
-    return {
+  if (!memoryRateLimit || memoryRateLimit.lastResetDay !== currentDay) {
+    memoryRateLimit = {
       hourlyCount: 0,
       dailyCount: 0,
       lastResetHour: currentHour,
       lastResetDay: currentDay,
-      hourlyLimit: maxHourly,
-      dailyLimit: maxDaily,
     };
+  } else if (memoryRateLimit.lastResetHour !== currentHour) {
+    memoryRateLimit.hourlyCount = 0;
+    memoryRateLimit.lastResetHour = currentHour;
   }
 
   try {
-    const raw = fs.readFileSync(RATE_LIMIT_FILE, "utf-8");
-    const data = JSON.parse(raw);
+    if (fs.existsSync(RATE_LIMIT_FILE)) {
+      const raw = fs.readFileSync(RATE_LIMIT_FILE, "utf-8");
+      const data = JSON.parse(raw);
 
-    let hourlyCount = data.hourlyCount || 0;
-    let dailyCount = data.dailyCount || 0;
+      let hourlyCount = data.hourlyCount || 0;
+      let dailyCount = data.dailyCount || 0;
 
-    if (data.lastResetHour !== currentHour) {
-      hourlyCount = 0;
+      if (data.lastResetHour !== currentHour) {
+        hourlyCount = 0;
+      }
+      if (data.lastResetDay !== currentDay) {
+        dailyCount = 0;
+      }
+
+      memoryRateLimit.hourlyCount = Math.max(memoryRateLimit.hourlyCount, hourlyCount);
+      memoryRateLimit.dailyCount = Math.max(memoryRateLimit.dailyCount, dailyCount);
     }
-    if (data.lastResetDay !== currentDay) {
-      dailyCount = 0;
-    }
+  } catch {}
 
-    return {
-      hourlyCount,
-      dailyCount,
-      lastResetHour: currentHour,
-      lastResetDay: currentDay,
-      hourlyLimit: maxHourly,
-      dailyLimit: maxDaily,
-    };
-  } catch {
-    return {
-      hourlyCount: 0,
-      dailyCount: 0,
-      lastResetHour: currentHour,
-      lastResetDay: currentDay,
-      hourlyLimit: maxHourly,
-      dailyLimit: maxDaily,
-    };
-  }
+  return {
+    hourlyCount: memoryRateLimit.hourlyCount,
+    dailyCount: memoryRateLimit.dailyCount,
+    lastResetHour: currentHour,
+    lastResetDay: currentDay,
+    hourlyLimit: maxHourly,
+    dailyLimit: maxDaily,
+  };
 }
 
 function incrementRateLimitCount(): void {
   const state = getRateLimitState();
   state.hourlyCount += 1;
   state.dailyCount += 1;
-  fs.writeFileSync(RATE_LIMIT_FILE, JSON.stringify(state, null, 2), "utf-8");
+  if (memoryRateLimit) {
+    memoryRateLimit.hourlyCount = state.hourlyCount;
+    memoryRateLimit.dailyCount = state.dailyCount;
+  }
+  try {
+    fs.writeFileSync(RATE_LIMIT_FILE, JSON.stringify(state, null, 2), "utf-8");
+  } catch {}
 }
 
 export interface SendEmailResult {

@@ -135,6 +135,8 @@ jobs:
           echo "Active Revision: ${LATEST_REVISION}"
 
       - name: Run Smoke Verification Tests
+        env:
+          WEBSITEBANJA_AUTOMATION_SECRET: ${{ secrets.WEBSITEBANJA_AUTOMATION_SECRET }}
         run: |
           echo "Executing automated smoke test against ${APP_URL}..."
           node azure-migration/11_smoke_test_container_app.mjs "${APP_URL}"

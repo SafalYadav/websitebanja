@@ -34,14 +34,23 @@ interface IntegrationInternalState {
   };
 }
 
+let memoryState: IntegrationInternalState = {
+  googlePlaces: { lastRequestAt: null, lastSuccessAt: null, lastError: null },
+  gmail: { lastSendAt: null, lastSyncAt: null, lastError: null },
+};
+
 function ensureStorage(): void {
-  if (!fs.existsSync(STATE_DIR)) {
-    fs.mkdirSync(STATE_DIR, { recursive: true });
-  }
-  const configDir = path.dirname(GMAIL_AUTH_FILE);
-  if (!fs.existsSync(configDir)) {
-    fs.mkdirSync(configDir, { recursive: true });
-  }
+  try {
+    if (!fs.existsSync(STATE_DIR)) {
+      fs.mkdirSync(STATE_DIR, { recursive: true });
+    }
+  } catch {}
+  try {
+    const configDir = path.dirname(GMAIL_AUTH_FILE);
+    if (!fs.existsSync(configDir)) {
+      fs.mkdirSync(configDir, { recursive: true });
+    }
+  } catch {}
 }
 
 export function redactSecret(secret?: string | null): string {
@@ -54,28 +63,27 @@ export function redactSecret(secret?: string | null): string {
 export class ConfigValidator {
   static getInternalState(): IntegrationInternalState {
     ensureStorage();
-    if (!fs.existsSync(STATE_FILE)) {
-      return {
-        googlePlaces: { lastRequestAt: null, lastSuccessAt: null, lastError: null },
-        gmail: { lastSendAt: null, lastSyncAt: null, lastError: null },
-      };
-    }
     try {
-      const raw = fs.readFileSync(STATE_FILE, "utf-8");
-      return JSON.parse(raw);
+      if (fs.existsSync(STATE_FILE)) {
+        const raw = fs.readFileSync(STATE_FILE, "utf-8");
+        return JSON.parse(raw);
+      }
     } catch {
-      return {
-        googlePlaces: { lastRequestAt: null, lastSuccessAt: null, lastError: null },
-        gmail: { lastSendAt: null, lastSyncAt: null, lastError: null },
-      };
+      // Fallback to memory
     }
+    return memoryState;
   }
 
   static updateInternalState(updater: (state: IntegrationInternalState) => void): void {
     ensureStorage();
     const current = this.getInternalState();
     updater(current);
-    fs.writeFileSync(STATE_FILE, JSON.stringify(current, null, 2), "utf-8");
+    updater(memoryState);
+    try {
+      fs.writeFileSync(STATE_FILE, JSON.stringify(current, null, 2), "utf-8");
+    } catch {
+      // Non-fatal in read-only / restricted containers
+    }
   }
 
   /**

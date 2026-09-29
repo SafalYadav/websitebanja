@@ -166,28 +166,49 @@ async function run() {
     return res;
   });
 
-  // Test 9: Integrations Status (Phase 16)
-  await test("Integrations Status Route (GET /api/integrations/status) returns HTTP 200", async () => {
-    const res = await fetchUrl("/api/integrations/status");
-    if (res.status !== 200) throw new Error(`Expected HTTP 200, got ${res.status}`);
-    const data = JSON.parse(res.body);
-    if (!data || typeof data.googlePlaces !== "object" || typeof data.gmail !== "object") {
-      throw new Error("Invalid integrations status payload shape");
+  // Test 9: Integrations Status Security Guard & Response (Phase 16)
+  await test("Integrations Status Route (GET /api/integrations/status) responds cleanly", async () => {
+    const secret = process.env.WEBSITEBANJA_AUTOMATION_SECRET;
+    const res = await fetchUrl("/api/integrations/status", {
+      headers: secret ? { "x-automation-secret": secret } : {},
+    });
+    if (secret) {
+      if (res.status !== 200) throw new Error(`Expected HTTP 200 with secret, got ${res.status}`);
+      const data = JSON.parse(res.body);
+      if (!data || typeof data.googlePlaces !== "object" || typeof data.gmail !== "object") {
+        throw new Error("Invalid integrations status payload shape");
+      }
+    } else {
+      if (res.status !== 401 && res.status !== 200) throw new Error(`Expected 401 or 200, got ${res.status}`);
     }
     return res;
   });
 
-  // Test 10: Gmail Integration Status (Phase 16)
-  await test("Gmail Status Route (GET /api/integrations/gmail/status) returns HTTP 200", async () => {
-    const res = await fetchUrl("/api/integrations/gmail/status");
-    if (res.status !== 200) throw new Error(`Expected HTTP 200, got ${res.status}`);
+  // Test 10: Gmail Integration Status Security Guard & Response (Phase 16)
+  await test("Gmail Status Route (GET /api/integrations/gmail/status) responds cleanly", async () => {
+    const secret = process.env.WEBSITEBANJA_AUTOMATION_SECRET;
+    const res = await fetchUrl("/api/integrations/gmail/status", {
+      headers: secret ? { "x-automation-secret": secret } : {},
+    });
+    if (secret) {
+      if (res.status !== 200) throw new Error(`Expected HTTP 200 with secret, got ${res.status}`);
+    } else {
+      if (res.status !== 401 && res.status !== 200) throw new Error(`Expected 401 or 200, got ${res.status}`);
+    }
     return res;
   });
 
-  // Test 11: Automation Pipeline Status (Phase 13/14)
-  await test("Automation Pipeline Status (GET /api/automation/status) returns HTTP 200", async () => {
-    const res = await fetchUrl("/api/automation/status");
-    if (res.status !== 200) throw new Error(`Expected HTTP 200, got ${res.status}`);
+  // Test 11: Automation Pipeline API Security Guard & Response (Phase 13/14)
+  await test("Automation Pipeline Route (GET /api/automation/pipeline) responds cleanly", async () => {
+    const secret = process.env.WEBSITEBANJA_AUTOMATION_SECRET;
+    const res = await fetchUrl("/api/automation/pipeline", {
+      headers: secret ? { "x-automation-secret": secret } : {},
+    });
+    if (secret) {
+      if (res.status !== 200) throw new Error(`Expected HTTP 200 with secret, got ${res.status}`);
+    } else {
+      if (res.status !== 401 && res.status !== 200) throw new Error(`Expected 401 or 200, got ${res.status}`);
+    }
     return res;
   });
 
