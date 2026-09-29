@@ -283,6 +283,9 @@ async function main() {
     console.log("Could not list env vars:", e.message);
   }
 
+  console.log("\nWaiting 20 seconds for new container revision to settle before smoke testing...");
+  await sleep(20000);
+
   console.log("\nConfiguration complete.");
 }
 
