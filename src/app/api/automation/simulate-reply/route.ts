@@ -18,42 +18,13 @@ import { emitAgentEvent } from "@/lib/telemetry/agentTelemetry";
 import { sanitizeErrorOutput } from "@/lib/ai/router/modelConfig";
 
 const MAX_PAYLOAD_SIZE = 256 * 1024; // 256 KB
-const DEFAULT_LOCAL_AUTOMATION_SECRET = "wb-auto-secret-local-dev-2026";
-
-function validateAutomationAuth(req: Request): boolean {
-  const configuredSecret =
-    process.env.WEBSITEBANJA_AUTOMATION_SECRET || DEFAULT_LOCAL_AUTOMATION_SECRET;
-
-  const headerSecret = req.headers.get("x-automation-secret");
-  if (headerSecret && headerSecret.trim() === configuredSecret) {
-    return true;
-  }
-
-  const authHeader = req.headers.get("authorization");
-  if (authHeader && authHeader.startsWith("Bearer ")) {
-    const token = authHeader.slice(7).trim();
-    if (token === configuredSecret) {
-      return true;
-    }
-  }
-
-  // Permit local browser admin console
-  const referer = req.headers.get("referer") || "";
-  const host = req.headers.get("host") || "";
-  if (host.includes("localhost") || host.includes("127.0.0.1")) {
-    if (referer.includes("/admin/")) {
-      return true;
-    }
-  }
-
-  return false;
-}
+import { isAuthorized } from "@/lib/automation/auth";
 
 export async function POST(req: Request) {
   const requestId = `req_p12_sim_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
 
   // 1. Authentication
-  if (!validateAutomationAuth(req)) {
+  if (!isAuthorized(req)) {
     emitAgentEvent({
       event: "automation.auth_failed",
       agent: "n8n_automation",

@@ -119,7 +119,9 @@ export default function AdminCRMPage() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/automation/crm");
+      const res = await fetch("/api/automation/crm", {
+        headers: { "x-automation-secret": "wb-auto-secret-local-dev-2026" },
+      });
       if (!res.ok) throw new Error(`HTTP ${res.status}: Failed to fetch CRM leads`);
       const data = await res.json();
       const list: LeadCRMState[] = data.leads || [];
@@ -143,7 +145,9 @@ export default function AdminCRMPage() {
   // Fetch active lead details
   const fetchActiveLead = useCallback(async (leadId: string) => {
     try {
-      const res = await fetch(`/api/automation/crm/${leadId}`);
+      const res = await fetch(`/api/automation/crm/${leadId}`, {
+        headers: { "x-automation-secret": "wb-auto-secret-local-dev-2026" },
+      });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       setActiveLead(data.leadState);
@@ -173,7 +177,10 @@ export default function AdminCRMPage() {
     try {
       const res = await fetch("/api/automation/simulate-reply", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-automation-secret": "wb-auto-secret-local-dev-2026",
+        },
         body: JSON.stringify({
           leadId: selectedLeadId,
           channel: simChannel,
@@ -209,7 +216,10 @@ export default function AdminCRMPage() {
     try {
       const res = await fetch(`/api/automation/crm/${selectedLeadId}/status`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-automation-secret": "wb-auto-secret-local-dev-2026",
+        },
         body: JSON.stringify({
           newStatus,
           reason: statusReason.trim(),
