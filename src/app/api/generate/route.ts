@@ -15,6 +15,7 @@ import { emitAgentEvent } from "@/lib/telemetry/agentTelemetry";
 import { buildWebsitePrompt } from "@/lib/prompts";
 import { buildAIContext } from "@/lib/ai/contextBuilder";
 import { shouldBypassRateLimit, checkMemoryRateLimit } from "@/lib/rateLimit";
+import { isUserAdmin } from "@/lib/adminAuth";
 import { validateBusinessInputs } from "@/lib/validation";
 import type { SkillId } from "@/lib/skills/types";
 import { runSkillsAgent, getRecentDesignFingerprints, buildDeterministicSkillsFallback } from "@/lib/agents/skills";
@@ -123,15 +124,7 @@ export async function POST(req: Request) {
     const subData = await dbGetUserSubscription(user.id);
 
     const isPaidPro = subData?.status === "active_paid" && subData?.plan_id === "paid_pro";
-
-    const userEmail = user.email?.toLowerCase().trim() || "";
-    const rawAdminEmails = process.env.ADMIN_EMAILS || "";
-    const adminEmailList = rawAdminEmails
-      .split(",")
-      .map((e) => e.trim().toLowerCase())
-      .filter(Boolean);
-    const appRole = (user.app_metadata as Record<string, unknown> | undefined)?.role;
-    const isAdmin = adminEmailList.includes(userEmail) || appRole === "admin" || appRole === "superadmin";
+    const isAdmin = isUserAdmin(user);
 
     const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "127.0.0.1";
     const bypass = isAdmin || shouldBypassRateLimit(ip);

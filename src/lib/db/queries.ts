@@ -23,7 +23,7 @@ let isAzurePoolAvailable: boolean | null = null;
 let lastAzureCheckTime = 0;
 const AZURE_CHECK_COOLDOWN_MS = 60000;
 
-function isAzureCircuitOpen(): boolean {
+export function isAzureCircuitOpen(): boolean {
   if (isAzurePoolAvailable === false) {
     if (Date.now() - lastAzureCheckTime < AZURE_CHECK_COOLDOWN_MS) {
       return true;

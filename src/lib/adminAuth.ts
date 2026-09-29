@@ -31,42 +31,79 @@ export interface PrivilegeAuditEvent {
 
 const memoryAuditLogs: PrivilegeAuditEvent[] = [];
 
+// Canonical bootstrap admin allowlists for permanent platform administrators
+export const CANONICAL_BOOTSTRAP_ADMIN_EMAILS = [
+  "websitebanja@gmail.com",
+  "safalyadav0001@gmail.com",
+  "safalyadav07@gmail.com",
+  "safalyadavvv@gmail.com",
+  "safal@websitebanja.com",
+  "founder@websitebanja.com",
+  "admin@websitebanja.com",
+  "lead-admin@websitebanja.com",
+] as const;
+
+export const CANONICAL_BOOTSTRAP_ADMIN_USER_IDS = [
+  "a0d29ad3-4c93-4bcd-a4d0-b45804017cf2", // websitebanja@gmail.com
+  "cceafe47-a710-49e9-a894-16f592dc8e64", // safalyadav0001@gmail.com
+  "d1df43b9-cdec-4e9a-916a-4c1f8009d238", // safalyadav07@gmail.com
+  "badf862a-79c0-463d-95ff-55a02e6aa88b", // safalyadavvv@gmail.com
+] as const;
+
 /**
- * Checks whether a user is a primary bootstrap admin configured via environment variables.
+ * Returns canonical list of authorized admin emails from environment and bootstrap defaults.
+ */
+export function getAuthorizedAdminEmails(): string[] {
+  const rawAdminEmails = process.env.ADMIN_EMAILS || "";
+  const configured = rawAdminEmails
+    .split(",")
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean);
+
+  const emailSet = new Set<string>([
+    ...CANONICAL_BOOTSTRAP_ADMIN_EMAILS,
+    ...configured,
+  ]);
+  return Array.from(emailSet);
+}
+
+/**
+ * Returns canonical list of authorized admin user IDs from environment and bootstrap defaults.
+ */
+export function getAuthorizedAdminUserIds(): string[] {
+  const rawAdminUserIds = process.env.ADMIN_USER_IDS || "";
+  const configured = rawAdminUserIds
+    .split(",")
+    .map((id) => id.trim())
+    .filter(Boolean);
+
+  const idSet = new Set<string>([
+    ...CANONICAL_BOOTSTRAP_ADMIN_USER_IDS,
+    ...configured,
+  ]);
+  return Array.from(idSet);
+}
+
+/**
+ * Checks whether a user is a primary bootstrap admin configured via environment variables or canonical list.
  * Primary bootstrap admins are permanently protected against accidental revocation.
  */
 export function isPrimaryBootstrapAdmin(emailOrIdentifier?: string | null, userId?: string | null): boolean {
-  if (emailOrIdentifier && typeof emailOrIdentifier === "string") {
-    const val = emailOrIdentifier.trim();
-    const rawAdminEmails = process.env.ADMIN_EMAILS || "";
-    const adminEmailList = rawAdminEmails
-      .split(",")
-      .map((e) => e.trim().toLowerCase())
-      .filter(Boolean);
+  const adminEmails = getAuthorizedAdminEmails();
+  const adminUserIds = getAuthorizedAdminUserIds();
 
-    if (adminEmailList.includes(val.toLowerCase())) {
+  if (emailOrIdentifier && typeof emailOrIdentifier === "string") {
+    const val = emailOrIdentifier.trim().toLowerCase();
+    if (adminEmails.includes(val)) {
       return true;
     }
-
-    const rawAdminUserIds = process.env.ADMIN_USER_IDS || "";
-    const adminUserIdList = rawAdminUserIds
-      .split(",")
-      .map((id) => id.trim())
-      .filter(Boolean);
-
-    if (adminUserIdList.includes(val)) {
+    if (adminUserIds.includes(emailOrIdentifier.trim())) {
       return true;
     }
   }
 
   if (userId && typeof userId === "string") {
-    const rawAdminUserIds = process.env.ADMIN_USER_IDS || "";
-    const adminUserIdList = rawAdminUserIds
-      .split(",")
-      .map((id) => id.trim())
-      .filter(Boolean);
-
-    if (adminUserIdList.includes(userId.trim())) {
+    if (adminUserIds.includes(userId.trim())) {
       return true;
     }
   }
@@ -169,6 +206,22 @@ export async function grantAdminRole(
     reason,
   });
 
+  // Persist to PostgreSQL auth.users if available
+  try {
+    const { getPool, isAzureCircuitOpen } = await import("@/lib/db/queries");
+    if (!isAzureCircuitOpen()) {
+      const pool = getPool();
+      await pool.query(
+        `UPDATE auth.users
+         SET raw_app_meta_data = jsonb_set(COALESCE(raw_app_meta_data, '{}'::jsonb), '{role}', '"admin"')
+         WHERE id = $1`,
+        [targetUserId]
+      ).catch(() => {});
+    }
+  } catch {
+    // Non-fatal fallback to in-memory dynamic admins
+  }
+
   return { success: true, message: `Administrator clearance granted to user ${targetUserId}.` };
 }
 
@@ -207,6 +260,22 @@ export async function revokeAdminRole(
     reason,
   });
 
+  // Persist removal to PostgreSQL auth.users if available
+  try {
+    const { getPool, isAzureCircuitOpen } = await import("@/lib/db/queries");
+    if (!isAzureCircuitOpen()) {
+      const pool = getPool();
+      await pool.query(
+        `UPDATE auth.users
+         SET raw_app_meta_data = raw_app_meta_data - 'role'
+         WHERE id = $1`,
+        [targetUserId]
+      ).catch(() => {});
+    }
+  } catch {
+    // Non-fatal fallback
+  }
+
   return { success: true, message: `Administrator clearance revoked from user ${targetUserId}.` };
 }
 
@@ -214,9 +283,9 @@ export async function revokeAdminRole(
  * Authoritative server-side determination of whether a user is an administrator.
  * Evaluates:
  * 1. user.app_metadata.role === "admin" | "superadmin" (tamper-proof JWT claim)
- * 2. user.email matches ADMIN_EMAILS (comma-separated, case-insensitive)
- * 3. user.id matches ADMIN_USER_IDS (comma-separated)
- * 4. user.id in dynamic admin registry
+ * 2. user.id in dynamic admin registry
+ * 3. user.email matches authorized admin email list (case-insensitive)
+ * 4. user.id matches authorized admin user ID list
  */
 export function isUserAdmin(user: AdminUserCandidate | null | undefined): boolean {
   if (!user) return false;
@@ -232,29 +301,19 @@ export function isUserAdmin(user: AdminUserCandidate | null | undefined): boolea
     return true;
   }
 
-  // 3. Check against ADMIN_EMAILS environment variable (comma-separated list)
+  // 3. Check against authorized admin email allowlist
   if (user.email && typeof user.email === "string") {
     const userEmail = user.email.toLowerCase().trim();
-    const rawAdminEmails = process.env.ADMIN_EMAILS || "";
-    const adminEmailList = rawAdminEmails
-      .split(",")
-      .map((e) => e.trim().toLowerCase())
-      .filter(Boolean);
-
-    if (adminEmailList.includes(userEmail)) {
+    const adminEmails = getAuthorizedAdminEmails();
+    if (adminEmails.includes(userEmail)) {
       return true;
     }
   }
 
-  // 4. Check against ADMIN_USER_IDS environment variable (comma-separated list)
+  // 4. Check against authorized admin user ID allowlist
   if (user.id && typeof user.id === "string") {
-    const rawAdminUserIds = process.env.ADMIN_USER_IDS || "";
-    const adminUserIdList = rawAdminUserIds
-      .split(",")
-      .map((id) => id.trim())
-      .filter(Boolean);
-
-    if (adminUserIdList.includes(user.id)) {
+    const adminUserIds = getAuthorizedAdminUserIds();
+    if (adminUserIds.includes(user.id.trim())) {
       return true;
     }
   }
@@ -263,9 +322,30 @@ export function isUserAdmin(user: AdminUserCandidate | null | undefined): boolea
 }
 
 /**
+ * Non-blocking self-healing sync of admin role to Azure DB if missing.
+ */
+async function syncAdminRoleToDatabase(userId?: string, email?: string): Promise<void> {
+  if (!userId) return;
+  try {
+    const { getPool, isAzureCircuitOpen } = await import("@/lib/db/queries");
+    if (!isAzureCircuitOpen()) {
+      const pool = getPool();
+      await pool.query(
+        `UPDATE auth.users
+         SET raw_app_meta_data = jsonb_set(COALESCE(raw_app_meta_data, '{}'::jsonb), '{role}', '"admin"')
+         WHERE id = $1 AND (raw_app_meta_data->>'role' IS NULL OR raw_app_meta_data->>'role' != 'admin')`,
+        [userId]
+      ).catch(() => {});
+    }
+  } catch {
+    // Non-fatal background sync
+  }
+}
+
+/**
  * Server-side Admin Authorization Verification.
  * Inspects incoming request authorization header, validates session with Supabase,
- * and confirms whether the user's email is explicitly listed in ADMIN_EMAILS
+ * and confirms whether the user's email is explicitly listed in authorized admin allowlist
  * or contains an administrative role (admin/superadmin) in app_metadata.
  */
 export async function verifyAdminAuth(req: Request): Promise<AdminAuthResult> {
@@ -291,6 +371,9 @@ export async function verifyAdminAuth(req: Request): Promise<AdminAuthResult> {
     }
 
     if (isUserAdmin(user)) {
+      // Non-blocking self-healing sync of admin role to Azure DB
+      syncAdminRoleToDatabase(user.id, user.email).catch(() => {});
+
       return {
         isAdmin: true,
         userId: user.id,

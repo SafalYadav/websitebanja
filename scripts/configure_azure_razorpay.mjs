@@ -13,7 +13,11 @@ const gmailRefreshToken = process.env.GMAIL_REFRESH_TOKEN;
 const gmailRedirectUri = process.env.GMAIL_REDIRECT_URI || "https://websitebanja-app.salmondesert-9c3e03bc.centralindia.azurecontainerapps.io/api/integrations/gmail/callback";
 const gmailSenderEmail = process.env.GMAIL_SENDER_EMAIL || "websitebanja@gmail.com";
 const automationSecret = process.env.WEBSITEBANJA_AUTOMATION_SECRET;
-const nextPublicAppUrl = process.env.NEXT_PUBLIC_APP_URL || "https://websitebanja-app.salmondesert-9c3e03bc.centralindia.azurecontainerapps.io";
+const defaultAdminEmails = "websitebanja@gmail.com,safalyadav0001@gmail.com,safalyadav07@gmail.com,safalyadavvv@gmail.com,safal@websitebanja.com,founder@websitebanja.com,admin@websitebanja.com,lead-admin@websitebanja.com";
+const adminEmails = process.env.ADMIN_EMAILS || defaultAdminEmails;
+const defaultAdminUserIds = "a0d29ad3-4c93-4bcd-a4d0-b45804017cf2,cceafe47-a710-49e9-a894-16f592dc8e64,d1df43b9-cdec-4e9a-916a-4c1f8009d238,badf862a-79c0-463d-95ff-55a02e6aa88b";
+const adminUserIds = process.env.ADMIN_USER_IDS || defaultAdminUserIds;
+const nextPublicAppUrl = process.env.NEXT_PUBLIC_APP_URL || "https://websitebanja.com";
 const imageTag = process.env.IMAGE_TAG;
 const clientId = process.env.AZURE_CLIENT_ID;
 
@@ -23,6 +27,9 @@ console.log("===================================================================
 console.log("Container App:", containerAppName);
 console.log("Resource Group:", resourceGroup);
 console.log("Image Tag:", imageTag || "not specified");
+console.log("Production App URL:", nextPublicAppUrl);
+console.log("Admin Emails configured:", adminEmails.split(",").length, "accounts");
+console.log("Admin User IDs configured:", adminUserIds.split(",").length, "identities");
 console.log("Razorpay Key ID configured:", Boolean(keyId));
 console.log("Razorpay Key Secret configured:", Boolean(keySecret));
 console.log("Billing CRON Secret configured:", Boolean(cronSecret));
@@ -165,6 +172,8 @@ async function main() {
   envVarsToSet.push(`GOOGLE_CLIENT_ID=${gmailClientId}`);
   envVarsToSet.push(`GMAIL_REDIRECT_URI=${gmailRedirectUri}`);
   envVarsToSet.push(`GMAIL_SENDER_EMAIL=${gmailSenderEmail}`);
+  envVarsToSet.push(`ADMIN_EMAILS=${adminEmails}`);
+  envVarsToSet.push(`ADMIN_USER_IDS=${adminUserIds}`);
   envVarsToSet.push(`NEXT_PUBLIC_APP_URL=${nextPublicAppUrl}`);
   envVarsToSet.push(`AUTO_SEND_ENABLED=false`);
   envVarsToSet.push(`COMMUNICATION_DRY_RUN=false`);
@@ -232,6 +241,8 @@ async function main() {
           envMap.set("GOOGLE_CLIENT_ID", { name: "GOOGLE_CLIENT_ID", value: gmailClientId });
           envMap.set("GMAIL_REDIRECT_URI", { name: "GMAIL_REDIRECT_URI", value: gmailRedirectUri });
           envMap.set("GMAIL_SENDER_EMAIL", { name: "GMAIL_SENDER_EMAIL", value: gmailSenderEmail });
+          envMap.set("ADMIN_EMAILS", { name: "ADMIN_EMAILS", value: adminEmails });
+          envMap.set("ADMIN_USER_IDS", { name: "ADMIN_USER_IDS", value: adminUserIds });
           envMap.set("NEXT_PUBLIC_APP_URL", { name: "NEXT_PUBLIC_APP_URL", value: nextPublicAppUrl });
           envMap.set("AUTO_SEND_ENABLED", { name: "AUTO_SEND_ENABLED", value: "false" });
           envMap.set("COMMUNICATION_DRY_RUN", { name: "COMMUNICATION_DRY_RUN", value: "false" });

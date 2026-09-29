@@ -13,6 +13,7 @@ import { dbGetProjectOwnership } from "@/lib/db/queries";
 import { openai } from "@/lib/openai";
 import { buildPlanningPrompt } from "@/lib/planningPrompts";
 import { shouldBypassRateLimit, checkMemoryRateLimit } from "@/lib/rateLimit";
+import { isUserAdmin } from "@/lib/adminAuth";
 import { validateBusinessInputs } from "@/lib/validation";
 import { generateDesignTokens } from "@/lib/ai/design/designTokens";
 import { generateDesignRules } from "@/lib/ai/design/designRules";
@@ -89,14 +90,7 @@ export async function POST(request: Request) {
     const user = auth.user;
     console.log("[PLAN] auth:success duration=" + (Date.now() - authStart) + "ms userId=" + user.id);
 
-    const userEmail = user.email?.toLowerCase().trim() || "";
-    const rawAdminEmails = process.env.ADMIN_EMAILS || "";
-    const adminEmailList = rawAdminEmails
-      .split(",")
-      .map((e) => e.trim().toLowerCase())
-      .filter(Boolean);
-    const appRole = (user.app_metadata as Record<string, unknown> | undefined)?.role;
-    const isAdmin = adminEmailList.includes(userEmail) || appRole === "admin" || appRole === "superadmin";
+    const isAdmin = isUserAdmin(user);
 
     const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "127.0.0.1";
     const bypass = isAdmin || shouldBypassRateLimit(ip);

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthClient } from "@/lib/supabaseServer";
+import { isUserAdmin } from "@/lib/adminAuth";
 import type { WebsiteData } from "@/types/website";
 import {
   dbGetProjectBySlugForAdmin,
@@ -41,9 +42,7 @@ export async function GET(
     }
 
     // 1. Check if user is Platform Admin or Project Creator
-    const rawAdminEmails = process.env.ADMIN_EMAILS || "";
-    const adminEmails = rawAdminEmails.split(",").map((e) => e.trim().toLowerCase());
-    const isPlatformAdmin = Boolean(user.email && adminEmails.includes(user.email.toLowerCase()));
+    const isPlatformAdmin = isUserAdmin(user);
     const isProjectCreator = project.user_id === user.id;
 
     // 2. Check Website Members
