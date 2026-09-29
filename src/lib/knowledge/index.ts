@@ -5,6 +5,7 @@
 
 export * from "./types";
 export * from "./retrieval";
+export * from "../ai/contextBuilder";
 
 import { knowledgeRetrievalService } from "./retrieval";
 
@@ -28,26 +29,47 @@ export const getProjectContext = knowledgeRetrievalService.getProjectContext.bin
   knowledgeRetrievalService
 );
 export const setProjectKnowledge = async (
-  projectId: string,
-  key: string,
-  value: any,
-  userId: string = 'system',
-  category: string = 'agent_decisions'
+  projectIdOrInput:
+    | string
+    | {
+        projectId: string;
+        key: string;
+        content?: any;
+        value?: any;
+        userId?: string;
+        category?: string;
+        confidence?: number;
+        source?: string;
+      },
+  key?: string,
+  value?: any,
+  userId: string = "system",
+  category: string = "agent_decisions"
 ) => {
-  if (!process.env.SUPABASE_SERVICE_ROLE_KEY && !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
-    return;
+  let input: any;
+  if (typeof projectIdOrInput === "object" && projectIdOrInput !== null) {
+    input = {
+      projectId: projectIdOrInput.projectId,
+      userId: projectIdOrInput.userId || "system",
+      category: projectIdOrInput.category || "agent_decisions",
+      key: projectIdOrInput.key,
+      content: projectIdOrInput.content ?? projectIdOrInput.value,
+      confidence: projectIdOrInput.confidence,
+      source: projectIdOrInput.source,
+    };
+  } else {
+    input = {
+      projectId: projectIdOrInput,
+      userId,
+      category,
+      key: key!,
+      content: value,
+    };
   }
-  const input = {
-    projectId,
-    userId,
-    category,
-    key,
-    content: value,
-  } as any;
   try {
     await knowledgeRetrievalService.setProjectKnowledgeEntry(input);
   } catch (err) {
-    console.debug('[Knowledge] Project knowledge persistence skipped:', err instanceof Error ? err.message : err);
+    console.debug("[Knowledge] Project knowledge persistence skipped:", err instanceof Error ? err.message : err);
   }
 };
 
@@ -57,3 +79,4 @@ export const setProjectKnowledgeEntry = knowledgeRetrievalService.setProjectKnow
 export const checkKnowledgeStaleness = knowledgeRetrievalService.checkKnowledgeStaleness.bind(
   knowledgeRetrievalService
 );
+

@@ -210,6 +210,7 @@ export default function HeroSection({
   eyebrow,
   imageFit,
   imageFocalPoint,
+  contrastProtection,
 }: HeroSectionProps) {
   const effectiveLayoutVariant = normalizeHeroVariant(layoutVariant || layoutType || heroType);
   const shouldReduceMotion = useReducedMotion();
@@ -234,6 +235,9 @@ export default function HeroSection({
 
   // 1. Fullscreen Visual Layout (Architecture, Fine Dining, Luxury, Hospitality)
   if (effectiveLayoutVariant === "fullscreen_visual") {
+    const isProtectedPanel = contrastProtection?.panelBackdrop || visualArchetype === "luxury_bespoke";
+    const scrimOpacity = contrastProtection?.overlayOpacity ?? 0.8;
+
     return (
       <section data-section="hero" className="relative overflow-hidden min-h-[92vh] flex flex-col justify-end pb-24 pt-36 px-6 sm:px-12 transition-colors duration-300 bg-zinc-950 isolate">
         <HeroBackgroundAtmosphere heroBackground={heroBackground} category={category} visualArchetype={visualArchetype} />
@@ -248,8 +252,11 @@ export default function HeroSection({
             <div className="h-full w-full bg-gradient-to-br from-zinc-900 via-stone-900 to-black" />
           )}
           {/* Guaranteed accessible contrast scrim: 3-tier gradient + ambient tint */}
-          <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-black/75 to-black/40 pointer-events-none" />
-          <div className="absolute inset-0 bg-black/35 pointer-events-none" />
+          <div
+            className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-black/80 to-black/45 pointer-events-none"
+            style={{ opacity: scrimOpacity }}
+          />
+          <div className="absolute inset-0 bg-black/40 pointer-events-none" />
           {bgType === "warm_glow" && (
             <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_bottom,rgba(217,119,6,0.4)_0%,transparent_70%)] mix-blend-screen pointer-events-none" />
           )}
@@ -263,7 +270,11 @@ export default function HeroSection({
             initial={shouldReduceMotion ? { opacity: 1 } : { opacity: 0, y: 24 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5 }}
-            className="max-w-3xl space-y-6"
+            className={`max-w-3xl space-y-6 ${
+              isProtectedPanel
+                ? "rounded-3xl p-6 sm:p-10 bg-black/40 backdrop-blur-xl border border-white/20 shadow-2xl"
+                : ""
+            }`}
           >
             <div className="inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-xs font-bold tracking-widest uppercase bg-white/10 backdrop-blur-md border border-white/20 text-white">
               <span className="h-2 w-2 rounded-full bg-amber-400 animate-pulse" />
@@ -271,13 +282,13 @@ export default function HeroSection({
             </div>
 
             <EditableElement sectionKey={sectionKey} elementPath={sectionKey + ".title"} elementType="heading" label="Hero Headline">
-              <h1 className="text-4xl sm:text-6xl md:text-7xl font-extrabold tracking-tight leading-[1.08] text-balance text-white drop-shadow-lg">
+              <h1 className="text-4xl sm:text-6xl md:text-7xl font-extrabold tracking-tight leading-[1.08] text-balance text-white drop-shadow-xl">
                 {safeTitle}
               </h1>
             </EditableElement>
 
             <EditableElement sectionKey={sectionKey} elementPath={sectionKey + ".subtitle"} elementType="paragraph" label="Hero Subtitle">
-              <p className="text-lg sm:text-xl text-zinc-200 font-light max-w-2xl leading-relaxed text-balance drop-shadow">
+              <p className="text-lg sm:text-xl text-zinc-100 font-light max-w-2xl leading-relaxed text-balance drop-shadow-md">
                 {safeSubtitle}
               </p>
             </EditableElement>

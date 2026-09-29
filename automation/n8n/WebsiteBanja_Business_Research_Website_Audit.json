@@ -1,0 +1,233 @@
+{
+  "name": "WebsiteBanja — Business Research & Website Audit",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "f330b330-3003-4003-8003-000000000001",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        220,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "leadId",
+              "value": "lead_cc4f59e3d5e5"
+            },
+            {
+              "name": "businessName",
+              "value": "Grand Heritage Dining"
+            },
+            {
+              "name": "category",
+              "value": "restaurant"
+            },
+            {
+              "name": "location",
+              "value": "Vadodara, Gujarat"
+            },
+            {
+              "name": "website",
+              "value": "https://grandheritagedining.com"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "f330b330-3003-4003-8003-000000000002",
+      "name": "Lead Audit Input",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [
+        440,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\n\n// Format request payload for WebsiteBanja Audit API\nconst payload = {\n  leadId: item.leadId || undefined,\n  lead: item.leadId ? undefined : {\n    leadId: 'lead_manual_' + Date.now(),\n    businessName: item.businessName || 'Grand Heritage Dining',\n    category: item.category || 'restaurant',\n    industry: 'restaurant',\n    location: item.location || 'Vadodara, Gujarat',\n    website: item.website || 'https://grandheritagedining.com',\n    source: 'n8n_manual',\n    sourceId: 'src_manual_1'\n  },\n  maxPages: 8,\n  maxDepth: 2\n};\n\nreturn [{ json: payload }];"
+      },
+      "id": "f330b330-3003-4003-8003-000000000003",
+      "name": "Prepare Audit Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3000/api/automation/audit-lead",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-automation-secret",
+              "value": "={{ $env.WEBSITEBANJA_AUTOMATION_SECRET }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "f330b330-3003-4003-8003-000000000004",
+      "name": "HTTP Request → Audit Lead",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        880,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.success }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "f330b330-3003-4003-8003-000000000005",
+      "name": "Audit Succeeded?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const res = $input.first().json;\nconst report = res.report || {};\nconst dInputs = report.phase10DesignInputs || {};\n\n// Format high-fidelity Phase 10 Handoff Object\nconst handoff = {\n  status: 'audit_completed_ready_for_phase10',\n  auditId: report.auditId,\n  leadId: report.leadId,\n  businessName: report.business ? report.business.businessName : 'Unknown',\n  category: report.business ? report.business.category : 'restaurant',\n  websiteStatus: report.website ? report.website.status : 'unknown',\n  websiteOpportunityScore: report.opportunity ? report.opportunity.score : 0,\n  opportunityReasons: report.opportunity ? report.opportunity.reasons : [],\n  phase10DesignInputs: {\n    visualDirection: dInputs.visualDirection,\n    layoutStrategy: dInputs.layoutStrategy,\n    requiredSections: dInputs.requiredSections,\n    ctaStrategy: dInputs.ctaStrategy,\n    imageryDirection: dInputs.imageryDirection,\n    contentPriorities: dInputs.contentPriorities\n  },\n  handoffPhase: 'phase10_automated_preview_generation'\n};\n\nreturn [{ json: handoff }];"
+      },
+      "id": "f330b330-3003-4003-8003-000000000006",
+      "name": "Format Phase 10 Handoff",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1340,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "status",
+              "value": "audit_failed"
+            },
+            {
+              "name": "errorCode",
+              "value": "={{ $json.error ? $json.error.code : 'UNKNOWN_ERROR' }}"
+            },
+            {
+              "name": "errorMessage",
+              "value": "={{ $json.error ? $json.error.message : 'Audit failed to complete' }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "f330b330-3003-4003-8003-000000000007",
+      "name": "Record Audit Error",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [
+        1340,
+        420
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Lead Audit Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lead Audit Input": {
+      "main": [
+        [
+          {
+            "node": "Prepare Audit Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Audit Request": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request → Audit Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request → Audit Lead": {
+      "main": [
+        [
+          {
+            "node": "Audit Succeeded?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Audit Succeeded?": {
+      "main": [
+        [
+          {
+            "node": "Format Phase 10 Handoff",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Record Audit Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "f330b330-3003-4003-8003-000000000001",
+  "id": "WebsiteBanja_Research_Audit",
+  "tags": []
+}

@@ -267,7 +267,20 @@ export default function WebsiteRenderer({
         const raw = (rawWebsite as Record<string, unknown> | null | undefined)?.[k] ?? (website as Record<string, unknown>)[k];
         const isCustom = Boolean(raw && typeof raw === "object" && !Array.isArray(raw) && Object.keys(raw).length > 0 && (raw as any).title);
         const bType = k.split("_")[0];
-        const isAboutMatch = k === "about" || k === "atmosphere_story" || k === "craft_heritage" || k === "doctor_clinic" || bType === "story" || bType === "heritage" || bType === "clinic";
+        const isAboutMatch =
+          k === "about" ||
+          k === "atmosphere_story" ||
+          k === "craft_heritage" ||
+          k === "doctor_clinic" ||
+          k === "atmosphere" ||
+          k === "practitioners" ||
+          k === "faculty" ||
+          k === "campus" ||
+          k === "attorney_profiles" ||
+          bType === "story" ||
+          bType === "heritage" ||
+          bType === "clinic" ||
+          bType === "faculty";
         return isAboutMatch && !isCustom;
       });
 
@@ -277,7 +290,24 @@ export default function WebsiteRenderer({
         const raw = (rawWebsite as Record<string, unknown> | null | undefined)?.[k] ?? (website as Record<string, unknown>)[k];
         const hasCustom = (Array.isArray(raw) && raw.length > 0) || (Boolean(raw) && typeof raw === "object" && !Array.isArray(raw) && Object.values(raw as Record<string, unknown>).some((v) => Boolean(v && typeof v === "object" && "title" in v)));
         const bType = k.split("_")[0];
-        const isServicesMatch = k === "services" || k === "signature_dishes" || k === "menu" || k === "emergency_services" || k === "creative_capabilities" || k === "capabilities" || bType === "services" || bType === "menu" || bType === "emergency";
+        const isServicesMatch =
+          k === "services" ||
+          k === "signature_dishes" ||
+          k === "menu" ||
+          k === "emergency_services" ||
+          k === "creative_capabilities" ||
+          k === "capabilities" ||
+          k === "room_showcase" ||
+          k === "dining" ||
+          k === "treatments" ||
+          k === "practice_areas" ||
+          k === "solutions" ||
+          k === "programs" ||
+          bType === "services" ||
+          bType === "menu" ||
+          bType === "emergency" ||
+          bType === "rooms" ||
+          bType === "treatments";
         return isServicesMatch && !hasCustom;
       });
 
@@ -287,7 +317,28 @@ export default function WebsiteRenderer({
         const raw = (rawWebsite as Record<string, unknown> | null | undefined)?.[k] ?? (website as Record<string, unknown>)[k];
         const hasCustom = (Array.isArray(raw) && raw.length > 0) || (Boolean(raw) && typeof raw === "object" && !Array.isArray(raw) && Object.values(raw as Record<string, unknown>).some((v) => Boolean(v && typeof v === "object" && "title" in v)));
         const bType = k.split("_")[0];
-        const isFeaturesMatch = k === "features" || k === "trust_proof" || k === "trust_guarantees" || k === "service_area" || k === "awards_metrics" || k === "selected_works" || k === "selected_cases" || k === "gallery" || k === "lookbook" || k === "pricing" || bType === "features" || bType === "trust" || bType === "awards" || bType === "selected" || bType === "gallery" || bType === "pricing";
+        const isFeaturesMatch =
+          k === "features" ||
+          k === "trust_proof" ||
+          k === "trust_guarantees" ||
+          k === "service_area" ||
+          k === "awards_metrics" ||
+          k === "selected_works" ||
+          k === "selected_cases" ||
+          k === "gallery" ||
+          k === "lookbook" ||
+          k === "pricing" ||
+          k === "amenities" ||
+          k === "case_results" ||
+          k === "outcomes" ||
+          k === "skills" ||
+          bType === "features" ||
+          bType === "trust" ||
+          bType === "awards" ||
+          bType === "selected" ||
+          bType === "gallery" ||
+          bType === "pricing" ||
+          bType === "amenities";
         return isFeaturesMatch && !hasCustom;
       });
 
@@ -717,10 +768,16 @@ export default function WebsiteRenderer({
             const sectionObj = (rawSectionData && typeof rawSectionData === "object" && !Array.isArray(rawSectionData)) ? (rawSectionData as Record<string, unknown>) : null;
             const hasCustomServices = Array.isArray(rawSectionData) && rawSectionData.length > 0;
             if (hasCustomServices) {
-              servicesData = rawSectionData as Service[];
+              servicesData = (rawSectionData as Service[]).map((item, idx) => ({
+                ...item,
+                image: item.image || website.services?.[idx]?.image,
+              }));
             } else if (rawSectionData && typeof rawSectionData === "object" && !Array.isArray(rawSectionData)) {
               const vals = Object.values(rawSectionData).filter((v): v is Service => Boolean(v && typeof v === "object" && "title" in v));
-              servicesData = vals.length > 0 ? vals : website.services;
+              servicesData = (vals.length > 0 ? vals : website.services).map((item, idx) => ({
+                ...item,
+                image: item.image || website.services?.[idx]?.image,
+              }));
             } else {
               if (key !== designatedServicesKey) {
                 return null;
@@ -772,10 +829,16 @@ export default function WebsiteRenderer({
             const sectionObj = (rawSectionData && typeof rawSectionData === "object" && !Array.isArray(rawSectionData)) ? (rawSectionData as Record<string, unknown>) : null;
             const hasCustomFeatures = Array.isArray(rawSectionData) && rawSectionData.length > 0;
             if (hasCustomFeatures) {
-              featuresData = rawSectionData as Feature[];
+              featuresData = (rawSectionData as Feature[]).map((item, idx) => ({
+                ...item,
+                image: item.image || website.features?.[idx]?.image,
+              }));
             } else if (rawSectionData && typeof rawSectionData === "object" && !Array.isArray(rawSectionData)) {
               const vals = Object.values(rawSectionData).filter((v): v is Feature => Boolean(v && typeof v === "object" && "title" in v));
-              featuresData = vals.length > 0 ? vals : website.features;
+              featuresData = (vals.length > 0 ? vals : website.features).map((item, idx) => ({
+                ...item,
+                image: item.image || website.features?.[idx]?.image,
+              }));
             } else {
               if (key !== designatedFeaturesKey) {
                 return null;

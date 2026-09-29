@@ -1,7 +1,9 @@
-// src/app/api/agent/live-token/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { checkMemoryRateLimit } from '@/lib/rateLimit';
-import { getClientIp } from '@/lib/supabaseServer';
+import { getClientIp, authenticateRequest } from '@/lib/supabaseServer';
+import { sanitizeErrorOutput } from '@/lib/ai/router/modelConfig';
+import { emitAgentEvent } from '@/lib/telemetry/agentTelemetry';
+import { mitraSessionManager } from '@/lib/agents/mitra/sessionManager';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -17,11 +19,42 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const authUser = await authenticateRequest(req);
+    let body: any = {};
+    try {
+      body = await req.json();
+    } catch {
+      // body is optional
+    }
+
+    const sessionId = body?.sessionId;
+    const projectId = body?.projectId;
+
+    if (sessionId) {
+      mitraSessionManager.updateSessionStatus(sessionId, "connecting", { mode: "live" });
+    }
+
+    emitAgentEvent({
+      event: "agent.provider_call",
+      agent: "mitra",
+      requestId: sessionId || `req_token_${Date.now()}`,
+      userId: authUser?.id,
+      projectId,
+      provider: "gemini-live",
+      model: process.env.GEMINI_LIVE_MODEL || "gemini-3.1-flash-live-preview",
+    });
+
     const rawKey =
       process.env.GEMINI_API_KEY ||
       process.env.GOOGLE_API_KEY ||
       process.env.GOOGLE_GENAI_API_KEY;
     if (!rawKey) {
+      if (sessionId) {
+        mitraSessionManager.updateSessionStatus(sessionId, "error", {
+          error: "Gemini Live API is not configured on the server",
+          mode: "fallback",
+        });
+      }
       return NextResponse.json(
         { success: false, error: 'Gemini Live API is not configured on the server.' },
         { status: 503 }
@@ -57,8 +90,25 @@ export async function POST(req: NextRequest) {
     });
 
     if (!tokenRes.ok) {
-      const errText = await tokenRes.text();
-      console.error(`[API /api/agent/live-token] Gemini AuthToken service HTTP ${tokenRes.status}: ${errText}`);
+      const errText = await tokenRes.text().catch(() => "");
+      const safeErrText = sanitizeErrorOutput(errText);
+      console.error(`[API /api/agent/live-token] Gemini AuthToken service HTTP ${tokenRes.status}: ${safeErrText}`);
+      if (sessionId) {
+        mitraSessionManager.updateSessionStatus(sessionId, "error", {
+          error: "Failed to negotiate ephemeral session token",
+          mode: "fallback",
+        });
+      }
+      emitAgentEvent({
+        event: "agent.fallback",
+        agent: "mitra",
+        requestId: sessionId || `req_token_${Date.now()}`,
+        userId: authUser?.id,
+        projectId,
+        fromModel: targetModel,
+        toModel: "gemini-2.5-flash",
+        reason: "live_token_negotiation_failed",
+      });
       return NextResponse.json(
         { success: false, error: 'Failed to negotiate ephemeral session token.' },
         { status: 502 }
@@ -67,12 +117,26 @@ export async function POST(req: NextRequest) {
 
     const tokenData = await tokenRes.json();
     if (!tokenData?.name) {
-      console.error('[API /api/agent/live-token] Missing token name in response:', tokenData);
+      console.error('[API /api/agent/live-token] Missing token name in response');
       return NextResponse.json(
         { success: false, error: 'Unexpected authentication response format.' },
         { status: 502 }
       );
     }
+
+    if (sessionId) {
+      mitraSessionManager.updateSessionStatus(sessionId, "connected", { mode: "live" });
+    }
+
+    emitAgentEvent({
+      event: "agent.provider_success",
+      agent: "mitra",
+      requestId: sessionId || `req_token_${Date.now()}`,
+      userId: authUser?.id,
+      projectId,
+      provider: "gemini-live",
+      model: targetModel,
+    });
 
     return NextResponse.json({
       success: true,
@@ -81,10 +145,12 @@ export async function POST(req: NextRequest) {
       voice: voiceName,
       sampleRate: 24000,
       expireTime,
+      sessionId,
     });
   } catch (err) {
-    const errorMsg = err instanceof Error ? err.message : 'Unknown error generating Live API token';
-    console.error('[API /api/agent/live-token Error]:', errorMsg);
+    const rawErrorMsg = err instanceof Error ? err.message : 'Unknown error generating Live API token';
+    const safeErrorMsg = sanitizeErrorOutput(rawErrorMsg);
+    console.error('[API /api/agent/live-token Error]:', safeErrorMsg);
     return NextResponse.json(
       { success: false, error: 'Failed to generate session token.' },
       { status: 500 }

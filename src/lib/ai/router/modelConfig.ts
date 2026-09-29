@@ -5,17 +5,26 @@ import type { ModelProviderName, RoutingPolicy } from "./types";
  * Secret-stripping sanitizer for error logs and telemetry.
  * Ensures no API key, bearer token, or auth header ever leaks into logs, databases, or client responses.
  */
-export function sanitizeErrorOutput(text: string): string {
-  if (!text) return "";
-  return text
+export function sanitizeErrorOutput(text: unknown): string {
+  if (text === null || text === undefined) return "";
+  const raw =
+    text instanceof Error
+      ? `${text.name}: ${text.message}${text.stack ? `\n${text.stack}` : ""}`
+      : typeof text === "string"
+      ? text
+      : typeof text === "object"
+      ? JSON.stringify(text)
+      : String(text);
+
+  return raw
     // Strip Authorization / Bearer tokens
     .replace(/Bearer\s+[A-Za-z0-9._-]+/gi, "Bearer [REDACTED]")
     // Strip OpenAI / Groq / OpenRouter style keys (sk-..., gsk_...)
     .replace(/\b(sk-[A-Za-z0-9_-]{12,}|gsk_[A-Za-z0-9_-]{12,})\b/g, "[REDACTED_API_KEY]")
-    // Strip Gemini keys (AIzaSy...)
-    .replace(/\bAIzaSy[A-Za-z0-9_-]{20,}\b/g, "[REDACTED_GEMINI_KEY]")
-    // Strip generic query param keys (?key=..., &key=..., ?api_key=...)
-    .replace(/([?&](?:api_)?key=)[^& \s]+/gi, "$1[REDACTED]")
+    // Strip Gemini / Google keys (AIza...)
+    .replace(/\bAIza[A-Za-z0-9_-]{10,}\b/g, "[REDACTED_GEMINI_KEY]")
+    // Strip generic query param keys (?key=..., &key=..., ?api_key=..., ?token=...)
+    .replace(/([?&](?:api_)?key=|[?&](?:auth_)?token=)[^& \s]+/gi, "$1[REDACTED]")
     // Strip database connection strings with passwords
     .replace(/(postgres(?:ql)?:\/\/[^:]+:)[^@]+(@)/gi, "$1[REDACTED]$2")
     // Strip inline password/pwd key-value pairs
@@ -38,8 +47,14 @@ export const MODEL_CONFIG = {
     openrouter: () => process.env.OPENROUTER_API_KEY || "",
   },
 
-  // Default models per provider
+  // Default models per provider and functional role
   defaults: {
+    generationModel: process.env.OPENAI_GENERATION_MODEL || "gpt-5.6-luna",
+    generationFallbackModel: process.env.OPENAI_FALLBACK_MODEL || "gpt-4o-mini",
+    plannerModel: process.env.PLANNER_MODEL || process.env.OPENAI_PLANNER_MODEL || "gpt-4o-mini",
+    extractorModel: process.env.EXTRACTOR_MODEL || process.env.OPENAI_EXTRACTOR_MODEL || "gpt-4o-mini",
+    studioModel: process.env.STUDIO_MODEL || "gpt-4o-mini",
+    studioFallbackModel: process.env.STUDIO_FALLBACK_MODEL || "gemini-2.5-flash",
     geminiModel: process.env.GEMINI_MODEL || "gemini-2.5-flash",
     groqModel: process.env.GROQ_MODEL || "llama-3.3-70b-versatile",
     openrouterModel: process.env.OPENROUTER_MODEL || "meta-llama/llama-3.3-70b-instruct:free",

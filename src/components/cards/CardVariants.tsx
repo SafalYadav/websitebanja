@@ -386,18 +386,35 @@ export function HorizontalMediaCard({
 }: {
   title: string;
   description: string;
-  image: string;
+  image?: string;
   ctaText?: string;
 }) {
   return (
     <CardPrimitive variant="glass" padding="none" className="grid grid-cols-1 md:grid-cols-2 overflow-hidden border-[var(--wb-border)]">
       <div className="relative min-h-[220px] md:min-h-full">
-        <ImageWithFallback
-          src={image}
-          alt={title}
-          wrapperClassName="w-full h-full absolute inset-0 md:relative"
-          className="w-full h-full object-cover"
-        />
+        {image ? (
+          <ImageWithFallback
+            src={image}
+            alt={title}
+            wrapperClassName="w-full h-full absolute inset-0 md:relative"
+            className="w-full h-full object-cover"
+          />
+        ) : (
+          <div
+            className="w-full h-full min-h-[220px] flex items-center justify-center relative overflow-hidden"
+            style={{
+              background: "linear-gradient(135deg, var(--wb-surface), var(--wb-surface-alt))",
+            }}
+          >
+            <div
+              className="absolute inset-0 opacity-20 pointer-events-none"
+              style={{
+                background: "radial-gradient(circle at 50% 50%, var(--wb-primary), transparent 70%)",
+              }}
+            />
+            <span className="text-xs font-mono text-[var(--wb-muted)] uppercase tracking-wider">{title}</span>
+          </div>
+        )}
       </div>
       <div className="p-8 flex flex-col justify-between">
         <div>
@@ -426,17 +443,26 @@ export function ProjectShowcaseCard({
 }: {
   title: string;
   category: string;
-  image: string;
+  image?: string;
   stats?: string;
 }) {
   return (
     <CardPrimitive variant="default" padding="none" interactive className="group relative overflow-hidden h-[360px] border-[var(--wb-border)]">
-      <ImageWithFallback
-        src={image}
-        alt={title}
-        wrapperClassName="w-full h-full absolute inset-0"
-        className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
-      />
+      {image ? (
+        <ImageWithFallback
+          src={image}
+          alt={title}
+          wrapperClassName="w-full h-full absolute inset-0"
+          className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+        />
+      ) : (
+        <div
+          className="w-full h-full absolute inset-0 flex items-center justify-center"
+          style={{
+            background: "linear-gradient(135deg, var(--wb-surface), var(--wb-surface-alt))",
+          }}
+        />
+      )}
       <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent opacity-90 z-10 pointer-events-none" />
 
       <div className="absolute inset-x-0 bottom-0 p-8 flex flex-col justify-end">
@@ -912,11 +938,30 @@ export function ImageLedCard({
   return (
     <CardPrimitive variant="default" treatment={treatment} padding="none" interactive className="group overflow-hidden flex flex-col justify-between">
       <div className="relative w-full aspect-[16/10] overflow-hidden">
-        <ImageWithFallback
-          src={image || "https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?w=800&q=80"}
-          alt={title}
-          className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
-        />
+        {image ? (
+          <ImageWithFallback
+            src={image}
+            alt={title}
+            className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+          />
+        ) : (
+          <div
+            className="w-full h-full flex items-center justify-center relative overflow-hidden"
+            style={{
+              background: "linear-gradient(135deg, var(--wb-surface), var(--wb-surface-alt))",
+            }}
+          >
+            <div
+              className="absolute inset-0 opacity-20 pointer-events-none"
+              style={{
+                background: "radial-gradient(circle at 50% 50%, var(--wb-primary), transparent 70%)",
+              }}
+            />
+            <div className="text-xs uppercase tracking-widest text-[var(--wb-muted)] font-mono">
+              {tag || "Featured"}
+            </div>
+          </div>
+        )}
         <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent z-10" />
         {tag && (
           <div className="absolute top-4 left-4 z-20">

@@ -1,12 +1,22 @@
 import type { AiWorkspace, PlanningInput } from "@/types/aiWorkspace";
+import type { AIContextResult } from "@/lib/ai/contextBuilder";
 
 export type PlanningPromptData = Partial<PlanningInput> & {
   businessName: string;
   category: string;
   description: string;
+  aiContext?: AIContextResult;
 };
 
 export function buildPlanningPrompt(data: PlanningPromptData, existingWorkspace?: AiWorkspace) {
+  const globalSection = data.aiContext?.systemKnowledgePrompt
+    ? `\n--- GLOBAL INDUSTRY KNOWLEDGE & ARCHITECTURAL GUIDANCE ---\n${data.aiContext.systemKnowledgePrompt}\n`
+    : "";
+
+  const projectSection = data.aiContext?.projectDataPrompt
+    ? `\n--- PROJECT VERIFIED FACTS & UNTRUSTED USER DATA ---\n${data.aiContext.projectDataPrompt}\n`
+    : "";
+
   return `You are WebsiteBanja's software architect. Think and plan before implementation. Return a JSON object whose keys exactly match the requested .websitebanja Markdown paths. Each value must be complete Markdown.
 
 Business details:
@@ -17,7 +27,7 @@ Business details:
 - Style: ${data.style}; colors: ${data.primaryColor}, ${data.secondaryColor}
 - 3D Preference: ${data.threeDPreference === "yes" ? "YES (Explicitly requested 3D capabilities)" : "NO (Hard constraint: Standard 2D layout only; zero 3D, WebGL, or R3F)"}
 - Contact: ${data.phone}, ${data.email}, ${data.website}, ${data.instagram}, ${data.facebook}, ${data.address}
-
+${globalSection}${projectSection}
 Create these documents:
 - ai/memory.md: project vision, business goal, brand identity, coding style, architecture, preferred libraries, user preferences and prior decisions.
 - ai/context.md: concise product context and constraints.

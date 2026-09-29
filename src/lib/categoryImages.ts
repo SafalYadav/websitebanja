@@ -518,6 +518,101 @@ export const CATEGORY_IMAGE_POOLS: Record<string, CategoryPoolSet> = {
       "https://images.unsplash.com/photo-1531297484001-80022131f5a1?auto=format&fit=crop&w=800&q=80",
     ],
   },
+  hotel: {
+    heroes: [
+      "https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?auto=format&fit=crop&w=1200&q=80",
+      "https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=1200&q=80",
+      "https://images.unsplash.com/photo-1571896349842-33c89424de2d?auto=format&fit=crop&w=1200&q=80",
+    ],
+    abouts: [
+      "https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=1000&q=80",
+      "https://images.unsplash.com/photo-1578683010236-d716f9a3f461?auto=format&fit=crop&w=1000&q=80",
+    ],
+    atmospheres: [
+      "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=1600&q=80",
+    ],
+    services: [
+      "https://images.unsplash.com/photo-1571896349842-33c89424de2d?auto=format&fit=crop&w=800&q=80",
+      "https://images.unsplash.com/photo-1540555700478-4be289fbecef?auto=format&fit=crop&w=800&q=80",
+      "https://images.unsplash.com/photo-1550966871-3ed3cdb5ed0c?auto=format&fit=crop&w=800&q=80",
+      "https://images.unsplash.com/photo-1569263979104-865ab7cd8d13?auto=format&fit=crop&w=800&q=80",
+    ],
+    features: [
+      "https://images.unsplash.com/photo-1510414842594-a61c69b5ae57?auto=format&fit=crop&w=800&q=80",
+      "https://images.unsplash.com/photo-1578683010236-d716f9a3f461?auto=format&fit=crop&w=800&q=80",
+      "https://images.unsplash.com/photo-1544161515-4ab6ce6db874?auto=format&fit=crop&w=800&q=80",
+    ],
+  },
+  "real estate": {
+    heroes: [
+      "https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&w=1200&q=80",
+      "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1200&q=80",
+      "https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?auto=format&fit=crop&w=1200&q=80",
+    ],
+    abouts: [
+      "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1000&q=80",
+      "https://images.unsplash.com/photo-1512917774080-9991f1c4c750?auto=format&fit=crop&w=1000&q=80",
+    ],
+    atmospheres: [
+      "https://images.unsplash.com/photo-1513694203232-719a280e022f?auto=format&fit=crop&w=1600&q=80",
+    ],
+    services: [
+      "https://images.unsplash.com/photo-1503387762-592deb58ef4e?auto=format&fit=crop&w=800&q=80",
+      "https://images.unsplash.com/photo-1600585154526-990dced4db0d?auto=format&fit=crop&w=800&q=80",
+      "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?auto=format&fit=crop&w=800&q=80",
+      "https://images.unsplash.com/photo-1600566753376-12c8ab7fb75b?auto=format&fit=crop&w=800&q=80",
+    ],
+    features: [
+      "https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?auto=format&fit=crop&w=800&q=80",
+      "https://images.unsplash.com/photo-1600210492486-724fe5c67fb0?auto=format&fit=crop&w=800&q=80",
+    ],
+  },
+  agency: {
+    heroes: [
+      "https://images.unsplash.com/photo-1550684848-fac1c5b4e853?auto=format&fit=crop&w=1200&q=80",
+      "https://images.unsplash.com/photo-1507238691740-187a5b1d37b8?auto=format&fit=crop&w=1200&q=80",
+    ],
+    abouts: [
+      "https://images.unsplash.com/photo-1507238691740-187a5b1d37b8?auto=format&fit=crop&w=1000&q=80",
+      "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=1000&q=80",
+    ],
+    atmospheres: [
+      "https://images.unsplash.com/photo-1550684847-75bdda21cc95?auto=format&fit=crop&w=1600&q=80",
+    ],
+    services: [
+      "https://images.unsplash.com/photo-1513542789411-b6a5d4f31634?auto=format&fit=crop&w=800&q=80",
+      "https://images.unsplash.com/photo-1550745165-9bc0b252726f?auto=format&fit=crop&w=800&q=80",
+      "https://images.unsplash.com/photo-1581291518655-9523c9320984?auto=format&fit=crop&w=800&q=80",
+      "https://images.unsplash.com/photo-1500462918059-b1a0cb512f1d?auto=format&fit=crop&w=800&q=80",
+    ],
+    features: [
+      "https://images.unsplash.com/photo-1579783900882-c0d3dad7b119?auto=format&fit=crop&w=800&q=80",
+      "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=800&q=80",
+    ],
+  },
+  electrician: {
+    heroes: [
+      "https://images.unsplash.com/photo-1621905251189-08b45d6a269e?auto=format&fit=crop&w=1200&q=80",
+      "https://images.unsplash.com/photo-1581092335397-9583fe92d232?auto=format&fit=crop&w=1200&q=80",
+    ],
+    abouts: [
+      "https://images.unsplash.com/photo-1581092335397-9583fe92d232?auto=format&fit=crop&w=1000&q=80",
+      "https://images.unsplash.com/photo-1541888946425-d0fbb186244f?auto=format&fit=crop&w=1000&q=80",
+    ],
+    atmospheres: [
+      "https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=1600&q=80",
+    ],
+    services: [
+      "https://images.unsplash.com/photo-1504328345606-18bbc8c9d7d1?auto=format&fit=crop&w=800&q=80",
+      "https://images.unsplash.com/photo-1558441719-8b489c63f7d1?auto=format&fit=crop&w=800&q=80",
+      "https://images.unsplash.com/photo-1593941707882-a5bba14938c7?auto=format&fit=crop&w=800&q=80",
+      "https://images.unsplash.com/photo-1581092795360-fd1ca04f0952?auto=format&fit=crop&w=800&q=80",
+    ],
+    features: [
+      "https://images.unsplash.com/photo-1541888946425-d0fbb186244f?auto=format&fit=crop&w=800&q=80",
+      "https://images.unsplash.com/photo-1581092580497-e0d23cbdf1dc?auto=format&fit=crop&w=800&q=80",
+    ],
+  },
   general: {
     heroes: [
       "https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&w=1200&q=80",
@@ -1064,7 +1159,15 @@ export function getHeroAtmosphereImage(
   const cat = (category || "").toLowerCase();
   const arch = (archetype || "").toLowerCase();
 
-  if (cat.includes("restaurant") || cat.includes("cafe") || cat.includes("coffee") || cat.includes("dining") || arch === "warm_artisanal") {
+  if (cat.includes("hotel") || cat.includes("resort")) {
+    return "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=1600&q=80"; // Tranquil coastal sea ripples
+  }
+
+  if (cat.includes("restaurant") || cat.includes("dining") || cat.includes("epicure") || arch === "warm_artisanal") {
+    return "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=1600&q=80"; // Warm culinary embers & bokeh
+  }
+
+  if (cat.includes("cafe") || cat.includes("coffee")) {
     return "https://images.unsplash.com/photo-1447933601403-0c6688de566e?auto=format&fit=crop&w=1600&q=80"; // Macro roasted coffee crema & warm steam texture
   }
 
@@ -1076,11 +1179,11 @@ export function getHeroAtmosphereImage(
     return "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=1600&q=80"; // Abstract obsidian telemetry server mesh with neon cyan/sky depth
   }
 
-  if (cat.includes("architect") || cat.includes("interior") || arch === "minimal_editorial") {
+  if (cat.includes("real estate") || cat.includes("estate") || cat.includes("realty") || cat.includes("architect") || cat.includes("interior") || arch === "minimal_editorial") {
     return "https://images.unsplash.com/photo-1513694203232-719a280e022f?auto=format&fit=crop&w=1600&q=80"; // Crisp architectural shadow geometry across concrete facade
   }
 
-  if (cat.includes("fashion") || cat.includes("luxury") || cat.includes("couture") || arch === "luxury_bespoke") {
+  if (cat.includes("fashion") || cat.includes("luxury") || cat.includes("couture")) {
     return "https://images.unsplash.com/photo-1584917865442-de89df76afd3?auto=format&fit=crop&w=1600&q=80"; // Flowing soft silk fabric folds with elegant light and tactile atelier texture
   }
 
@@ -1088,12 +1191,8 @@ export function getHeroAtmosphereImage(
     return "https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=1600&q=80"; // Precision copper wiring and blueprint schematic lines
   }
 
-  if (cat.includes("ceramic") || cat.includes("pottery") || cat.includes("stoneware")) {
-    return "https://images.unsplash.com/photo-1578749556568-bc2c40e68b61?auto=format&fit=crop&w=1600&q=80"; // Handcrafted stoneware clay texture and mineral glaze grain
-  }
-
   if (cat.includes("agency") || cat.includes("creative") || arch === "expressive_creative") {
-    return "https://images.unsplash.com/photo-1550684848-fac1c5b4e853?auto=format&fit=crop&w=1600&q=80"; // Monochromatic dark abstract geometric fluid distortion
+    return "https://images.unsplash.com/photo-1550684847-75bdda21cc95?auto=format&fit=crop&w=1600&q=80"; // Dark kinetic wave distortion
   }
 
   return "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=1600&q=80"; // Universal subtle ambient fluid mesh

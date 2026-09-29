@@ -1,0 +1,243 @@
+{
+  "id": "WebsiteBanja_Reply_Intelligence_CRM",
+  "name": "WebsiteBanja — Reply Intelligence & CRM Processing",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "e301d012-1111-4000-8000-000000000001",
+      "name": "When Executed by Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "param_lead_id",
+              "name": "leadId",
+              "value": "lead_cc4f59e3d5e5",
+              "type": "string"
+            },
+            {
+              "id": "param_channel",
+              "name": "channel",
+              "value": "email",
+              "type": "string"
+            },
+            {
+              "id": "param_message",
+              "name": "messageText",
+              "value": "Hi, I checked the interactive preview. The concept looks great! How much does a website like this cost to launch?",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "e301d012-1111-4000-8000-000000000002",
+      "name": "Set Inbound Reply Parameters",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        480,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3000/api/automation/simulate-reply",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-automation-secret",
+              "value": "={{ $env.WEBSITEBANJA_AUTOMATION_SECRET }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"leadId\": \"{{ $json.leadId }}\",\n  \"channel\": \"{{ $json.channel }}\",\n  \"messageText\": \"{{ $json.messageText }}\"\n}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "e301d012-1111-4000-8000-000000000003",
+      "name": "HTTP Request → Simulate Reply & Classify",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        720,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "cond_commercial_intent",
+              "leftValue": "={{ $json.analysis.intent }}",
+              "rightValue": "ASKING_PRICE",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "or"
+        },
+        "options": {}
+      },
+      "id": "e301d012-1111-4000-8000-000000000004",
+      "name": "Is Price Inquiry?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        960,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "assign_status_interested",
+              "name": "pipelineStatus",
+              "value": "INTERESTED — Pricing Inquiry Received",
+              "type": "string"
+            },
+            {
+              "id": "assign_action_required",
+              "name": "recommendedAction",
+              "value": "={{ $json.nextAction.recommendedAction }}",
+              "type": "string"
+            },
+            {
+              "id": "assign_confidence",
+              "name": "confidence",
+              "value": "={{ $json.analysis.confidence }}",
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "e301d012-1111-4000-8000-000000000005",
+      "name": "Commercial Opportunity Route",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1220,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "assign_status_general",
+              "name": "pipelineStatus",
+              "value": "={{ $json.leadStatus }}",
+              "type": "string"
+            },
+            {
+              "id": "assign_detected_intent",
+              "name": "detectedIntent",
+              "value": "={{ $json.analysis.intent }}",
+              "type": "string"
+            },
+            {
+              "id": "assign_review_flag",
+              "name": "requiresHumanReview",
+              "value": "={{ $json.analysis.requiresHumanReview }}",
+              "type": "boolean"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "e301d012-1111-4000-8000-000000000006",
+      "name": "Standard CRM Status Route",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1220,
+        400
+      ]
+    }
+  ],
+  "connections": {
+    "When Executed by Trigger": {
+      "main": [
+        [
+          {
+            "node": "Set Inbound Reply Parameters",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Inbound Reply Parameters": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request → Simulate Reply & Classify",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request → Simulate Reply & Classify": {
+      "main": [
+        [
+          {
+            "node": "Is Price Inquiry?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Price Inquiry?": {
+      "main": [
+        [
+          {
+            "node": "Commercial Opportunity Route",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Standard CRM Status Route",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

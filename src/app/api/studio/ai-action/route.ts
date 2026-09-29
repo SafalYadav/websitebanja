@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { openai } from "@/lib/openai";
+import { MODEL_CONFIG, sanitizeErrorOutput } from "@/lib/ai/router/modelConfig";
+import { emitAgentEvent } from "@/lib/telemetry/agentTelemetry";
 import { checkMemoryRateLimit } from "@/lib/rateLimit";
 import { verifyAdminAuth } from "@/lib/adminAuth";
 import { authenticateRequest, getClientIp } from "@/lib/supabaseServer";
 import { getStudioQuota } from "@/lib/studioQuota";
 import type { StudioAiAction } from "@/lib/studioAiActions";
+import { buildAIContext } from "@/lib/ai/contextBuilder";
 
 export const dynamic = "force-dynamic";
 
@@ -24,6 +27,16 @@ function boundedJson(value: unknown, maxChars: number): string {
 }
 
 export async function POST(req: NextRequest) {
+  const studioStart = Date.now();
+  const requestId = `req_studio_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+
+  emitAgentEvent({
+    event: "agent.started",
+    agent: "studio",
+    requestId,
+    metadata: { operation: "Studio AI copilot action" },
+  });
+
   try {
     const user = await authenticateRequest(req);
     let isAdmin = false;
@@ -85,6 +98,27 @@ export async function POST(req: NextRequest) {
         { status: 413 }
       );
     }
+
+    const projectId = body.projectId || currentWebsite?.id || currentWebsite?.projectId;
+    const aiContext = await buildAIContext({
+      projectId,
+      userId: user?.id,
+      userPrompt: prompt,
+      websiteType: category,
+      taskType: "studio",
+    });
+
+    emitAgentEvent({
+      event: "agent.thinking",
+      agent: "studio",
+      requestId,
+      projectId,
+      userId: user?.id,
+      metadata: {
+        operation: "Reasoning with studio knowledge & context",
+        ...aiContext.telemetryMetadata,
+      },
+    });
 
     const systemPrompt = `You are WebsiteBanja Studio AI Copilot, a high-intelligence web builder assistant.
 You interpret user intent (Hindi, Hinglish, English) and convert it into structured Studio actions.
@@ -191,16 +225,27 @@ Current Website Outline: ${boundedJson({
       hero: currentWebsite?.hero,
       about: currentWebsite?.about,
     }, MAX_CONTEXT_CHARS)}
-
+${aiContext.projectDataPrompt ? `\nVerified Project Facts & Knowledge:\n${aiContext.projectDataPrompt}\n` : ""}
 User Command: "${prompt.trim()}"`;
 
     let rawResponse = "{}";
     let providerError: Error | null = null;
+    let selectedProvider: "openai" | "gemini" = "openai";
+    let selectedModel: string = MODEL_CONFIG.defaults.studioModel;
 
     if (process.env.OPENAI_API_KEY) {
+      const callStart = Date.now();
+      emitAgentEvent({
+        event: "agent.provider_call",
+        agent: "studio",
+        requestId,
+        provider: "openai",
+        model: MODEL_CONFIG.defaults.studioModel,
+      });
+
       try {
         const completion = await openai.chat.completions.create({
-          model: "gpt-4o-mini",
+          model: MODEL_CONFIG.defaults.studioModel,
           response_format: { type: "json_object" },
           messages: [
             { role: "system", content: systemPrompt },
@@ -209,8 +254,25 @@ User Command: "${prompt.trim()}"`;
           temperature: 0.1,
         });
         rawResponse = completion.choices[0]?.message?.content || "{}";
+        emitAgentEvent({
+          event: "agent.provider_success",
+          agent: "studio",
+          requestId,
+          provider: "openai",
+          model: MODEL_CONFIG.defaults.studioModel,
+          latencyMs: Date.now() - callStart,
+        });
       } catch (openaiErr: unknown) {
-        console.warn("[OpenAI Execution Warning, trying fallback]", openaiErr);
+        emitAgentEvent({
+          event: "agent.provider_error",
+          agent: "studio",
+          requestId,
+          provider: "openai",
+          model: MODEL_CONFIG.defaults.studioModel,
+          latencyMs: Date.now() - callStart,
+          error: openaiErr instanceof Error ? openaiErr.message : String(openaiErr),
+        });
+        console.warn("[OpenAI Execution Warning, trying fallback]", sanitizeErrorOutput(openaiErr));
         providerError = openaiErr instanceof Error ? openaiErr : new Error(String(openaiErr));
       }
     }
@@ -222,11 +284,31 @@ User Command: "${prompt.trim()}"`;
         process.env.GOOGLE_GENAI_API_KEY;
 
       if (geminiApiKey) {
+        emitAgentEvent({
+          event: "agent.fallback",
+          agent: "studio",
+          requestId,
+          fromProvider: "openai",
+          toProvider: "gemini",
+          fromModel: MODEL_CONFIG.defaults.studioModel,
+          toModel: MODEL_CONFIG.defaults.studioFallbackModel,
+          reason: providerError ? providerError.message : "OpenAI returned empty or was unavailable",
+        });
+
+        const geminiStart = Date.now();
+        emitAgentEvent({
+          event: "agent.provider_call",
+          agent: "studio",
+          requestId,
+          provider: "gemini",
+          model: MODEL_CONFIG.defaults.studioFallbackModel,
+        });
+
         try {
           const { GoogleGenAI } = await import("@google/genai");
           const ai = new GoogleGenAI({ apiKey: geminiApiKey.trim(), vertexai: false });
           const response = await ai.models.generateContent({
-            model: "gemini-2.5-flash",
+            model: MODEL_CONFIG.defaults.studioFallbackModel,
             contents: [
               {
                 role: "user",
@@ -241,8 +323,27 @@ User Command: "${prompt.trim()}"`;
             },
           });
           rawResponse = response.text || "{}";
+          selectedProvider = "gemini";
+          selectedModel = MODEL_CONFIG.defaults.studioFallbackModel;
+          emitAgentEvent({
+            event: "agent.provider_success",
+            agent: "studio",
+            requestId,
+            provider: "gemini",
+            model: MODEL_CONFIG.defaults.studioFallbackModel,
+            latencyMs: Date.now() - geminiStart,
+          });
         } catch (geminiErr: unknown) {
-          console.error("[Gemini Fallback Error]", geminiErr);
+          emitAgentEvent({
+            event: "agent.provider_error",
+            agent: "studio",
+            requestId,
+            provider: "gemini",
+            model: MODEL_CONFIG.defaults.studioFallbackModel,
+            latencyMs: Date.now() - geminiStart,
+            error: geminiErr instanceof Error ? geminiErr.message : String(geminiErr),
+          });
+          console.error("[Gemini Fallback Error]", sanitizeErrorOutput(geminiErr));
           if (providerError) throw providerError;
           throw geminiErr;
         }
@@ -262,8 +363,30 @@ User Command: "${prompt.trim()}"`;
     const actions: StudioAiAction[] = Array.isArray(parsed.actions) ? parsed.actions : [];
     const summary: string = parsed.summary || "Website modified successfully.";
 
+    emitAgentEvent({
+      event: "agent.completed",
+      agent: "studio",
+      requestId,
+      projectId,
+      userId: user?.id,
+      provider: selectedProvider,
+      model: selectedModel,
+      latencyMs: Date.now() - studioStart,
+      metadata: {
+        actionCount: actions.length,
+        ...aiContext.telemetryMetadata,
+      },
+    });
+
     return NextResponse.json({ success: true, summary, actions });
   } catch (error) {
+    emitAgentEvent({
+      event: "agent.failed",
+      agent: "studio",
+      requestId,
+      latencyMs: Date.now() - studioStart,
+      error: error instanceof Error ? error.message : String(error),
+    });
     return NextResponse.json(
       {
         error: "AI Copilot Error",

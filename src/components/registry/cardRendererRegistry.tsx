@@ -304,7 +304,7 @@ export function CardRenderer({
         <HorizontalMediaCard
           title={title}
           description={description}
-          image={image || "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=800&q=80"}
+          image={image}
           ctaText={ctaText || "Explore Details"}
         />
       );
@@ -358,7 +358,7 @@ export function CardRenderer({
         <ImageRevealCard
           title={title}
           subtitle={subtitle || effectiveTag || description}
-          image={image || "https://images.unsplash.com/photo-1579546929518-9e396f3cc809?w=800&q=80"}
+          image={image || ""}
         />
       );
 
@@ -375,7 +375,7 @@ export function CardRenderer({
         <ProjectShowcaseCard
           title={title}
           category={effectiveTag || subtitle || "Featured Project"}
-          image={image || "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=800&q=80"}
+          image={image}
           stats={metric}
         />
       );

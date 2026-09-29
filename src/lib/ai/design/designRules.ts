@@ -10,7 +10,16 @@ export type SupportedIndustry =
   | "gym"
   | "saas"
   | "ecommerce"
-  | "local_service";
+  | "local_service"
+  // Phase 6 — new industry coverage
+  | "luxury_hotel"
+  | "creative_agency"
+  | "law_firm"
+  | "wellness_spa"
+  | "finance"
+  | "education"
+  | "portfolio"
+  | "automotive";
 
 export interface IndustryProfile {
   key: SupportedIndustry;
@@ -77,16 +86,128 @@ export interface DesignRules {
  * Normalizes input industry/business type to one of the 8 core supported industries.
  */
 export function normalizeIndustry(req: WebsiteRequirement): SupportedIndustry {
-  const combined = `${req.business.industry || ""} ${req.business.type || ""} ${req.business.name || ""} ${req.intent || ""}`.toLowerCase();
+  const combined = ` ${req.business.industry || ""} ${req.business.type || ""} ${req.business.name || ""} ${req.intent || ""} `.toLowerCase();
 
+  // Phase 6 — specialized industries checked first before broad keywords
+  if (
+    combined.includes("hotel") ||
+    combined.includes("resort") ||
+    combined.includes("hospitality") ||
+    combined.includes("boutique hotel") ||
+    combined.includes("lodge") ||
+    combined.includes("inn") ||
+    combined.includes("bed and breakfast") ||
+    combined.includes("b&b") ||
+    combined.includes("luxury stay")
+  ) {
+    return "luxury_hotel";
+  }
+
+  if (
+    combined.includes("spa") ||
+    combined.includes("wellness") ||
+    combined.includes("yoga") ||
+    combined.includes("pilates") ||
+    combined.includes("meditation") ||
+    combined.includes("holistic") ||
+    combined.includes("naturopath") ||
+    combined.includes("massage") ||
+    combined.includes("ayurved")
+  ) {
+    return "wellness_spa";
+  }
+
+  if (
+    combined.includes("law firm") ||
+    combined.includes("attorney") ||
+    combined.includes("lawyer") ||
+    combined.includes(" legal ") ||
+    combined.includes("counsel") ||
+    combined.includes("barrister") ||
+    combined.includes("solicitor") ||
+    combined.includes("litigation")
+  ) {
+    return "law_firm";
+  }
+
+  if (
+    combined.includes("finance") ||
+    combined.includes("wealth management") ||
+    combined.includes("hedge fund") ||
+    combined.includes("venture capital") ||
+    combined.includes("private equity") ||
+    combined.includes("financial advisor") ||
+    combined.includes("accounting") ||
+    combined.includes("investment")
+  ) {
+    return "finance";
+  }
+
+  if (
+    combined.includes("dealership") ||
+    combined.includes("showroom") ||
+    combined.includes("car sales") ||
+    combined.includes("luxury car") ||
+    combined.includes("motorcycle") ||
+    combined.includes("auto repair") ||
+    combined.includes("garage") ||
+    combined.includes("automobile") ||
+    combined.includes("automotive")
+  ) {
+    return "automotive";
+  }
+
+  if (
+    combined.includes("agency") ||
+    combined.includes("creative studio") ||
+    combined.includes("branding studio") ||
+    combined.includes("design agency") ||
+    combined.includes("design studio") ||
+    combined.includes("advertising agency") ||
+    combined.includes("marketing agency") ||
+    combined.includes("digital agency")
+  ) {
+    return "creative_agency";
+  }
+
+  if (
+    combined.includes("university") ||
+    combined.includes("college") ||
+    combined.includes("academy") ||
+    combined.includes("institute") ||
+    combined.includes("education") ||
+    combined.includes("coaching") ||
+    combined.includes("tutoring") ||
+    combined.includes("e-learning") ||
+    combined.includes("elearning") ||
+    combined.includes("online course")
+  ) {
+    return "education";
+  }
+
+  if (
+    combined.includes("portfolio") ||
+    combined.includes("freelancer") ||
+    combined.includes("personal brand") ||
+    combined.includes("designer portfolio") ||
+    combined.includes("photographer portfolio") ||
+    combined.includes("artist portfolio") ||
+    combined.includes("developer portfolio")
+  ) {
+    return "portfolio";
+  }
+
+  // Core baseline industries
   if (
     combined.includes("dental") ||
     combined.includes("dentist") ||
+    combined.includes("teeth") ||
+    combined.includes("orthodont") ||
     combined.includes("clinic") ||
     combined.includes("doctor") ||
     combined.includes("medical") ||
-    combined.includes("health") ||
-    combined.includes("hospital")
+    combined.includes(" hospital ") ||
+    (combined.includes("health") && !combined.includes("holistic") && !combined.includes("wellness"))
   ) {
     return "dental";
   }
@@ -106,9 +227,9 @@ export function normalizeIndustry(req: WebsiteRequirement): SupportedIndustry {
   }
 
   if (
-    combined.includes("car") ||
     combined.includes("rental") ||
-    combined.includes("vehicle") ||
+    combined.includes("car rental") ||
+    combined.includes("vehicle rental") ||
     combined.includes("fleet") ||
     combined.includes("auto hire") ||
     combined.includes("cab") ||
@@ -138,7 +259,6 @@ export function normalizeIndustry(req: WebsiteRequirement): SupportedIndustry {
     combined.includes("workout") ||
     combined.includes("crossfit") ||
     combined.includes("trainer") ||
-    combined.includes("yoga") ||
     combined.includes("martial arts")
   ) {
     return "gym";
@@ -147,8 +267,7 @@ export function normalizeIndustry(req: WebsiteRequirement): SupportedIndustry {
   if (
     combined.includes("saas") ||
     combined.includes("software") ||
-    combined.includes("tech") ||
-    combined.includes("app") ||
+    combined.includes("tech platform") ||
     combined.includes("cloud") ||
     combined.includes("platform") ||
     combined.includes("ai tool")
@@ -605,6 +724,489 @@ export function generateDesignRules(req: WebsiteRequirement): DesignRules {
           heroLayout: "split",
           recommendedSections: ["navbar", "hero", "productsSection", "features", "about", "faq", "contact", "footer"],
           gridColumns: { mobile: 2, tablet: 3, desktop: 4 },
+        },
+      };
+
+
+    // ── Phase 6: New Industries ─────────────────────────────────────────────────
+
+    case "luxury_hotel":
+      return {
+        industry: "luxury_hotel",
+        industryProfile: {
+          key: "luxury_hotel",
+          displayName: "Luxury Hotel & Boutique Resort",
+          archetype: "Aspirational escape, spatial grandeur, sensory immersion, impeccable hospitality",
+          voiceAndTone: "Refined, evocative, unhurried, inviting, prestigious",
+          trustSignals: ["Forbes 5-Star Rated", "Complimentary Concierge", "Award-Winning Spa", "Ocean-View Suites"],
+          recommendedBadges: ["Exclusive Member Rates", "Complimentary Breakfast"],
+          defaultCtaText: req.cta || "Reserve Your Suite",
+          ctaActionType: "scroll",
+        },
+        typography: {
+          headingFont: req.brand?.typography?.heading || "Cormorant Garamond, serif",
+          bodyFont: req.brand?.typography?.body || "Jost, sans-serif",
+          headingScale: 1.7,
+          bodyScale: 1.0,
+          lineHeight: 1.65,
+          letterSpacing: "0.04em",
+          headingStyle: "uppercase",
+        },
+        spacing: {
+          scale: 1.4,
+          density: "spacious",
+          sectionPaddingY: "py-28 sm:py-40",
+          cardPadding: "p-10",
+          containerMaxWidth: "max-w-7xl",
+        },
+        colorSystem: {
+          primaryDefault: req.brand?.colors?.primary || "#1C1917", // Charcoal Noir
+          secondaryDefault: req.brand?.colors?.secondary || "#B8960C", // Warm Gold
+          accentDefault: req.brand?.colors?.accent || "#D4AF37",
+          bgDefault: isDarkRequested ? "#0C0B09" : "#FDFDFA",
+          textDefault: isDarkRequested ? "#FAF5E9" : "#1C1917",
+          contrastRatio: 6.5,
+          colorMood: "luxury_prestige",
+        },
+        cta: {
+          emphasis: "prominent",
+          primaryLabel: req.cta || "Reserve Your Suite",
+          secondaryLabel: "Explore The Property",
+          buttonShape: "sharp",
+          actionType: "scroll",
+          stickyMobileCta: false,
+        },
+        motion: {
+          animationLevel: "smooth",
+          durationBaseMs: 600,
+          easing: "easeInOut",
+          hoverZoomScale: 1.03,
+          allowBackgroundOrbs: false,
+        },
+        layout: {
+          heroLayout: "fullscreen_media",
+          recommendedSections: ["navbar", "hero", "about", "services", "features", "reviews", "contact", "footer"],
+          gridColumns: { mobile: 1, tablet: 2, desktop: 3 },
+        },
+      };
+
+    case "creative_agency":
+      return {
+        industry: "creative_agency",
+        industryProfile: {
+          key: "creative_agency",
+          displayName: "Creative Agency & Design Studio",
+          archetype: "Bold creative vision, cultural impact, craft excellence, portfolio authority",
+          voiceAndTone: "Confident, provocative, idea-driven, culturally informed",
+          trustSignals: ["Award-Winning Creative Team", "Global Brand Clients", "Cannes Lions Recognition", "End-to-End Execution"],
+          recommendedBadges: ["Open for 2025 Projects", "Selected Cases"],
+          defaultCtaText: req.cta || "Start a Project",
+          ctaActionType: "scroll",
+        },
+        typography: {
+          headingFont: req.brand?.typography?.heading || "Syne, sans-serif",
+          bodyFont: req.brand?.typography?.body || "DM Sans, sans-serif",
+          headingScale: 1.65,
+          bodyScale: 1.0,
+          lineHeight: 1.2,
+          letterSpacing: "-0.03em",
+          headingStyle: "normal",
+        },
+        spacing: {
+          scale: 1.2,
+          density: "spacious",
+          sectionPaddingY: "py-24 sm:py-36",
+          cardPadding: "p-8",
+          containerMaxWidth: "max-w-7xl",
+        },
+        colorSystem: {
+          primaryDefault: req.brand?.colors?.primary || "#0F0F0F",
+          secondaryDefault: req.brand?.colors?.secondary || "#F5F0E8",
+          accentDefault: req.brand?.colors?.accent || "#FF4D00",
+          bgDefault: isDarkRequested ? "#0A0A0A" : "#F8F8F5",
+          textDefault: isDarkRequested ? "#FAFAFA" : "#0F0F0F",
+          contrastRatio: 7.0,
+          colorMood: "luxury_prestige",
+        },
+        cta: {
+          emphasis: "prominent",
+          primaryLabel: req.cta || "Start a Project",
+          secondaryLabel: "View Selected Work",
+          buttonShape: "sharp",
+          actionType: "scroll",
+          stickyMobileCta: false,
+        },
+        motion: {
+          animationLevel: "energetic",
+          durationBaseMs: 350,
+          easing: "easeOut",
+          hoverZoomScale: 1.04,
+          allowBackgroundOrbs: false,
+        },
+        layout: {
+          heroLayout: "split",
+          recommendedSections: ["navbar", "hero", "services", "about", "features", "reviews", "contact", "footer"],
+          gridColumns: { mobile: 1, tablet: 2, desktop: 3 },
+        },
+      };
+
+    case "law_firm":
+      return {
+        industry: "law_firm",
+        industryProfile: {
+          key: "law_firm",
+          displayName: "Law Firm & Legal Counsel",
+          archetype: "Authoritative credibility, measured precision, uncompromising advocacy, institutional trust",
+          voiceAndTone: "Authoritative, precise, reassuring, professional, direct",
+          trustSignals: ["25+ Years Combined Experience", "900+ Cases Won", "Confidential Consultation", "Licensed in All Jurisdictions"],
+          recommendedBadges: ["Free Initial Consultation", "No Win, No Fee"],
+          defaultCtaText: req.cta || "Book Consultation",
+          ctaActionType: "scroll",
+        },
+        typography: {
+          headingFont: req.brand?.typography?.heading || "Playfair Display, serif",
+          bodyFont: req.brand?.typography?.body || "Inter, sans-serif",
+          headingScale: 1.45,
+          bodyScale: 1.05,
+          lineHeight: 1.7,
+          letterSpacing: "-0.01em",
+          headingStyle: "normal",
+        },
+        spacing: {
+          scale: 1.2,
+          density: "spacious",
+          sectionPaddingY: "py-24 sm:py-32",
+          cardPadding: "p-8",
+          containerMaxWidth: "max-w-6xl",
+        },
+        colorSystem: {
+          primaryDefault: req.brand?.colors?.primary || "#1E3A5F", // Deep Authoritative Navy
+          secondaryDefault: req.brand?.colors?.secondary || "#C9A84C", // Legal Gold
+          accentDefault: req.brand?.colors?.accent || "#334155",
+          bgDefault: isDarkRequested ? "#0D1219" : "#FAFBFC",
+          textDefault: isDarkRequested ? "#F8FAFC" : "#0F172A",
+          contrastRatio: 7.0,
+          colorMood: "high_trust",
+        },
+        cta: {
+          emphasis: "prominent",
+          primaryLabel: req.cta || "Book Free Consultation",
+          secondaryLabel: "View Our Practice Areas",
+          buttonShape: "sharp",
+          actionType: "scroll",
+          stickyMobileCta: false,
+        },
+        motion: {
+          animationLevel: "minimal",
+          durationBaseMs: 300,
+          easing: "easeOut",
+          hoverZoomScale: 1.01,
+          allowBackgroundOrbs: false,
+        },
+        layout: {
+          heroLayout: "split",
+          recommendedSections: ["navbar", "hero", "services", "about", "features", "faq", "contact", "footer"],
+          gridColumns: { mobile: 1, tablet: 2, desktop: 3 },
+        },
+      };
+
+    case "wellness_spa":
+      return {
+        industry: "wellness_spa",
+        industryProfile: {
+          key: "wellness_spa",
+          displayName: "Wellness, Spa & Holistic Health",
+          archetype: "Restorative sanctuary, mindful touch, organic harmony, sensory renewal",
+          voiceAndTone: "Gentle, nurturing, mindful, grounded, inviting",
+          trustSignals: ["Certified Therapists", "Organic & Natural Products", "Private Healing Spaces", "Personalised Wellness Plans"],
+          recommendedBadges: ["New Client Offer", "Holistic Consultation Included"],
+          defaultCtaText: req.cta || "Book a Treatment",
+          ctaActionType: "scroll",
+        },
+        typography: {
+          headingFont: req.brand?.typography?.heading || "Fraunces, serif",
+          bodyFont: req.brand?.typography?.body || "Plus Jakarta Sans, sans-serif",
+          headingScale: 1.55,
+          bodyScale: 1.0,
+          lineHeight: 1.7,
+          letterSpacing: "0.01em",
+          headingStyle: "serif",
+        },
+        spacing: {
+          scale: 1.3,
+          density: "spacious",
+          sectionPaddingY: "py-24 sm:py-36",
+          cardPadding: "p-8",
+          containerMaxWidth: "max-w-6xl",
+        },
+        colorSystem: {
+          primaryDefault: req.brand?.colors?.primary || "#5E7C4E", // Sage Green
+          secondaryDefault: req.brand?.colors?.secondary || "#C4A882", // Warm Sand
+          accentDefault: req.brand?.colors?.accent || "#7D9B6D",
+          bgDefault: isDarkRequested ? "#141610" : "#FEFCF8",
+          textDefault: isDarkRequested ? "#F4F1E8" : "#2C2A26",
+          contrastRatio: 6.5,
+          colorMood: "sterile_calm",
+        },
+        cta: {
+          emphasis: "prominent",
+          primaryLabel: req.cta || "Book a Treatment",
+          secondaryLabel: "Explore Treatments",
+          buttonShape: "pill",
+          actionType: "scroll",
+          stickyMobileCta: true,
+        },
+        motion: {
+          animationLevel: "subtle",
+          durationBaseMs: 500,
+          easing: "easeInOut",
+          hoverZoomScale: 1.02,
+          allowBackgroundOrbs: false,
+        },
+        layout: {
+          heroLayout: "fullscreen_media",
+          recommendedSections: ["navbar", "hero", "services", "about", "features", "reviews", "faq", "contact", "footer"],
+          gridColumns: { mobile: 1, tablet: 2, desktop: 3 },
+        },
+      };
+
+    case "finance":
+      return {
+        industry: "finance",
+        industryProfile: {
+          key: "finance",
+          displayName: "Finance, Investment & Wealth Management",
+          archetype: "Institutional authority, data-driven confidence, security-first, long-term partnership",
+          voiceAndTone: "Authoritative, measured, transparent, expert, discreet",
+          trustSignals: ["SEC Registered Advisors", "$2B+ Assets Under Management", "Fiduciary Duty Guaranteed", "35-Year Track Record"],
+          recommendedBadges: ["Schedule a Strategy Session", "Complimentary Portfolio Review"],
+          defaultCtaText: req.cta || "Schedule Consultation",
+          ctaActionType: "scroll",
+        },
+        typography: {
+          headingFont: req.brand?.typography?.heading || "Instrument Serif, serif",
+          bodyFont: req.brand?.typography?.body || "Inter, sans-serif",
+          headingScale: 1.45,
+          bodyScale: 1.0,
+          lineHeight: 1.65,
+          letterSpacing: "-0.015em",
+          headingStyle: "normal",
+        },
+        spacing: {
+          scale: 1.2,
+          density: "spacious",
+          sectionPaddingY: "py-24 sm:py-32",
+          cardPadding: "p-8",
+          containerMaxWidth: "max-w-6xl",
+        },
+        colorSystem: {
+          primaryDefault: req.brand?.colors?.primary || "#0F2D52", // Deep Trust Navy
+          secondaryDefault: req.brand?.colors?.secondary || "#1A5276", // Analytical Blue
+          accentDefault: req.brand?.colors?.accent || "#2E86C1",
+          bgDefault: isDarkRequested ? "#080F1A" : "#FAFBFC",
+          textDefault: isDarkRequested ? "#E8ECF0" : "#0F1923",
+          contrastRatio: 7.0,
+          colorMood: "high_trust",
+        },
+        cta: {
+          emphasis: "prominent",
+          primaryLabel: req.cta || "Schedule Consultation",
+          secondaryLabel: "Download Prospectus",
+          buttonShape: "sharp",
+          actionType: "scroll",
+          stickyMobileCta: false,
+        },
+        motion: {
+          animationLevel: "minimal",
+          durationBaseMs: 350,
+          easing: "easeOut",
+          hoverZoomScale: 1.01,
+          allowBackgroundOrbs: false,
+        },
+        layout: {
+          heroLayout: "split",
+          recommendedSections: ["navbar", "hero", "services", "features", "about", "faq", "contact", "footer"],
+          gridColumns: { mobile: 1, tablet: 2, desktop: 3 },
+        },
+      };
+
+    case "education":
+      return {
+        industry: "education",
+        industryProfile: {
+          key: "education",
+          displayName: "Education, Academy & Learning",
+          archetype: "Knowledge empowerment, structured growth, accessible excellence, community learning",
+          voiceAndTone: "Encouraging, clear, inspiring, inclusive, expert",
+          trustSignals: ["Accredited Institution", "95% Graduate Employment Rate", "Expert Faculty", "Globally Recognised Credentials"],
+          recommendedBadges: ["Applications Open 2025", "Scholarship Available"],
+          defaultCtaText: req.cta || "Apply Now",
+          ctaActionType: "scroll",
+        },
+        typography: {
+          headingFont: req.brand?.typography?.heading || "Plus Jakarta Sans, sans-serif",
+          bodyFont: req.brand?.typography?.body || "Inter, sans-serif",
+          headingScale: 1.45,
+          bodyScale: 1.05,
+          lineHeight: 1.65,
+          letterSpacing: "-0.01em",
+          headingStyle: "normal",
+        },
+        spacing: {
+          scale: 1.1,
+          density: "medium",
+          sectionPaddingY: "py-20 sm:py-28",
+          cardPadding: "p-7",
+          containerMaxWidth: "max-w-7xl",
+        },
+        colorSystem: {
+          primaryDefault: req.brand?.colors?.primary || "#2563EB", // Academic Blue
+          secondaryDefault: req.brand?.colors?.secondary || "#7C3AED", // Wisdom Violet
+          accentDefault: req.brand?.colors?.accent || "#0EA5E9",
+          bgDefault: isDarkRequested ? "#0B0F19" : "#FFFFFF",
+          textDefault: isDarkRequested ? "#F8FAFC" : "#0F172A",
+          contrastRatio: 6.5,
+          colorMood: "sterile_calm",
+        },
+        cta: {
+          emphasis: "prominent",
+          primaryLabel: req.cta || "Apply Now",
+          secondaryLabel: "Explore Programs",
+          buttonShape: "rounded",
+          actionType: "scroll",
+          stickyMobileCta: false,
+        },
+        motion: {
+          animationLevel: "subtle",
+          durationBaseMs: 300,
+          easing: "easeOut",
+          hoverZoomScale: 1.02,
+          allowBackgroundOrbs: true,
+        },
+        layout: {
+          heroLayout: "centered",
+          recommendedSections: ["navbar", "hero", "services", "features", "about", "reviews", "faq", "contact", "footer"],
+          gridColumns: { mobile: 1, tablet: 2, desktop: 3 },
+        },
+      };
+
+    case "portfolio":
+      return {
+        industry: "portfolio",
+        industryProfile: {
+          key: "portfolio",
+          displayName: "Personal Portfolio & Creative Brand",
+          archetype: "Singular creative vision, curated mastery, distinctive personal voice, confident craft",
+          voiceAndTone: "Personal, direct, confident, authentic",
+          trustSignals: ["Available for Freelance", "Remote & Worldwide", "Trusted by Top Brands", "Fast Turnaround"],
+          recommendedBadges: ["Open to Projects", "Featured Work"],
+          defaultCtaText: req.cta || "Get in Touch",
+          ctaActionType: "scroll",
+        },
+        typography: {
+          headingFont: req.brand?.typography?.heading || "Bebas Neue, sans-serif",
+          bodyFont: req.brand?.typography?.body || "Inter, sans-serif",
+          headingScale: 1.75,
+          bodyScale: 1.0,
+          lineHeight: 1.3,
+          letterSpacing: "0.02em",
+          headingStyle: "uppercase",
+        },
+        spacing: {
+          scale: 1.2,
+          density: "spacious",
+          sectionPaddingY: "py-24 sm:py-36",
+          cardPadding: "p-8",
+          containerMaxWidth: "max-w-7xl",
+        },
+        colorSystem: {
+          primaryDefault: req.brand?.colors?.primary || "#111827", // Midnight Ink
+          secondaryDefault: req.brand?.colors?.secondary || "#F9FAFB",
+          accentDefault: req.brand?.colors?.accent || "#EF4444",
+          bgDefault: isDarkRequested ? "#0A0A0B" : "#FAFAFA",
+          textDefault: isDarkRequested ? "#FAFAFA" : "#111827",
+          contrastRatio: 7.0,
+          colorMood: "luxury_prestige",
+        },
+        cta: {
+          emphasis: "prominent",
+          primaryLabel: req.cta || "Get in Touch",
+          secondaryLabel: "See My Work",
+          buttonShape: "sharp",
+          actionType: "scroll",
+          stickyMobileCta: false,
+        },
+        motion: {
+          animationLevel: "smooth",
+          durationBaseMs: 400,
+          easing: "easeInOut",
+          hoverZoomScale: 1.05,
+          allowBackgroundOrbs: false,
+        },
+        layout: {
+          heroLayout: "fullscreen_media",
+          recommendedSections: ["navbar", "hero", "about", "services", "features", "reviews", "contact", "footer"],
+          gridColumns: { mobile: 1, tablet: 2, desktop: 3 },
+        },
+      };
+
+    case "automotive":
+      return {
+        industry: "automotive",
+        industryProfile: {
+          key: "automotive",
+          displayName: "Automotive & Vehicle Dealership",
+          archetype: "Power and performance, precision engineering, aspirational lifestyle, premium ownership",
+          voiceAndTone: "Bold, confident, performance-driven, aspirational",
+          trustSignals: ["Certified Pre-Owned Inventory", "Transparent Pricing", "Manufacturer Warranty", "Zero-Km Delivery Available"],
+          recommendedBadges: ["Test Drive Today", "EMI Available"],
+          defaultCtaText: req.cta || "Book a Test Drive",
+          ctaActionType: req.functionality?.whatsappDirect ? "whatsapp" : "scroll",
+        },
+        typography: {
+          headingFont: req.brand?.typography?.heading || "Space Grotesk, sans-serif",
+          bodyFont: req.brand?.typography?.body || "Inter, sans-serif",
+          headingScale: 1.6,
+          bodyScale: 1.0,
+          lineHeight: 1.4,
+          letterSpacing: "-0.03em",
+          headingStyle: "geometric",
+        },
+        spacing: {
+          scale: 1.0,
+          density: "medium",
+          sectionPaddingY: "py-20 sm:py-28",
+          cardPadding: "p-6",
+          containerMaxWidth: "max-w-7xl",
+        },
+        colorSystem: {
+          primaryDefault: req.brand?.colors?.primary || "#1E293B", // Performance Slate
+          secondaryDefault: req.brand?.colors?.secondary || "#EF4444", // Speed Red
+          accentDefault: req.brand?.colors?.accent || "#F59E0B",
+          bgDefault: isDarkRequested ? "#0F1117" : "#F8FAFC",
+          textDefault: isDarkRequested ? "#F8FAFC" : "#0F172A",
+          contrastRatio: 6.0,
+          colorMood: "energetic",
+        },
+        cta: {
+          emphasis: "urgent",
+          primaryLabel: req.cta || "Book a Test Drive",
+          secondaryLabel: "Browse Inventory",
+          buttonShape: "rounded",
+          actionType: req.functionality?.whatsappDirect ? "whatsapp" : "scroll",
+          stickyMobileCta: true,
+        },
+        motion: {
+          animationLevel: "energetic",
+          durationBaseMs: 280,
+          easing: "easeOut",
+          hoverZoomScale: 1.04,
+          allowBackgroundOrbs: true,
+        },
+        layout: {
+          heroLayout: "fullscreen_media",
+          recommendedSections: ["navbar", "hero", "productsSection", "services", "features", "about", "faq", "contact", "footer"],
+          gridColumns: { mobile: 1, tablet: 2, desktop: 3 },
         },
       };
 

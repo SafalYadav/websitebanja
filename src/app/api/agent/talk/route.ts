@@ -4,11 +4,13 @@ import type { ExtractedUserNeeds, AgentTalkResponse } from "@/types/aiAgent";
 import { ModelRouter } from "@/lib/ai/router/modelRouter";
 import { MODEL_CONFIG, sanitizeErrorOutput } from "@/lib/ai/router/modelConfig";
 import { recordAgentRun } from "@/lib/agents/telemetry";
+import { emitAgentEvent } from "@/lib/telemetry/agentTelemetry";
 import { normalizeAgentResponse } from "@/lib/ai/agentNormalizer";
 import { setProjectKnowledge } from "@/lib/knowledge";
 import { getClientIp, authenticateRequest } from "@/lib/supabaseServer";
 import { dbCheckProjectExists } from "@/lib/db/queries";
 import { getMitraLanguageConfig } from "@/lib/constants/mitraLanguages";
+import { mitraSessionManager } from "@/lib/agents/mitra/sessionManager";
 
 interface RequestMessage {
   role: "user" | "assistant" | "system";
@@ -20,6 +22,8 @@ interface TalkRequestBody {
   currentNeeds?: ExtractedUserNeeds;
   projectId?: string;
   language?: string;
+  sessionId?: string;
+  confirmed?: boolean;
 }
 
 function buildFallbackResponse(
@@ -287,6 +291,28 @@ export async function POST(req: Request) {
     const body = (rawBody || {}) as TalkRequestBody;
     const rawMessages = Array.isArray(body?.messages) ? body.messages : [];
     const currentNeeds: ExtractedUserNeeds = body?.currentNeeds || {};
+    const requestId = `req_mitra_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+
+    if (body?.sessionId) {
+      mitraSessionManager.updateSessionStatus(body.sessionId, "thinking");
+    }
+
+    emitAgentEvent({
+      event: "agent.started",
+      agent: "mitra",
+      requestId,
+      projectId: body.projectId,
+      userId: authenticatedUser?.id,
+      metadata: { operation: "Conversational intake", sessionId: body.sessionId },
+    });
+    emitAgentEvent({
+      event: "agent.thinking",
+      agent: "mitra",
+      requestId,
+      projectId: body.projectId,
+      userId: authenticatedUser?.id,
+      metadata: { sessionId: body.sessionId },
+    });
 
     if (rawMessages.length === 0) {
       return NextResponse.json(
@@ -412,7 +438,39 @@ JSON Schema:
         temperature: 0.7,
         maxTokens: 1000,
         timeoutMs: policy.timeoutMs,
+        metadata: {
+          agent: "mitra",
+          requestId,
+          projectId: body.projectId,
+          userId: authenticatedUser?.id,
+        },
       }, policy);
+
+      if (routerResponse.success) {
+        emitAgentEvent({
+          event: "agent.completed",
+          agent: "mitra",
+          requestId,
+          projectId: body.projectId,
+          userId: authenticatedUser?.id,
+          provider: routerResponse.provider,
+          model: routerResponse.model,
+          latencyMs: routerResponse.latencyMs,
+          status: "success",
+        });
+      } else {
+        emitAgentEvent({
+          event: "agent.failed",
+          agent: "mitra",
+          requestId,
+          projectId: body.projectId,
+          userId: authenticatedUser?.id,
+          status: "error",
+          metadata: {
+            error: routerResponse.error?.message,
+          },
+        });
+      }
 
       // Record non-blocking telemetry
       recordAgentRun({
@@ -454,8 +512,13 @@ JSON Schema:
           }
         }
 
+        if (body?.sessionId) {
+          mitraSessionManager.updateSessionStatus(body.sessionId, "speaking");
+        }
+
         return NextResponse.json({
           success: true,
+          sessionId: body?.sessionId,
           data: normalized,
         });
       }
@@ -465,8 +528,31 @@ JSON Schema:
 
     // Fallback response engine
     const fallbackData = buildFallbackResponse(lastUserMessage, messages, currentNeeds, userLanguage);
+
+    if (body.projectId && authenticatedUser) {
+      try {
+        const projectExists = await dbCheckProjectExists(body.projectId, authenticatedUser.id);
+        if (projectExists && fallbackData?.extractedNeeds) {
+          await setProjectKnowledge(
+            body.projectId,
+            "extracted_needs",
+            fallbackData.extractedNeeds,
+            authenticatedUser.id,
+            "business_info"
+          );
+        }
+      } catch (pkErr) {
+        console.warn("[Agent Talk Fallback] Project Knowledge write skipped:", pkErr instanceof Error ? pkErr.message : pkErr);
+      }
+    }
+
+    if (body?.sessionId) {
+      mitraSessionManager.updateSessionStatus(body.sessionId, "speaking", { mode: "fallback" });
+    }
+
     return NextResponse.json({
       success: true,
+      sessionId: body?.sessionId,
       data: fallbackData,
     });
   } catch (err) {

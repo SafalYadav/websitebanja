@@ -94,11 +94,22 @@ export interface ComputedDesignStrategy extends DesignStrategyData {
     accent: string;
     bg: string;
     surface: string;
+    /** Alternate surface (elevated card) */
+    surfaceAlt?: string;
     text: string;
     muted: string;
     border: string;
+    shadow?: string;
+    /** Accent color for card highlights */
+    cardAccent?: string;
+    /** Accent color for section-level highlights */
+    sectionAccent?: string;
     contrastRatio: number;
     mood: string;
+    /** Palette name identifier for anti-repetition */
+    paletteName?: string;
+    /** Whether this is a dark-mode palette */
+    isDark?: boolean;
   };
 }
 
@@ -128,14 +139,76 @@ export function deriveVisualArchetype(context: StrategyInputContext): VisualArch
     return "bold_brutalist";
   }
 
-  // 2. Industry-driven archetypes (must precede generic marketing adjectives like "bespoke" or "high-end")
+  // 2. Specialized Phase 6 industries (checked first to prevent greedy substring collisions)
+  if (
+    combined.includes("hotel") ||
+    combined.includes("resort") ||
+    combined.includes("hospitality") ||
+    combined.includes("luxury stay") ||
+    combined.includes("boutique hotel")
+  ) {
+    return "luxury_bespoke";
+  }
+
+  if (
+    /\bspa\b/.test(combined) ||
+    combined.includes("wellness") ||
+    combined.includes("yoga") ||
+    combined.includes("pilates") ||
+    combined.includes("meditation") ||
+    combined.includes("holistic") ||
+    combined.includes("ayurved")
+  ) {
+    return "warm_artisanal";
+  }
+
+  if (
+    combined.includes("law firm") ||
+    combined.includes("attorney") ||
+    combined.includes("lawyer") ||
+    combined.includes("legal counsel") ||
+    combined.includes("litigation")
+  ) {
+    return "high_trust_service";
+  }
+
+  if (
+    combined.includes("dealership") ||
+    combined.includes("automotive") ||
+    combined.includes("automobile") ||
+    combined.includes("car sales")
+  ) {
+    return "bold_brutalist";
+  }
+
+  if (
+    combined.includes("finance") ||
+    combined.includes("wealth management") ||
+    combined.includes("investment") ||
+    combined.includes("accounting") ||
+    combined.includes("hedge fund")
+  ) {
+    return "dark_technical";
+  }
+
+  if (
+    combined.includes("education") ||
+    combined.includes("university") ||
+    combined.includes("college") ||
+    combined.includes("academy") ||
+    combined.includes("school")
+  ) {
+    return "clean_clinical";
+  }
+
+  // 3. Baseline industry-driven archetypes
   if (
     combined.includes("dental") ||
     combined.includes("dentist") ||
     combined.includes("clinic") ||
     combined.includes("doctor") ||
     combined.includes("medical") ||
-    combined.includes("health") ||
+    (combined.includes("health") && !combined.includes("wellness")) ||
     combined.includes("hospital")
   ) {
     return "clean_clinical";
@@ -158,7 +231,7 @@ export function deriveVisualArchetype(context: StrategyInputContext): VisualArch
     combined.includes("coffee") ||
     combined.includes("bakery") ||
     combined.includes("bistro") ||
-    combined.includes("dining") ||
+    (combined.includes("dining") && !combined.includes("hotel") && !combined.includes("resort")) ||
     combined.includes("culinary") ||
     combined.includes("food")
   ) {
@@ -278,6 +351,68 @@ export function deriveSectionSequence(archetype: VisualArchetype, context: Strat
 
   const hasCustomPricing = combined.includes("pricing") || combined.includes("plans");
 
+  // Phase 6: Expanded industry section sequences (prioritized to avoid false fashion/restaurant matches)
+  if (
+    combined.includes("hotel") ||
+    combined.includes("resort") ||
+    combined.includes("hospitality") ||
+    combined.includes("luxury stay") ||
+    combined.includes("boutique hotel")
+  ) {
+    return ["hero", "room_showcase", "amenities", "about", "dining", "reviews", "booking", "footer"];
+  }
+
+  if (
+    /\bspa\b/.test(combined) ||
+    combined.includes("wellness") ||
+    combined.includes("yoga") ||
+    combined.includes("pilates") ||
+    combined.includes("meditation") ||
+    combined.includes("holistic") ||
+    combined.includes("ayurved")
+  ) {
+    return ["hero", "treatments", "atmosphere", "practitioners", "pricing", "reviews", "contact", "footer"];
+  }
+
+  if (
+    combined.includes("law firm") ||
+    combined.includes("attorney") ||
+    combined.includes("lawyer") ||
+    combined.includes("legal counsel") ||
+    combined.includes("litigation")
+  ) {
+    return ["hero", "practice_areas", "attorney_profiles", "case_results", "testimonials", "contact", "footer"];
+  }
+
+  if (
+    combined.includes("finance") ||
+    combined.includes("wealth management") ||
+    combined.includes("investment") ||
+    combined.includes("accounting") ||
+    combined.includes("hedge fund")
+  ) {
+    return ["hero", "solutions", "process", "social_proof", "features", "contact", "footer"];
+  }
+
+  if (
+    combined.includes("education") ||
+    combined.includes("university") ||
+    combined.includes("college") ||
+    combined.includes("academy") ||
+    combined.includes("school")
+  ) {
+    return ["hero", "programs", "faculty", "outcomes", "campus", "faq", "contact", "footer"];
+  }
+
+  if (
+    combined.includes("dealership") ||
+    combined.includes("automotive") ||
+    combined.includes("automobile") ||
+    combined.includes("car sales")
+  ) {
+    return ["hero", "productsSection", "services", "features", "about", "faq", "contact", "footer"];
+  }
+
   // 1. Dental Clinic / Healthcare / Orthodontics (must precede ceramic check to prevent "ceramic braces" matching pottery)
   if (
     combined.includes("dental") ||
@@ -285,7 +420,7 @@ export function deriveSectionSequence(archetype: VisualArchetype, context: Strat
     combined.includes("clinic") ||
     combined.includes("doctor") ||
     combined.includes("medical") ||
-    combined.includes("healthcare") ||
+    (combined.includes("healthcare") && !combined.includes("wellness")) ||
     combined.includes("orthodont") ||
     combined.includes("teeth")
   ) {
@@ -355,7 +490,7 @@ export function deriveSectionSequence(archetype: VisualArchetype, context: Strat
     combined.includes("fashion") ||
     combined.includes("couture") ||
     combined.includes("apparel") ||
-    combined.includes("boutique") ||
+    (combined.includes("boutique") && !combined.includes("hotel") && !combined.includes("resort")) ||
     combined.includes("jewelry")
   ) {
     return ["hero", "curated_collection", "craft_heritage", "lookbook", "services", "reviews", "contact", "footer"];
@@ -382,6 +517,7 @@ export function deriveSectionSequence(archetype: VisualArchetype, context: Strat
   ) {
     return ["hero", "emergency_services", "trust_guarantees", "services", "reviews", "service_area", "contact", "footer"];
   }
+
 
   let sequence: string[];
 
@@ -2281,6 +2417,7 @@ export function generateDesignStrategy(context: StrategyInputContext): ComputedD
     contrastRatio: archetype === "clean_clinical" ? 7.0 : 4.5,
     mood: chosenPalette.name,
     paletteName: chosenPalette.name,
+    isDark,
   };
 
   const featuresLayoutStrategy = deriveFeaturesLayoutStrategy(

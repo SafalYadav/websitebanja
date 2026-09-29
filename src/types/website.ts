@@ -279,6 +279,23 @@ export interface DesignStrategyData {
   colorSystem?: any;
 }
 
+export type ContrastRemedyMode =
+  | "reinforced_scrim"
+  | "glass_panel"
+  | "dual_gradient"
+  | "drop_shadow"
+  | "dark_text_light_bg"
+  | "none";
+
+export interface HeroContrastProtection {
+  mode: ContrastRemedyMode;
+  textMode: "light" | "dark";
+  minContrastRatio: number;
+  overlayOpacity?: number;
+  textShadow?: boolean;
+  panelBackdrop?: boolean;
+}
+
 export interface Hero {
   title: string;
   subtitle: string;
@@ -293,6 +310,7 @@ export interface Hero {
   badges?: string[];
   trustBadges?: string[];
   eyebrow?: string;
+  contrastProtection?: HeroContrastProtection;
 }
 
 export interface About {
@@ -337,6 +355,7 @@ export interface Contact {
   phone: string;
   email: string;
   address: string;
+  whatsapp?: string;
 }
 
 export interface Footer {
@@ -460,6 +479,13 @@ export interface WebsiteData {
   featuresLayoutStrategy?: FeaturesLayoutStrategyConfig;
   skillExecutionPlan?: SkillExecutionPlan;
   threeDPreference?: "yes" | "no";
+
+  // Phase 6 — Premium Website Generation Engine extensions
+  designBrief?: import("@/lib/ai/design/designBrief").DesignBrief;
+  responsiveConfig?: import("@/lib/ai/design/designBrief").ResponsiveConfig;
+  seoConfig?: import("@/lib/ai/design/designBrief").SeoConfig;
+  motionConfig?: import("@/lib/ai/design/designBrief").MotionConfig;
+  accessibilityConfig?: import("@/lib/ai/design/designBrief").AccessibilityConfig;
 
   sectionOrder?: string[];
   [key: string]: unknown;

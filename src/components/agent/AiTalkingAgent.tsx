@@ -316,6 +316,10 @@ export default function AiTalkingAgent({
     cancelListening,
     muteMic,
     setVoiceLanguage,
+    activeSessionMode,
+    activeSessionId,
+    setActiveSessionId,
+    interruptPlayback,
   } = useVoiceAgent();
 
   // User-Selectable Language State (Default: English, session-persisted)
@@ -331,7 +335,9 @@ export default function AiTalkingAgent({
     return "English";
   });
   const selectedLanguageRef = useRef<MitraLanguage>(selectedLanguage);
-  selectedLanguageRef.current = selectedLanguage;
+  useEffect(() => {
+    selectedLanguageRef.current = selectedLanguage;
+  }, [selectedLanguage]);
 
   // Component State - Initialized with selected language greeting
   const [messages, setMessages] = useState<AgentMessage[]>(() => {
@@ -358,10 +364,17 @@ export default function AiTalkingAgent({
 
   // State refs to ensure async voice callbacks always access the freshest state
   const messagesRef = useRef(messages);
-  messagesRef.current = messages;
   const extractedNeedsRef = useRef(extractedNeeds);
   const isLoadingRef = useRef(isLoading);
   const isContinuousModeRef = useRef(isContinuousMode);
+
+  useEffect(() => {
+    messagesRef.current = messages;
+    extractedNeedsRef.current = extractedNeeds;
+    isLoadingRef.current = isLoading;
+    isContinuousModeRef.current = isContinuousMode;
+  }, [messages, extractedNeeds, isLoading, isContinuousMode]);
+
   const handleSendMessageRef = useRef<(text?: string) => Promise<void>>(() => Promise.resolve());
   const handleBuildWebsiteRef = useRef<() => Promise<void>>(() => Promise.resolve());
 
@@ -466,7 +479,10 @@ export default function AiTalkingAgent({
       }
     );
   }, [startListening]);
-  triggerNextVoiceTurnRef.current = triggerNextVoiceTurn;
+
+  useEffect(() => {
+    triggerNextVoiceTurnRef.current = triggerNextVoiceTurn;
+  }, [triggerNextVoiceTurn]);
 
   // Hands-Free Conversational Voice Activation (Requests mic permission & triggers loop)
   const startHandsFreeConversation = useCallback(async () => {
@@ -610,13 +626,18 @@ export default function AiTalkingAgent({
           currentNeeds: extractedNeedsRef.current,
           projectId,
           language: selectedLanguageRef.current,
+          sessionId: activeSessionId || undefined,
         }),
       });
 
-      const json = (await res.json()) as AgentTalkResponse;
+      const json = (await res.json()) as AgentTalkResponse & { sessionId?: string };
 
       if (!res.ok || !json.success || !json.data) {
         throw new Error(json.message || "Failed to communicate with AI agent.");
+      }
+
+      if (json.sessionId && json.sessionId !== activeSessionId) {
+        setActiveSessionId(json.sessionId);
       }
 
       const {
@@ -958,7 +979,7 @@ export default function AiTalkingAgent({
             state={visualVoiceState}
             isVoiceMuted={isVoiceMuted}
             onOrbClick={handleOrbClick}
-            onStopSpeaking={stopSpeaking}
+            onStopSpeaking={interruptPlayback}
           />
 
           {/* Voice State Badge */}
@@ -981,7 +1002,7 @@ export default function AiTalkingAgent({
                 <span>🔊 Mitra speaking...</span>
                 <button
                   type="button"
-                  onClick={stopSpeaking}
+                  onClick={() => interruptPlayback("user_stop_button")}
                   title="Stop voice playback"
                   className="ml-1 px-1.5 py-0.5 rounded bg-violet-200 dark:bg-violet-900/60 text-[10px] text-violet-900 dark:text-violet-200 cursor-pointer"
                 >
@@ -1248,10 +1269,17 @@ export default function AiTalkingAgent({
                 <h3 className="text-sm font-bold text-zinc-900 dark:text-white">
                   Mitra — AI Website Architect
                 </h3>
-                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                  Live Voice & Chat
-                </span>
+                {activeSessionMode === "live" ? (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                    Gemini Live
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 text-[10px] font-bold text-amber-600 dark:text-amber-400">
+                    <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                    Standard / Fallback
+                  </span>
+                )}
               </div>
               <p className="text-xs text-zinc-500 dark:text-zinc-400">
                 Speaks aloud & understands your business requirements

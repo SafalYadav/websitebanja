@@ -19,6 +19,9 @@ import { generateDesignRules } from "@/lib/ai/design/designRules";
 import type { WebsiteRequirement } from "@/lib/ai/requirementModel";
 import { createWebsitePlan, createDesignPlan, selectComponents } from "@/lib/ai/planner";
 import { generateComponents } from "@/lib/ai/generation/generator";
+import { MODEL_CONFIG, sanitizeErrorOutput } from "@/lib/ai/router/modelConfig";
+import { emitAgentEvent } from "@/lib/telemetry/agentTelemetry";
+import { buildAIContext } from "@/lib/ai/contextBuilder";
 import { AI_WORKSPACE_FILES, type AiWorkspace, type PlanningInput } from "@/types/aiWorkspace";
 
 interface PlanningRequest extends Omit<PlanningInput, "projectId"> {
@@ -146,6 +149,7 @@ export async function POST(request: Request) {
     }
 
     const { existingWorkspace, projectId, ...rawInput } = rawBody as PlanningRequest;
+    const requestId = `req_plan_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
     
     // Project Ownership & Isolation Enforcement:
     // If a project already exists in the database, only its rightful owner can generate or modify its plan.
@@ -153,6 +157,15 @@ export async function POST(request: Request) {
       const projRecord = await dbGetProjectOwnership(projectId);
 
       if (projRecord && projRecord.user_id.toLowerCase() !== user.id.toLowerCase()) {
+        emitAgentEvent({
+          event: "agent.failed",
+          agent: "planner",
+          requestId,
+          projectId,
+          userId: user.id,
+          status: "error",
+          metadata: { error: "Forbidden: You do not have permission to plan for this project." },
+        });
         return NextResponse.json(
           { success: false, message: "Forbidden: You do not have permission to plan for this project." },
           { status: 403 }
@@ -166,7 +179,37 @@ export async function POST(request: Request) {
 
     const input = inputValidation.data;
 
+    // Retrieve deterministic knowledge and fence untrusted project data
+    const aiContext = await buildAIContext({
+      projectId,
+      userId: user.id,
+      userPrompt: input.description,
+      websiteType: input.category,
+      taskType: "planning",
+    });
+
+    emitAgentEvent({
+      event: "agent.started",
+      agent: "planner",
+      requestId,
+      projectId,
+      userId: user.id,
+      metadata: {
+        operation: "Architectural planning",
+        ...aiContext.telemetryMetadata,
+      },
+    });
+
     if (!process.env.OPENAI_API_KEY) {
+      emitAgentEvent({
+        event: "agent.failed",
+        agent: "planner",
+        requestId,
+        projectId,
+        userId: user.id,
+        status: "error",
+        metadata: { error: "OpenAI API key is missing" },
+      });
       return NextResponse.json(
         { success: false, message: "OpenAI API key is missing. Please configure OPENAI_API_KEY in server environment variables." },
         { status: 500 }
@@ -174,16 +217,39 @@ export async function POST(request: Request) {
     }
 
     const openaiStart = Date.now();
-    console.log("[PLAN] openai:start model=gpt-4.1-mini");
+    const plannerModel = MODEL_CONFIG.defaults.plannerModel;
+    console.log(`[PLAN] openai:start model=${plannerModel}`);
+    emitAgentEvent({
+      event: "agent.provider_call",
+      agent: "planner",
+      requestId,
+      projectId,
+      userId: user.id,
+      provider: "openai",
+      model: plannerModel,
+      status: "running",
+    });
     const response = await openai.chat.completions.create({
-      model: "gpt-4.1-mini",
+      model: plannerModel,
       response_format: { type: "json_object" },
       messages: [
         { role: "system", content: "You are a senior software architect. Return valid JSON only." },
-        { role: "user", content: buildPlanningPrompt(input, existingWorkspace) },
+        { role: "user", content: buildPlanningPrompt({ ...input, aiContext }, existingWorkspace) },
       ],
     });
-    console.log("[PLAN] openai:success duration=" + (Date.now() - openaiStart) + "ms");
+    const openaiLatency = Date.now() - openaiStart;
+    console.log("[PLAN] openai:success duration=" + openaiLatency + "ms");
+    emitAgentEvent({
+      event: "agent.provider_success",
+      agent: "planner",
+      requestId,
+      projectId,
+      userId: user.id,
+      provider: "openai",
+      model: plannerModel,
+      latencyMs: openaiLatency,
+      status: "success",
+    });
     const workspace: unknown = JSON.parse(response.choices[0].message.content ?? "{}");
     if (!isWorkspace(workspace)) throw new Error("The planning response was incomplete.");
 
@@ -216,7 +282,7 @@ export async function POST(request: Request) {
     // Full Phase 3 + Phase 4 Pipeline Execution
     const designRules = generateDesignRules(requirement);
     const designTokens = generateDesignTokens(requirement);
-    const websitePlan = createWebsitePlan(requirement);
+    const websitePlan = createWebsitePlan(requirement, aiContext);
     const designPlan = createDesignPlan(websitePlan, requirement);
     const componentPlan = selectComponents(designPlan, requirement);
 
@@ -227,14 +293,35 @@ export async function POST(request: Request) {
     (workspace as any).designPlan = designPlan;
     (workspace as any).components = componentPlan;
 
-    // Generate physical component files in src/generated
-    const generationResult = generateComponents(requirement, componentPlan, websitePlan, designPlan);
+    // Generate physical component files (in-memory mode for multi-tenant isolation)
+    const generationResult = generateComponents(requirement, componentPlan, websitePlan, designPlan, {
+      writeToDisk: false,
+    });
     (workspace as any).generationResult = generationResult;
+
+    emitAgentEvent({
+      event: "agent.completed",
+      agent: "planner",
+      requestId,
+      projectId,
+      userId: user.id,
+      provider: "openai",
+      model: plannerModel,
+      latencyMs: Date.now() - planStart,
+      status: "success",
+    });
 
     console.log("[PLAN] total duration=" + (Date.now() - planStart) + "ms");
     return NextResponse.json({ success: true, data: workspace });
   } catch (err) {
-    console.error("[PLAN] error duration=" + (Date.now() - planStart) + "ms error:", err);
+    emitAgentEvent({
+      event: "agent.failed",
+      agent: "planner",
+      status: "error",
+      latencyMs: Date.now() - planStart,
+      metadata: { error: sanitizeErrorOutput(err) },
+    });
+    console.error("[PLAN] error duration=" + (Date.now() - planStart) + "ms error:", sanitizeErrorOutput(err));
     const isDev = process.env.NODE_ENV === "development";
     return NextResponse.json(
       {

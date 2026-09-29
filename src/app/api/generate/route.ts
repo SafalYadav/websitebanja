@@ -10,7 +10,10 @@ import { Redis } from "@upstash/redis";
 import { validateUserAuth } from "@/lib/supabaseServer";
 import { dbGetUserSubscription } from "@/lib/db/queries";
 import { openai, OPENAI_GENERATION_MODEL } from "@/lib/openai";
+import { MODEL_CONFIG, sanitizeErrorOutput } from "@/lib/ai/router/modelConfig";
+import { emitAgentEvent } from "@/lib/telemetry/agentTelemetry";
 import { buildWebsitePrompt } from "@/lib/prompts";
+import { buildAIContext } from "@/lib/ai/contextBuilder";
 import { shouldBypassRateLimit, checkMemoryRateLimit } from "@/lib/rateLimit";
 import { validateBusinessInputs } from "@/lib/validation";
 import type { SkillId } from "@/lib/skills/types";
@@ -26,6 +29,10 @@ import {
   validateGeneratedWebsiteUiUx,
   validateGeneratedWebsiteDesign,
 } from "@/lib/skills/uiUxSkill";
+import {
+  validateWebsiteQuality,
+  formatQualityReport,
+} from "@/lib/ai/design/qualityValidator";
 import {
   isOpenAISkillsConfigured,
   getHostedSkillContainerConfig,
@@ -82,8 +89,16 @@ if (
 
 export async function POST(req: Request) {
   const genStart = Date.now();
-  console.log("[GEN] request:start");
+  const requestId = `req_gen_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+  console.log(`[GEN] request:start id=${requestId}`);
   let authenticatedUserId: string | undefined;
+
+  emitAgentEvent({
+    event: "agent.started",
+    agent: "generator",
+    requestId,
+    metadata: { operation: "Full website generation" },
+  });
 
   try {
     const authStart = Date.now();
@@ -91,6 +106,13 @@ export async function POST(req: Request) {
     const auth = await validateUserAuth(req);
     if (!auth.user) {
       console.warn("[GEN] auth:failed duration=" + (Date.now() - authStart) + "ms status=" + auth.status);
+      emitAgentEvent({
+        event: "agent.failed",
+        agent: "generator",
+        requestId,
+        status: "error",
+        metadata: { error: auth.error || "Unauthorized" },
+      });
       return NextResponse.json({ success: false, message: auth.error || "Unauthorized" }, { status: auth.status });
     }
     const user = auth.user;
@@ -233,6 +255,28 @@ export async function POST(req: Request) {
     const avoidPatterns = skillsData.variationStrategy?.avoidPatterns || [];
     const designDirection = `Layout: ${skillsData.designDirection.layoutStrategy}; Hero: ${skillsData.designDirection.heroStrategy}; Style: ${skillsData.designDirection.visualStyle}; Typography: ${skillsData.designDirection.typographyDirection}; Section: ${skillsData.designDirection.sectionStrategy}`;
 
+    const projectId = typeof rawWebsiteData.projectId === "string" ? rawWebsiteData.projectId : undefined;
+
+    const aiContext = await buildAIContext({
+      projectId,
+      userId: user.id,
+      userPrompt: websiteData.description,
+      websiteType: websiteData.category,
+      taskType: "generation",
+    });
+
+    emitAgentEvent({
+      event: "agent.thinking",
+      agent: "generator",
+      requestId,
+      projectId,
+      userId: user.id,
+      metadata: {
+        operation: "Synthesizing design context & knowledge",
+        ...aiContext.telemetryMetadata,
+      },
+    });
+
     const prompt = buildWebsitePrompt(
       {
         ...websiteData,
@@ -240,6 +284,7 @@ export async function POST(req: Request) {
         recentFingerprints,
         designDirection,
         selectedSkills: activeSkillIds,
+        aiContext,
       },
       workspace ?? ({} as AiWorkspace)
     );
@@ -270,20 +315,49 @@ Always prioritize explicit user requirements over general skill rules. Return va
 
         const openaiStart = Date.now();
         console.log("[GEN] openai:start model=" + OPENAI_GENERATION_MODEL);
+        emitAgentEvent({
+          event: "agent.provider_call",
+          agent: "generator",
+          requestId,
+          userId: authenticatedUserId,
+          provider: "openai",
+          model: OPENAI_GENERATION_MODEL,
+        });
         const response = await openai.responses.create({
           model: OPENAI_GENERATION_MODEL,
           instructions,
           input: prompt,
           tools: [containerConfig],
         });
-        console.log("[GEN] openai:success duration=" + (Date.now() - openaiStart) + "ms");
+        const latencyMs = Date.now() - openaiStart;
+        console.log("[GEN] openai:success duration=" + latencyMs + "ms");
         console.log("[GEN] skills:success duration=" + (Date.now() - skillsStart) + "ms");
+        emitAgentEvent({
+          event: "agent.provider_success",
+          agent: "generator",
+          requestId,
+          userId: authenticatedUserId,
+          provider: "openai",
+          model: OPENAI_GENERATION_MODEL,
+          latencyMs,
+          status: "success",
+        });
 
         const rawText = extractTextFromResponse(response);
         parsedResult = parseWebsiteJson(rawText);
         console.log("[GEN] json:parsed length=" + rawText.length);
         isHostedExecution = true;
       } catch (hostedErr) {
+        emitAgentEvent({
+          event: "agent.provider_error",
+          agent: "generator",
+          requestId,
+          userId: authenticatedUserId,
+          provider: "openai",
+          model: OPENAI_GENERATION_MODEL,
+          status: "fallback",
+          metadata: { error: sanitizeErrorOutput(hostedErr), fallback: true },
+        });
         // Safe server-side diagnostic logging (never exposes API keys or sensitive details)
         console.warn(
           "[OpenAI Skills Runtime] Hosted skills Responses API execution failed; executing graceful local fallback:",
@@ -295,6 +369,23 @@ Always prioritize explicit user requirements over general skill rules. Return va
     // Fallback: Local skill prompt injection via standard Chat Completions
     if (!parsedResult) {
       generationModelUsed = OPENAI_GENERATION_MODEL || "gpt-5.6-luna";
+      emitAgentEvent({
+        event: "agent.fallback",
+        agent: "generator",
+        requestId,
+        userId: authenticatedUserId,
+        provider: "openai",
+        model: generationModelUsed,
+        metadata: { fromProvider: "openai-responses", toProvider: "openai-chat", fallbackCount: 1 },
+      });
+      emitAgentEvent({
+        event: "agent.provider_call",
+        agent: "generator",
+        requestId,
+        userId: authenticatedUserId,
+        provider: "openai",
+        model: generationModelUsed,
+      });
       const fallbackStart = Date.now();
       console.log(`[GEN] openai:start model=${generationModelUsed} (chat completion)`);
       try {
@@ -314,31 +405,93 @@ Always prioritize explicit user requirements over general skill rules. Return va
             },
           ],
         });
+        const fallbackLatency = Date.now() - fallbackStart;
         parsedResult = parseWebsiteJson(chatResponse.choices[0]?.message?.content ?? "{}");
-        console.log("[GEN] openai:success duration=" + (Date.now() - fallbackStart) + "ms");
+        console.log("[GEN] openai:success duration=" + fallbackLatency + "ms");
+        emitAgentEvent({
+          event: "agent.provider_success",
+          agent: "generator",
+          requestId,
+          userId: authenticatedUserId,
+          provider: "openai",
+          model: generationModelUsed,
+          latencyMs: fallbackLatency,
+          status: "success",
+        });
       } catch (chatErr) {
-        console.warn(`[GEN] ${generationModelUsed} failed, falling back to gpt-4.1-mini:`, chatErr);
-        generationModelUsed = "gpt-4.1-mini";
+        const fallbackModel = MODEL_CONFIG.defaults.generationFallbackModel;
+        const safeErrorMsg = sanitizeErrorOutput(chatErr instanceof Error ? chatErr.message : String(chatErr));
+        console.warn(`[GEN] ${generationModelUsed} failed, falling back to ${fallbackModel}:`, safeErrorMsg);
+        emitAgentEvent({
+          event: "agent.provider_error",
+          agent: "generator",
+          requestId,
+          userId: authenticatedUserId,
+          provider: "openai",
+          model: generationModelUsed,
+          status: "fallback",
+          metadata: { error: safeErrorMsg, fallback: true },
+        });
+        emitAgentEvent({
+          event: "agent.fallback",
+          agent: "generator",
+          requestId,
+          userId: authenticatedUserId,
+          provider: "openai",
+          model: fallbackModel,
+          metadata: { fromProvider: generationModelUsed, toProvider: fallbackModel, fallbackCount: 2, reason: safeErrorMsg },
+        });
+        generationModelUsed = fallbackModel;
+        const secondFallbackStart = Date.now();
+        emitAgentEvent({
+          event: "agent.provider_call",
+          agent: "generator",
+          requestId,
+          userId: authenticatedUserId,
+          provider: "openai",
+          model: fallbackModel,
+        });
         const fallbackResponse = await openai.chat.completions.create({
-          model: "gpt-4.1-mini",
+          model: fallbackModel,
           response_format: { type: "json_object" },
           messages: [
             { role: "system", content: "You are WebsiteBanja AI. Return valid JSON only." },
             { role: "user", content: prompt },
           ],
         });
+        const secondLatency = Date.now() - secondFallbackStart;
         parsedResult = parseWebsiteJson(fallbackResponse.choices[0]?.message?.content ?? "{}");
+        emitAgentEvent({
+          event: "agent.provider_success",
+          agent: "generator",
+          requestId,
+          userId: authenticatedUserId,
+          provider: "openai",
+          model: fallbackModel,
+          latencyMs: secondLatency,
+          status: "success",
+        });
       }
     }
 
     // Post-generation multi-skill design validation and sanitization
     const validationStart = Date.now();
     const designValidation = validateGeneratedWebsiteDesign(parsedResult, websiteData);
-    let { sanitized: result, warnings: uiUxWarnings } = validateGeneratedWebsiteUiUx(
-      designValidation.sanitized,
-      websiteData
-    );
+    const uiUxValidation = validateGeneratedWebsiteUiUx(designValidation.sanitized, websiteData);
+    let result = uiUxValidation.sanitized;
+    const uiUxWarnings = uiUxValidation.warnings;
     console.log("[GEN] validation:success duration=" + (Date.now() - validationStart) + "ms warnings=" + uiUxWarnings.length);
+
+    // Phase 6: Deterministic Quality & Anti-Generic Validation
+    const qualityReport = validateWebsiteQuality(
+      result as Record<string, unknown>,
+      websiteData.businessName,
+      (result as any).designBrief
+    );
+    console.log("[GEN] " + formatQualityReport(qualityReport));
+    if (qualityReport.sanitizedData) {
+      result = qualityReport.sanitizedData;
+    }
 
     if (uiUxWarnings.length > 0) {
       console.debug("[Design Intelligence Validation]", uiUxWarnings);
@@ -457,6 +610,21 @@ Ensure a fresh visual rhythm, altered hero layout, different section sequencing,
       },
     });
 
+    emitAgentEvent({
+      event: "agent.completed",
+      agent: "generator",
+      requestId,
+      projectId,
+      userId: user.id,
+      provider: "openai",
+      model: generationModelUsed,
+      latencyMs: Date.now() - genStart,
+      status: "success",
+      metadata: {
+        ...aiContext.telemetryMetadata,
+      },
+    });
+
     console.log("[GEN] total=" + (Date.now() - genStart) + "ms");
     return NextResponse.json({
       success: true,
@@ -464,6 +632,15 @@ Ensure a fresh visual rhythm, altered hero layout, different section sequencing,
       uniqueness: uniquenessVerification,
     });
   } catch (err) {
+    emitAgentEvent({
+      event: "agent.failed",
+      agent: "generator",
+      requestId,
+      userId: authenticatedUserId,
+      status: "error",
+      latencyMs: Date.now() - genStart,
+      metadata: { error: sanitizeErrorOutput(err) },
+    });
     console.error("[GEN] error duration=" + (Date.now() - genStart) + "ms error:", err);
 
     if (authenticatedUserId) {

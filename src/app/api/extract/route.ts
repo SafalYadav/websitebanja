@@ -1,9 +1,12 @@
 import { NextResponse } from "next/server";
 import { openai } from "@/lib/openai";
+import { MODEL_CONFIG, sanitizeErrorOutput } from "@/lib/ai/router/modelConfig";
+import { emitAgentEvent } from "@/lib/telemetry/agentTelemetry";
 import { trackAnalyticsEvent } from "@/lib/analytics";
 import { extractBusinessDetailsFast } from "@/lib/promptExtractor";
 import { validateUserAuth } from "@/lib/supabaseServer";
 import { checkMemoryRateLimit } from "@/lib/rateLimit";
+import { setProjectKnowledge } from "@/lib/knowledge";
 
 /** Hard cap on prompt size: bounds both OpenAI token spend and regex work in the fast parser. */
 const MAX_PROMPT_CHARS = 2000;
@@ -19,9 +22,27 @@ export async function POST(req: Request) {
     }
     const user = auth.user;
     const userId = user.id;
+    const requestId = `req_ext_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    const extractStart = Date.now();
+
+    emitAgentEvent({
+      event: "agent.started",
+      agent: "extractor",
+      requestId,
+      userId,
+      metadata: { operation: "Business info extraction" },
+    });
 
     const { success: withinLimit } = checkMemoryRateLimit(`extract_${userId}`, 30, 60 * 1000);
     if (!withinLimit) {
+      emitAgentEvent({
+        event: "agent.failed",
+        agent: "extractor",
+        requestId,
+        userId,
+        status: "error",
+        metadata: { error: "Rate limit reached" },
+      });
       return NextResponse.json(
         { success: false, message: "Too many extraction requests. Please wait a moment." },
         { status: 429 }
@@ -33,10 +54,11 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, message: "Invalid payload." }, { status: 400 });
     }
 
-    const { prompt, selectedCategory, selectedFeatures } = body as {
+    const { prompt, selectedCategory, selectedFeatures, projectId } = body as {
       prompt?: string;
       selectedCategory?: string;
       selectedFeatures?: string[];
+      projectId?: string;
     };
 
     if (!prompt || typeof prompt !== "string" || prompt.trim().length < 3) {
@@ -84,14 +106,35 @@ Extract structured business profile data from the user's prompt. Return a valid 
 Selected Category Override: ${safeCategory || "None"}
 Requested Features: ${safeFeatures ? safeFeatures.join(", ") : "None"}`;
 
+        emitAgentEvent({
+          event: "agent.provider_call",
+          agent: "extractor",
+          requestId,
+          userId,
+          provider: "openai",
+          model: MODEL_CONFIG.defaults.extractorModel,
+          status: "running",
+        });
+
         const response = await openai.chat.completions.create({
-          model: "gpt-4.1-mini",
+          model: MODEL_CONFIG.defaults.extractorModel,
           response_format: { type: "json_object" },
           messages: [
             { role: "system", content: systemPrompt },
             { role: "user", content: userMessage },
           ],
           temperature: 0.3,
+        });
+
+        emitAgentEvent({
+          event: "agent.provider_success",
+          agent: "extractor",
+          requestId,
+          userId,
+          provider: "openai",
+          model: MODEL_CONFIG.defaults.extractorModel,
+          latencyMs: Date.now() - extractStart,
+          status: "success",
         });
 
         const parsed = JSON.parse(response.choices[0].message.content ?? "{}") as Record<string, unknown>;
@@ -117,7 +160,26 @@ Requested Features: ${safeFeatures ? safeFeatures.join(", ") : "None"}`;
           whatsappNumber: typeof parsed.whatsappNumber === "string" ? parsed.whatsappNumber : fallbackData.whatsappNumber,
         };
       } catch (llmErr) {
-        console.warn("[API /api/extract] LLM extraction fallback to fast parser:", llmErr);
+        emitAgentEvent({
+          event: "agent.provider_error",
+          agent: "extractor",
+          requestId,
+          userId,
+          provider: "openai",
+          model: MODEL_CONFIG.defaults.extractorModel,
+          status: "fallback",
+          metadata: { error: sanitizeErrorOutput(llmErr), fallback: true },
+        });
+        emitAgentEvent({
+          event: "agent.fallback",
+          agent: "extractor",
+          requestId,
+          userId,
+          provider: "fast-parser",
+          status: "fallback",
+          metadata: { reason: "Fallback to fast deterministic parser" },
+        });
+        console.warn("[API /api/extract] LLM extraction fallback to fast parser:", sanitizeErrorOutput(llmErr));
       }
     }
 
@@ -129,11 +191,43 @@ Requested Features: ${safeFeatures ? safeFeatures.join(", ") : "None"}`;
       });
     }
 
+    if (projectId) {
+      try {
+        await setProjectKnowledge({
+          projectId,
+          userId,
+          category: "business_info",
+          key: "extracted_business_profile",
+          content: extractedData,
+          confidence: 0.9,
+          source: "extract_api",
+        });
+      } catch (pkErr) {
+        console.warn("[API /api/extract] Failed to persist knowledge:", pkErr);
+      }
+    }
+
+    emitAgentEvent({
+      event: "agent.completed",
+      agent: "extractor",
+      requestId,
+      projectId,
+      userId,
+      latencyMs: Date.now() - extractStart,
+      status: "success",
+    });
+
     return NextResponse.json({
       success: true,
       data: extractedData,
     });
   } catch (err) {
+    emitAgentEvent({
+      event: "agent.failed",
+      agent: "extractor",
+      status: "error",
+      metadata: { error: sanitizeErrorOutput(err) },
+    });
     console.error("API /api/extract error:", err);
     // Return graceful fallback even on extreme error
     return NextResponse.json({

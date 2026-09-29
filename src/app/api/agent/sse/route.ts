@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server';
 import { ModelRouter } from '@/lib/ai/router/modelRouter';
 import { MODEL_CONFIG, sanitizeErrorOutput } from '@/lib/ai/router/modelConfig';
 import { recordAgentRun } from '@/lib/agents/telemetry';
+import { emitAgentEvent } from '@/lib/telemetry/agentTelemetry';
 import { getProjectKnowledge, setProjectKnowledge } from '@/lib/knowledge';
 import { z } from 'zod';
 import { checkMemoryRateLimit } from '@/lib/rateLimit';
@@ -129,6 +130,23 @@ export async function POST(req: Request) {
     // start event – useful for UI to show loading indicator.
     yield { type: 'start', data: { status: 'processing' } };
 
+    const requestId = `req_mitra_sse_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    emitAgentEvent({
+      event: "agent.started",
+      agent: "mitra",
+      requestId,
+      projectId: payload.projectId,
+      userId: authenticatedUser?.id,
+      metadata: { channel: "sse", operation: "Conversational intake (SSE)" },
+    });
+    emitAgentEvent({
+      event: "agent.thinking",
+      agent: "mitra",
+      requestId,
+      projectId: payload.projectId,
+      userId: authenticatedUser?.id,
+    });
+
     try {
       const router = new ModelRouter();
       const policy = MODEL_CONFIG.agentPolicies.mitra();
@@ -152,7 +170,37 @@ export async function POST(req: Request) {
         temperature: 0.7,
         maxTokens: 1000,
         timeoutMs: policy.timeoutMs,
+        metadata: {
+          agent: "mitra",
+          requestId,
+          projectId: payload.projectId,
+          userId: authenticatedUser?.id,
+        },
       }, policy);
+
+      if (routerRes.success) {
+        emitAgentEvent({
+          event: "agent.completed",
+          agent: "mitra",
+          requestId,
+          projectId: payload.projectId,
+          userId: authenticatedUser?.id,
+          provider: routerRes.provider,
+          model: routerRes.model,
+          latencyMs: routerRes.latencyMs,
+          status: "success",
+        });
+      } else {
+        emitAgentEvent({
+          event: "agent.failed",
+          agent: "mitra",
+          requestId,
+          projectId: payload.projectId,
+          userId: authenticatedUser?.id,
+          status: "error",
+          metadata: { error: routerRes.error?.message },
+        });
+      }
 
       // Record non-blocking telemetry
       recordAgentRun({

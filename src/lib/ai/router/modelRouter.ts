@@ -10,6 +10,7 @@ import { GeminiAdapter } from "./geminiAdapter";
 import { GroqAdapter } from "./groqAdapter";
 import { OpenRouterAdapter } from "./openRouterAdapter";
 import { MODEL_CONFIG, sanitizeErrorOutput } from "./modelConfig";
+import { emitAgentEvent } from "@/lib/telemetry/agentTelemetry";
 
 /**
  * Registry of available model provider adapters.
@@ -75,6 +76,11 @@ export class ModelRouter {
     let lastErrorResponse: ModelResponse<T> | null = null;
     const errorsEncountered: string[] = [];
 
+    const agentName = (req.metadata?.agent as string) || "mitra";
+    const requestId = (req.metadata?.requestId as string) || (req.metadata?.runId as string);
+    const projectId = req.metadata?.projectId as string;
+    const userId = req.metadata?.userId as string;
+
     for (let i = 0; i < pipeline.length; i++) {
       const target = pipeline[i];
       const adapter = this.adapters.get(target.provider);
@@ -95,16 +101,42 @@ export class ModelRouter {
         timeoutMs: policy.timeoutMs,
       };
 
+      // Emit provider_call telemetry
+      emitAgentEvent({
+        event: "agent.provider_call",
+        agent: agentName,
+        requestId,
+        projectId,
+        userId,
+        provider: target.provider,
+        model: target.model || req.model || "default",
+        status: "running",
+      });
+
       // Attempt execution with transient retry
       let attempt = 0;
       const maxAttempts = 1 + (policy.maxRetries || 0);
 
       while (attempt < maxAttempts) {
         attempt++;
+        const providerCallStart = performance.now();
         try {
           const response = await adapter.generate<T>(effectiveReq);
+          const providerLatency = Math.round(performance.now() - providerCallStart);
 
           if (response.success) {
+            emitAgentEvent({
+              event: "agent.provider_success",
+              agent: agentName,
+              requestId,
+              projectId,
+              userId,
+              provider: response.provider,
+              model: response.model,
+              status: "success",
+              latencyMs: providerLatency,
+            });
+
             return {
               ...response,
               fallbackCount: i,
@@ -117,11 +149,50 @@ export class ModelRouter {
           const errorMsg = response.error?.message || "Unknown error";
           errorsEncountered.push(`[${target.provider}:${response.model}] ${errorType}: ${errorMsg}`);
 
+          emitAgentEvent({
+            event: "agent.provider_error",
+            agent: agentName,
+            requestId,
+            projectId,
+            userId,
+            provider: target.provider,
+            model: response.model || target.model,
+            status: "error",
+            latencyMs: providerLatency,
+            metadata: {
+              error: sanitizeErrorOutput(errorMsg),
+              errorType,
+              fallback: i < pipeline.length - 1,
+            },
+          });
+
           // If error is retryable and we have attempts remaining, back off briefly
           if (response.error?.retryable && attempt < maxAttempts) {
             const backoffDelay = Math.min(attempt * 400, 1200);
             await new Promise((r) => setTimeout(r, backoffDelay));
             continue;
+          }
+
+          // If fallback is available, emit fallback event
+          if (i < pipeline.length - 1) {
+            const nextTarget = pipeline[i + 1];
+            emitAgentEvent({
+              event: "agent.fallback",
+              agent: agentName,
+              requestId,
+              projectId,
+              userId,
+              provider: nextTarget.provider,
+              model: nextTarget.model,
+              status: "fallback",
+              latencyMs: Math.round(performance.now() - totalStart),
+              metadata: {
+                fromProvider: target.provider,
+                toProvider: nextTarget.provider,
+                fallbackCount: i + 1,
+                reason: sanitizeErrorOutput(errorMsg),
+              },
+            });
           }
 
           // Not retryable or attempts exhausted: move to next provider in fallback pipeline
@@ -131,6 +202,42 @@ export class ModelRouter {
             unhandledErr instanceof Error ? unhandledErr.message : String(unhandledErr)
           );
           errorsEncountered.push(`[${target.provider}] Unhandled: ${safeMsg}`);
+
+          emitAgentEvent({
+            event: "agent.provider_error",
+            agent: agentName,
+            requestId,
+            projectId,
+            userId,
+            provider: target.provider,
+            model: target.model,
+            status: "error",
+            metadata: {
+              error: safeMsg,
+              unhandled: true,
+              fallback: i < pipeline.length - 1,
+            },
+          });
+
+          if (i < pipeline.length - 1) {
+            const nextTarget = pipeline[i + 1];
+            emitAgentEvent({
+              event: "agent.fallback",
+              agent: agentName,
+              requestId,
+              projectId,
+              userId,
+              provider: nextTarget.provider,
+              model: nextTarget.model,
+              status: "fallback",
+              metadata: {
+                fromProvider: target.provider,
+                toProvider: nextTarget.provider,
+                fallbackCount: i + 1,
+                reason: safeMsg,
+              },
+            });
+          }
           break;
         }
       }
@@ -143,6 +250,19 @@ export class ModelRouter {
         ? errorsEncountered.join(" | ")
         : "All configured model providers failed to respond."
     );
+
+    emitAgentEvent({
+      event: "agent.failed",
+      agent: agentName,
+      requestId,
+      projectId,
+      userId,
+      status: "error",
+      latencyMs: totalLatency,
+      metadata: {
+        error: combinedMessage,
+      },
+    });
 
     return {
       success: false,

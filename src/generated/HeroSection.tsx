@@ -14,8 +14,8 @@ export default function GeneratedHeroSection() {
       animate="visible"
     >
       <HeroSection
-        title="Prime Gym - Premium Quality & Service"
-        subtitle="Experience industry-leading excellence with Prime Gym. Crafted for discerning clients."
+        title="Tenant A Cleaners - Premium Quality & Service"
+        subtitle="Experience industry-leading excellence with Tenant A Cleaners. Crafted for discerning clients."
         button="Get Started"
         buttonAction={{
           type: "scroll",

@@ -1,0 +1,200 @@
+{
+  "id": "WebsiteBanja_Personalized_Outreach",
+  "name": "WebsiteBanja — Personalized Outreach Draft",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "e301d001-1111-4000-8000-000000000001",
+      "name": "When Executed by Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "param_lead_id",
+              "name": "leadId",
+              "value": "lead_cc4f59e3d5e5",
+              "type": "string"
+            },
+            {
+              "id": "param_channel",
+              "name": "channel",
+              "value": "email",
+              "type": "string"
+            },
+            {
+              "id": "param_regenerate",
+              "name": "regenerate",
+              "value": false,
+              "type": "boolean"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "e301d001-1111-4000-8000-000000000002",
+      "name": "Set Lead & Channel Parameters",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        480,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3000/api/automation/generate-outreach-draft",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-automation-secret",
+              "value": "={{ $env.WEBSITEBANJA_AUTOMATION_SECRET || 'wb-auto-secret-local-dev-2026' }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"leadId\": \"{{ $json.leadId }}\",\n  \"channel\": \"{{ $json.channel }}\",\n  \"regenerate\": {{ $json.regenerate }}\n}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "e301d001-1111-4000-8000-000000000003",
+      "name": "Generate Personalized Outreach Draft",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        720,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "out_status",
+              "name": "status",
+              "value": "={{ $json.outreach.status }}",
+              "type": "string"
+            },
+            {
+              "id": "out_id",
+              "name": "outreachId",
+              "value": "={{ $json.outreach.outreachId }}",
+              "type": "string"
+            },
+            {
+              "id": "out_lead",
+              "name": "leadId",
+              "value": "={{ $json.outreach.leadId }}",
+              "type": "string"
+            },
+            {
+              "id": "out_biz",
+              "name": "businessName",
+              "value": "={{ $json.outreach.business.name }}",
+              "type": "string"
+            },
+            {
+              "id": "out_channel",
+              "name": "channel",
+              "value": "={{ $json.outreach.channel }}",
+              "type": "string"
+            },
+            {
+              "id": "out_subject",
+              "name": "subject",
+              "value": "={{ $json.outreach.subject }}",
+              "type": "string"
+            },
+            {
+              "id": "out_msg",
+              "name": "message",
+              "value": "={{ $json.outreach.message }}",
+              "type": "string"
+            },
+            {
+              "id": "out_preview",
+              "name": "previewUrl",
+              "value": "={{ $json.outreach.previewUrl }}",
+              "type": "string"
+            },
+            {
+              "id": "out_handoff",
+              "name": "handoffPhase",
+              "value": "={{ $json.handoffPhase }}",
+              "type": "string"
+            },
+            {
+              "id": "out_admin_url",
+              "name": "adminReviewUrl",
+              "value": "http://localhost:3000/admin/outreach",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "e301d001-1111-4000-8000-000000000004",
+      "name": "Format Outreach Response",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        960,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "When Executed by Trigger": {
+      "main": [
+        [
+          {
+            "node": "Set Lead & Channel Parameters",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Lead & Channel Parameters": {
+      "main": [
+        [
+          {
+            "node": "Generate Personalized Outreach Draft",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Personalized Outreach Draft": {
+      "main": [
+        [
+          {
+            "node": "Format Outreach Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

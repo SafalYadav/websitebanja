@@ -1,6 +1,7 @@
 import OpenAI from "openai";
+import { MODEL_CONFIG } from "@/lib/ai/router/modelConfig";
 
-export const OPENAI_GENERATION_MODEL = process.env.OPENAI_GENERATION_MODEL || "gpt-5.6-luna";
+export const OPENAI_GENERATION_MODEL = MODEL_CONFIG.defaults.generationModel;
 
 let _client: OpenAI | null = null;
 

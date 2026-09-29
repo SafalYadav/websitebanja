@@ -24,6 +24,12 @@ import {
   AlertCircle,
   Server,
   Lock,
+  Wifi,
+  WifiOff,
+  Terminal,
+  ListFilter,
+  Trash2,
+  ArrowRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type {
@@ -35,6 +41,12 @@ import type {
   AgentHealthStatus,
   IssueSeverity,
 } from "@/lib/agents/boss/types";
+import type {
+  AgentTelemetryEvent,
+  AgentLiveStatus,
+  AgentName,
+  AgentState,
+} from "@/lib/telemetry/types";
 
 interface AdminIntelligenceCenterProps {
   sessionToken?: string;
@@ -48,12 +60,79 @@ const WINDOW_OPTIONS = [
   { label: "Past 7 Days", value: 10080 },
 ];
 
+const ALL_AGENTS: AgentName[] = [
+  "mitra",
+  "generator",
+  "planner",
+  "extractor",
+  "studio",
+  "skills",
+  "uniqueness",
+  "boss",
+];
+
 const AGENT_LABELS: Record<string, { title: string; subtitle: string }> = {
   mitra: { title: "Mitra Voice Agent", subtitle: "Multilingual Voice & Requirement Intake" },
+  generator: { title: "Website Generator", subtitle: "Full-page HTML, layout & Tailwind synthesis" },
+  planner: { title: "Architecture Planner", subtitle: "Component breakdown & structure generation" },
+  extractor: { title: "Content Extractor", subtitle: "Semantic information extraction" },
+  studio: { title: "Studio Copilot", subtitle: "Interactive visual editing & modifications" },
   skills: { title: "Skills Agent", subtitle: "Pre-Generation Feature & Style Extraction" },
   uniqueness: { title: "Uniqueness Agent", subtitle: "AST Fingerprint & Design Verification" },
-  boss: { title: "Boss Agent", subtitle: "Telemetry Diagnostics & Health Supervisor" },
+  boss: { title: "Boss Supervisor", subtitle: "Telemetry Diagnostics & Health Supervisor" },
 };
+
+function getLiveStateBadge(state?: AgentState) {
+  switch (state) {
+    case "running":
+      return {
+        bg: "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30",
+        dot: "bg-blue-500 animate-pulse",
+        label: "RUNNING",
+      };
+    case "success":
+      return {
+        bg: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30",
+        dot: "bg-emerald-500",
+        label: "READY",
+      };
+    case "error":
+      return {
+        bg: "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/30",
+        dot: "bg-red-500",
+        label: "ERROR",
+      };
+    case "fallback":
+      return {
+        bg: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30",
+        dot: "bg-amber-500",
+        label: "FALLBACK",
+      };
+    case "idle":
+    default:
+      return {
+        bg: "bg-zinc-500/10 text-zinc-500 dark:text-zinc-400 border-zinc-500/30",
+        dot: "bg-zinc-400",
+        label: "IDLE",
+      };
+  }
+}
+
+function getEventTypeBadge(eventType: string) {
+  if (eventType.includes("error") || eventType.includes("failed")) {
+    return "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/30";
+  }
+  if (eventType.includes("fallback")) {
+    return "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30";
+  }
+  if (eventType.includes("success") || eventType.includes("completed")) {
+    return "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30";
+  }
+  if (eventType.includes("call") || eventType.includes("started") || eventType.includes("thinking")) {
+    return "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30";
+  }
+  return "bg-zinc-500/10 text-zinc-600 dark:text-zinc-400 border-zinc-500/30";
+}
 
 function getStatusBadge(status: AgentHealthStatus) {
   switch (status) {
@@ -112,6 +191,24 @@ export default function AdminIntelligenceCenter({ sessionToken }: AdminIntellige
   const [selectedAgentDetail, setSelectedAgentDetail] = useState<AgentHealthMetric | null>(null);
   const [severityFilter, setSeverityFilter] = useState<string>("ALL");
 
+  // Real-time SSE State
+  const [sseConnected, setSseConnected] = useState<boolean>(false);
+  const [liveStatuses, setLiveStatuses] = useState<Record<string, AgentLiveStatus>>(() => {
+    const initial: Record<string, AgentLiveStatus> = {};
+    for (const ag of ALL_AGENTS) {
+      initial[ag] = {
+        agent: ag,
+        state: "idle",
+        updatedAt: new Date().toISOString(),
+        lastActiveAt: new Date().toISOString(),
+      };
+    }
+    return initial;
+  });
+  const [telemetryEvents, setTelemetryEvents] = useState<AgentTelemetryEvent[]>([]);
+  const [streamFilterAgent, setStreamFilterAgent] = useState<string>("ALL");
+  const [streamFilterType, setStreamFilterType] = useState<string>("ALL");
+
   const fetchDiagnostics = useCallback(
     async (isManualRefresh = false) => {
       if (isManualRefresh) {
@@ -160,6 +257,151 @@ export default function AdminIntelligenceCenter({ sessionToken }: AdminIntellige
   useEffect(() => {
     void fetchDiagnostics();
   }, [fetchDiagnostics]);
+
+  // Real-time Server-Sent Events (SSE) telemetry subscription
+  useEffect(() => {
+    let eventSource: EventSource | null = null;
+    let isMounted = true;
+
+    try {
+      const url = `/api/admin/agents/telemetry/stream${
+        sessionToken ? `?token=${encodeURIComponent(sessionToken)}` : ""
+      }`;
+      eventSource = new EventSource(url);
+
+      eventSource.onopen = () => {
+        if (isMounted) setSseConnected(true);
+      };
+
+      eventSource.onerror = () => {
+        if (isMounted) setSseConnected(false);
+      };
+
+      eventSource.addEventListener("init", (e: MessageEvent) => {
+        if (!isMounted) return;
+        try {
+          const data = JSON.parse(e.data);
+          if (data.liveStatuses) {
+            setLiveStatuses((prev) => ({ ...prev, ...data.liveStatuses }));
+          }
+          if (Array.isArray(data.recentEvents)) {
+            setTelemetryEvents(data.recentEvents);
+          }
+        } catch (err) {
+          console.error("[SSE init parse error]", err);
+        }
+      });
+
+      eventSource.addEventListener("telemetry", (e: MessageEvent) => {
+        if (!isMounted) return;
+        try {
+          const event: AgentTelemetryEvent = JSON.parse(e.data);
+          setTelemetryEvents((prev) => [event, ...prev.slice(0, 99)]);
+
+          // Update agent live status
+          setLiveStatuses((prev) => {
+            let nextState: AgentState = "idle";
+            if (
+              event.event === "agent.started" ||
+              event.event === "agent.thinking" ||
+              event.event === "agent.provider_call"
+            ) {
+              nextState = "running";
+            } else if (
+              event.event === "agent.completed" ||
+              event.event === "agent.provider_success"
+            ) {
+              nextState = "success";
+            } else if (
+              event.event === "agent.failed" ||
+              event.event === "agent.provider_error"
+            ) {
+              nextState = "error";
+            } else if (event.event === "agent.fallback") {
+              nextState = "fallback";
+            }
+
+            return {
+              ...prev,
+              [event.agent]: {
+                agent: event.agent,
+                state: nextState,
+                currentRequestId: event.requestId,
+                lastEvent: event.event,
+                updatedAt: event.timestamp || new Date().toISOString(),
+                lastActiveAt: event.timestamp || new Date().toISOString(),
+                lastLatencyMs: event.latencyMs,
+                provider: event.provider,
+                model: event.model,
+                error: event.error,
+              },
+            };
+          });
+
+          // Incrementally update provider counts in report if present
+          if (event.provider && (event.event === "agent.provider_success" || event.event === "agent.provider_error")) {
+            setReport((currentReport) => {
+              if (!currentReport || !currentReport.telemetrySummary) return currentReport;
+              const provKey = event.provider!;
+              const currentProv = (currentReport.telemetrySummary.providerBreakdown as any)?.[provKey] || {
+                calls: 0,
+                errors: 0,
+                successes: 0,
+                fallbacks: 0,
+                avgLatencyMs: 0,
+                recentErrors: [],
+              };
+              const isError = event.event === "agent.provider_error";
+              const newCalls = (currentProv.calls || 0) + 1;
+              const newErrors = (currentProv.errors || 0) + (isError ? 1 : 0);
+              const newSuccesses = (currentProv.successes || 0) + (isError ? 0 : 1);
+              const newLatency = event.latencyMs
+                ? Math.round(((currentProv.avgLatencyMs || 0) * (currentProv.calls || 0) + event.latencyMs) / newCalls)
+                : currentProv.avgLatencyMs || 0;
+
+              return {
+                ...currentReport,
+                telemetrySummary: {
+                  ...currentReport.telemetrySummary,
+                  totalRuns: currentReport.telemetrySummary.totalRuns + 1,
+                  totalErrors: currentReport.telemetrySummary.totalErrors + (isError ? 1 : 0),
+                  providerBreakdown: {
+                    ...currentReport.telemetrySummary.providerBreakdown,
+                    [provKey]: {
+                      ...currentProv,
+                      calls: newCalls,
+                      errors: newErrors,
+                      successes: newSuccesses,
+                      avgLatencyMs: newLatency,
+                    },
+                  },
+                },
+              };
+            });
+          }
+        } catch (err) {
+          console.error("[SSE telemetry parse error]", err);
+        }
+      });
+    } catch (err) {
+      console.warn("[SSE connection failed]", err);
+    }
+
+    return () => {
+      isMounted = false;
+      if (eventSource) {
+        eventSource.close();
+      }
+    };
+  }, [sessionToken]);
+
+  const filteredTelemetryEvents = useMemo(() => {
+    return telemetryEvents.filter((ev) => {
+      if (streamFilterAgent !== "ALL" && ev.agent !== streamFilterAgent) return false;
+      if (streamFilterType !== "ALL" && ev.event !== streamFilterType) return false;
+      return true;
+    });
+  }, [telemetryEvents, streamFilterAgent, streamFilterType]);
 
   // Aggregate stats from telemetrySummary
   const systemOverview = useMemo(() => {
@@ -287,6 +529,24 @@ export default function AdminIntelligenceCenter({ sessionToken }: AdminIntellige
         </div>
 
         <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end">
+          {/* Live SSE Stream Badge */}
+          <div className="flex items-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-1.5 text-xs font-bold dark:border-white/10 dark:bg-zinc-900 shadow-xs">
+            {sseConnected ? (
+              <>
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                </span>
+                <span className="text-emerald-600 dark:text-emerald-400 font-mono text-[11px] tracking-tight">LIVE STREAM</span>
+              </>
+            ) : (
+              <>
+                <span className="h-2 w-2 rounded-full bg-zinc-400"></span>
+                <span className="text-zinc-400 font-mono text-[11px] tracking-tight">DISCONNECTED</span>
+              </>
+            )}
+          </div>
+
           {/* Window Selector */}
           <div className="flex items-center gap-1.5 rounded-xl border border-zinc-200 bg-white p-1 dark:border-white/10 dark:bg-zinc-900 text-xs">
             <Clock className="h-3.5 w-3.5 text-zinc-400 ml-2" />
@@ -394,6 +654,72 @@ export default function AdminIntelligenceCenter({ sessionToken }: AdminIntellige
           </div>
         </motion.div>
       )}
+
+      {/* ─── LIVE AGENT RUNTIME STATUS BAR ─────────────────────────────────────── */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Activity className="h-4 w-4 text-violet-500" />
+            <h3 className="text-sm font-bold text-zinc-900 dark:text-white">
+              Live Agent Runtime Activity
+            </h3>
+            <span className="rounded-full bg-violet-500/10 border border-violet-500/20 px-2 py-0.5 text-[10px] font-mono font-bold text-violet-600 dark:text-violet-400">
+              REAL-TIME SSE
+            </span>
+          </div>
+          <span className="text-[11px] text-zinc-400 font-mono">
+            {ALL_AGENTS.filter((a) => liveStatuses[a]?.state === "running").length} active now
+          </span>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2.5">
+          {ALL_AGENTS.map((agentKey) => {
+            const live = liveStatuses[agentKey];
+            const badge = getLiveStateBadge(live?.state);
+            const meta = AGENT_LABELS[agentKey] || { title: agentKey, subtitle: "Agent" };
+            return (
+              <div
+                key={agentKey}
+                className={cn(
+                  "rounded-2xl border p-3 bg-white dark:bg-zinc-900/80 transition shadow-xs flex flex-col justify-between min-h-[92px]",
+                  live?.state === "running"
+                    ? "border-blue-500/50 ring-1 ring-blue-500/20 bg-blue-500/5"
+                    : live?.state === "error"
+                    ? "border-red-500/40 bg-red-500/5"
+                    : live?.state === "fallback"
+                    ? "border-amber-500/40 bg-amber-500/5"
+                    : "border-zinc-200/80 dark:border-white/5"
+                )}
+              >
+                <div className="flex items-start justify-between gap-1 mb-1">
+                  <span className="font-bold text-xs capitalize text-zinc-800 dark:text-zinc-200 truncate" title={meta.title}>
+                    {agentKey}
+                  </span>
+                  <span className={cn("inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[9px] font-bold border", badge.bg)}>
+                    <span className={cn("h-1.5 w-1.5 rounded-full", badge.dot)} />
+                    {badge.label}
+                  </span>
+                </div>
+
+                <div className="space-y-0.5 text-[10px] text-zinc-500 font-mono">
+                  {live?.provider ? (
+                    <div className="truncate text-zinc-700 dark:text-zinc-300 font-semibold" title={`${live.provider} (${live.model || "default"})`}>
+                      {live.provider}
+                    </div>
+                  ) : (
+                    <div className="text-zinc-400">standby</div>
+                  )}
+
+                  <div className="flex justify-between items-center text-[9px] text-zinc-400">
+                    <span>{live?.lastLatencyMs != null ? `${live.lastLatencyMs}ms` : "--"}</span>
+                    <span>{live?.lastActiveAt ? new Date(live.lastActiveAt).toLocaleTimeString([], { minute: "2-digit", second: "2-digit" }) : ""}</span>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
 
       {/* ─── SECTION 2: SYSTEM OVERVIEW KPI METRICS ──────────────────────────── */}
       {systemOverview && (
@@ -531,6 +857,160 @@ export default function AdminIntelligenceCenter({ sessionToken }: AdminIntellige
               </motion.div>
             );
           })}
+        </div>
+      </div>
+
+      {/* ─── REAL-TIME TELEMETRY STREAM FEED ───────────────────────────────────── */}
+      <div className="space-y-4">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-bold text-zinc-900 dark:text-white flex items-center gap-2">
+              <Terminal className="h-4 w-4 text-violet-500" />
+              <span>Real-Time Telemetry Stream</span>
+              <span className="rounded-full bg-violet-500/10 border border-violet-500/30 px-2 py-0.5 text-[10px] font-mono font-bold text-violet-600 dark:text-violet-400">
+                {filteredTelemetryEvents.length} events
+              </span>
+            </h3>
+            <p className="text-xs text-zinc-500 mt-0.5">
+              Live runtime event stream delivered via Server-Sent Events (SSE)
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            {/* Filter by Agent */}
+            <div className="flex items-center gap-1.5">
+              <ListFilter className="h-3.5 w-3.5 text-zinc-400" />
+              <select
+                value={streamFilterAgent}
+                onChange={(e) => setStreamFilterAgent(e.target.value)}
+                className="rounded-xl border border-zinc-200 bg-white px-2.5 py-1 text-xs font-semibold text-zinc-700 outline-none dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-200"
+              >
+                <option value="ALL">All Agents</option>
+                {ALL_AGENTS.map((ag) => (
+                  <option key={ag} value={ag}>
+                    {ag}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Filter by Event Type */}
+            <select
+              value={streamFilterType}
+              onChange={(e) => setStreamFilterType(e.target.value)}
+              className="rounded-xl border border-zinc-200 bg-white px-2.5 py-1 text-xs font-semibold text-zinc-700 outline-none dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-200"
+            >
+              <option value="ALL">All Events</option>
+              <option value="agent.started">agent.started</option>
+              <option value="agent.thinking">agent.thinking</option>
+              <option value="agent.provider_call">agent.provider_call</option>
+              <option value="agent.provider_success">agent.provider_success</option>
+              <option value="agent.provider_error">agent.provider_error</option>
+              <option value="agent.fallback">agent.fallback</option>
+              <option value="agent.completed">agent.completed</option>
+              <option value="agent.failed">agent.failed</option>
+            </select>
+
+            {/* Clear stream button */}
+            {telemetryEvents.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setTelemetryEvents([])}
+                className="flex items-center gap-1 rounded-xl border border-zinc-200 bg-white px-2.5 py-1 text-xs font-semibold text-zinc-600 hover:text-red-600 dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:text-red-400 transition"
+                title="Clear local event stream"
+              >
+                <Trash2 className="h-3 w-3" />
+                <span>Clear</span>
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Live Stream Table Container */}
+        <div className="rounded-3xl border border-zinc-200 bg-white shadow-xs dark:border-white/10 dark:bg-zinc-900/60 overflow-hidden">
+          {filteredTelemetryEvents.length === 0 ? (
+            <div className="p-8 text-center text-xs text-zinc-500 space-y-2">
+              <Activity className="h-6 w-6 text-zinc-400 mx-auto animate-pulse" />
+              <p className="font-semibold text-zinc-700 dark:text-zinc-300">
+                {sseConnected ? "Listening for live runtime events..." : "Connecting to telemetry stream..."}
+              </p>
+              <p className="text-[11px] text-zinc-400">
+                Invocations across Mitra, Generator, Planner, Extractor, and Studio will stream here in real time.
+              </p>
+            </div>
+          ) : (
+            <div className="max-h-[380px] overflow-y-auto divide-y divide-zinc-100 dark:divide-white/5 font-mono text-xs">
+              {filteredTelemetryEvents.map((ev) => {
+                const badgeClass = getEventTypeBadge(ev.event);
+                return (
+                  <div
+                    key={ev.id}
+                    className="p-3 sm:px-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2 hover:bg-zinc-50/60 dark:hover:bg-zinc-800/40 transition"
+                  >
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-[11px] text-zinc-400 shrink-0">
+                        {new Date(ev.timestamp).toLocaleTimeString([], {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                          second: "2-digit",
+                        })}
+                      </span>
+
+                      <span className="rounded-md bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-zinc-700 dark:text-zinc-300">
+                        {ev.agent}
+                      </span>
+
+                      <span
+                        className={cn(
+                          "rounded-full px-2 py-0.5 text-[10px] font-bold border",
+                          badgeClass
+                        )}
+                      >
+                        {ev.event}
+                      </span>
+
+                      {ev.provider && (
+                        <span className="text-[11px] text-zinc-600 dark:text-zinc-300 font-semibold">
+                          {ev.provider}
+                          {ev.model ? ` (${ev.model})` : ""}
+                        </span>
+                      )}
+
+                      {ev.fromProvider && ev.toProvider && (
+                        <span className="text-[11px] text-amber-600 dark:text-amber-400 flex items-center gap-1 font-semibold">
+                          <span>{ev.fromProvider}</span>
+                          <ArrowRight className="h-3 w-3 inline" />
+                          <span>{ev.toProvider}</span>
+                        </span>
+                      )}
+
+                      {ev.latencyMs != null && (
+                        <span className="text-[10px] text-zinc-400 font-bold">
+                          {ev.latencyMs}ms
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-3 text-[11px] text-zinc-500 truncate max-w-md">
+                      {ev.error ? (
+                        <span className="text-red-500 font-semibold truncate" title={ev.error}>
+                          {ev.error}
+                        </span>
+                      ) : ev.reason ? (
+                        <span className="text-amber-600 dark:text-amber-400 truncate" title={ev.reason}>
+                          {ev.reason}
+                        </span>
+                      ) : (
+                        <span className="text-zinc-400 truncate font-mono text-[10px]">
+                          {ev.requestId}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
 

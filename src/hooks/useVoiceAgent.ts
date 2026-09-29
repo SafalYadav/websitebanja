@@ -66,6 +66,8 @@ export function useVoiceAgent() {
     () => false
   );
   const [voiceError, setVoiceError] = useState<string | null>(null);
+  const [activeSessionMode, setActiveSessionMode] = useState<"live" | "fallback">("live");
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [isLiveConnected] = useState(true);
   const [isContinuousMode, setIsContinuousMode] = useState(true);
   const [voiceLanguage, setVoiceLanguage] = useState<string>("en-IN");
@@ -213,6 +215,29 @@ export function useVoiceAgent() {
     setIsLoadingVoice(false);
     updateTurnTakingState("IDLE");
   }, [updateTurnTakingState]);
+
+  /**
+   * Immediately interrupts playback, cancels scheduled Web Audio sources,
+   * and reports interruption telemetry to the active Mitra session.
+   */
+  const interruptPlayback = useCallback(
+    (reason: string = "barge_in") => {
+      console.log(`[VoiceAgent] ⚡ Interruption (barge-in): ${reason}`);
+      stopSpeaking();
+      if (activeSessionId) {
+        fetch("/api/agent/session", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "status",
+            sessionId: activeSessionId,
+            status: "interrupted",
+          }),
+        }).catch(() => {});
+      }
+    },
+    [stopSpeaking, activeSessionId]
+  );
 
   /**
    * Plays canonical Agent speechText by streaming real-time 24kHz PCM chunks
@@ -515,6 +540,9 @@ export function useVoiceAgent() {
           }
           const clean = fullTranscript.trim();
           if (clean) {
+            if (isSpeaking) {
+              interruptPlayback("user_speech_barge_in");
+            }
             currentTranscriptRef.current = clean;
             onTranscriptCallbackRef.current?.(clean);
 
@@ -618,7 +646,7 @@ export function useVoiceAgent() {
         updateTurnTakingState("ERROR");
       }
     },
-    [muteMic, stopSpeaking, unlockAudio, updateTurnTakingState, voiceLanguage]
+    [interruptPlayback, isSpeaking, muteMic, stopSpeaking, unlockAudio, updateTurnTakingState, voiceLanguage]
   );
 
   const stopListening = useCallback(() => {
@@ -688,6 +716,11 @@ export function useVoiceAgent() {
     isVoiceSupported,
     voiceError,
     isLiveConnected,
+    activeSessionMode,
+    setActiveSessionMode,
+    activeSessionId,
+    setActiveSessionId,
+    interruptPlayback,
     isContinuousMode,
     setIsContinuousMode,
     voiceLanguage,

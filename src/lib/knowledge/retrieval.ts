@@ -216,14 +216,13 @@ export class KnowledgeRetrievalService implements IKnowledgeRetrievalService {
     try {
       project = await dbGetProjectRecordById(projectId);
     } catch (projError) {
-      console.error(
-        `[KnowledgeRetrievalService] Failed to query projects table (${projectId}):`,
+      console.warn(
+        `[KnowledgeRetrievalService] Query projects table (${projectId}) warning:`,
         projError instanceof Error ? projError.message : String(projError)
       );
-      throw projError;
     }
 
-    if (!project) {
+    if (!project && !knowledgeRows.length) {
       return null;
     }
 

@@ -93,6 +93,11 @@ jobs:
           RAZORPAY_KEY_ID: ${{ secrets.RAZORPAY_KEY_ID }}
           RAZORPAY_KEY_SECRET: ${{ secrets.RAZORPAY_KEY_SECRET }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          GOOGLE_PLACES_API_KEY: ${{ secrets.GOOGLE_PLACES_API_KEY }}
+          GMAIL_CLIENT_ID: ${{ secrets.GMAIL_CLIENT_ID }}
+          GMAIL_CLIENT_SECRET: ${{ secrets.GMAIL_CLIENT_SECRET }}
+          GMAIL_REFRESH_TOKEN: ${{ secrets.GMAIL_REFRESH_TOKEN }}
+          WEBSITEBANJA_AUTOMATION_SECRET: ${{ secrets.WEBSITEBANJA_AUTOMATION_SECRET }}
           IMAGE_TAG: ${{ env.ACR_SERVER }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
         run: |
           node scripts/configure_azure_razorpay.mjs

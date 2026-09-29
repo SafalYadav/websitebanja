@@ -166,6 +166,31 @@ async function run() {
     return res;
   });
 
+  // Test 9: Integrations Status (Phase 16)
+  await test("Integrations Status Route (GET /api/integrations/status) returns HTTP 200", async () => {
+    const res = await fetchUrl("/api/integrations/status");
+    if (res.status !== 200) throw new Error(`Expected HTTP 200, got ${res.status}`);
+    const data = JSON.parse(res.body);
+    if (!data || typeof data.googlePlaces !== "object" || typeof data.gmail !== "object") {
+      throw new Error("Invalid integrations status payload shape");
+    }
+    return res;
+  });
+
+  // Test 10: Gmail Integration Status (Phase 16)
+  await test("Gmail Status Route (GET /api/integrations/gmail/status) returns HTTP 200", async () => {
+    const res = await fetchUrl("/api/integrations/gmail/status");
+    if (res.status !== 200) throw new Error(`Expected HTTP 200, got ${res.status}`);
+    return res;
+  });
+
+  // Test 11: Automation Pipeline Status (Phase 13/14)
+  await test("Automation Pipeline Status (GET /api/automation/status) returns HTTP 200", async () => {
+    const res = await fetchUrl("/api/automation/status");
+    if (res.status !== 200) throw new Error(`Expected HTTP 200, got ${res.status}`);
+    return res;
+  });
+
   console.log("\n================================================================================");
   console.log(`SMOKE TEST SUMMARY: ${passed} PASSED, ${failed} FAILED`);
   console.log("================================================================================");

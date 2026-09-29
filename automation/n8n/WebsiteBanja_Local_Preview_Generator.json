@@ -1,0 +1,265 @@
+{
+  "name": "WebsiteBanja — Local Preview Generator",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "e7b0a880-60b6-4b17-a068-07e86e5e8e81",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        220,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "businessName",
+              "value": "Astra Coffee House"
+            },
+            {
+              "name": "industry",
+              "value": "restaurant"
+            },
+            {
+              "name": "location",
+              "value": "Vadodara, Gujarat"
+            },
+            {
+              "name": "description",
+              "value": "A premium modern café focused on specialty coffee, desserts and relaxed evening dining."
+            },
+            {
+              "name": "style",
+              "value": "warm_artisanal"
+            },
+            {
+              "name": "ctaText",
+              "value": "Reserve a Table"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "76d54210-67f7-4dc4-b7eb-d1cf506d396a",
+      "name": "Business Test Data",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [
+        440,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\n\n// Structured payload for WebsiteBanja Automation API\nconst payload = {\n  businessName: item.businessName || 'Astra Coffee House',\n  industry: item.industry || 'restaurant',\n  location: item.location || 'Vadodara, Gujarat',\n  description: item.description || 'Premium modern culinary atelier and artisanal roastery.',\n  style: item.style || 'warm_artisanal',\n  ctaText: item.ctaText || 'Reserve a Table',\n  services: [\n    'Specialty Coffee',\n    'Artisanal Desserts',\n    'Farm-to-Hearth Brunch',\n    'Private Salon Celebrations'\n  ],\n  requirements: [\n    'Premium visual identity',\n    'Mobile responsive',\n    'Enquiry/contact CTA',\n    'Modern typography',\n    'Domain-relevant imagery'\n  ],\n  contact: {\n    phone: '+91 98765 43210',\n    email: 'hello@astracoffee.in'\n  }\n};\n\nreturn [{ json: payload }];"
+      },
+      "id": "c138f512-8822-4422-921a-c0b7fa98d5a2",
+      "name": "Validate & Prepare Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3000/api/automation/generate-preview",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-automation-secret",
+              "value": "={{ $env.WEBSITEBANJA_AUTOMATION_SECRET }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "a9db5860-2647-4951-8631-f2f25492dcf1",
+      "name": "HTTP Request → WebsiteBanja",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        880,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.success }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "3bd9f772-9844-4861-bb38-ec476be2d829",
+      "name": "Success?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "status",
+              "value": "preview_ready"
+            },
+            {
+              "name": "previewUrl",
+              "value": "={{ $json.preview.url }}"
+            },
+            {
+              "name": "previewId",
+              "value": "={{ $json.preview.id }}"
+            },
+            {
+              "name": "businessName",
+              "value": "={{ $json.business.name }}"
+            },
+            {
+              "name": "archetype",
+              "value": "={{ $json.design.archetype }}"
+            },
+            {
+              "name": "qualityScore",
+              "value": "={{ $json.design.qualityScore }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "e98e5473-b261-411a-8bb7-d51e737754b1",
+      "name": "Format Preview Result",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [
+        1320,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "status",
+              "value": "generation_failed"
+            },
+            {
+              "name": "errorCode",
+              "value": "={{ $json.error ? $json.error.code : 'UNKNOWN_ERROR' }}"
+            },
+            {
+              "name": "errorMessage",
+              "value": "={{ $json.error ? $json.error.message : 'No preview was returned' }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "4da76135-2c83-4a67-8fa2-68bb5620b793",
+      "name": "Record Error",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [
+        1320,
+        420
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Business Test Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Business Test Data": {
+      "main": [
+        [
+          {
+            "node": "Validate & Prepare Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate & Prepare Payload": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request → WebsiteBanja",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request → WebsiteBanja": {
+      "main": [
+        [
+          {
+            "node": "Success?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Success?": {
+      "main": [
+        [
+          {
+            "node": "Format Preview Result",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Record Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "b1e7f339-445e-4c7b-8919-48206d91c782",
+  "id": "WebsiteBanja_Preview_Generator",
+  "tags": []
+}

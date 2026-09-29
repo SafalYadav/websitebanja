@@ -1,0 +1,229 @@
+{
+  "id": "WebsiteBanja_Autonomous_Lead_Pipeline",
+  "name": "WebsiteBanja — Autonomous Lead Pipeline (End-to-End Orchestrator)",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "f401d013-1111-4000-8000-000000000001",
+      "name": "When Executed by Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "param_industry",
+              "name": "industry",
+              "value": "fine dining restaurant",
+              "type": "string"
+            },
+            {
+              "id": "param_city",
+              "name": "city",
+              "value": "Jaipur",
+              "type": "string"
+            },
+            {
+              "id": "param_limit",
+              "name": "limit",
+              "value": 3,
+              "type": "number"
+            },
+            {
+              "id": "param_channel",
+              "name": "channel",
+              "value": "email",
+              "type": "string"
+            },
+            {
+              "id": "param_auto_approve",
+              "name": "autoApproveOutreach",
+              "value": true,
+              "type": "boolean"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "f401d013-1111-4000-8000-000000000002",
+      "name": "Set Pipeline Criteria",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        460,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3000/api/automation/pipeline/run",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-automation-secret",
+              "value": "={{ $env.WEBSITEBANJA_AUTOMATION_SECRET }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"criteria\": {\n    \"industry\": \"{{ $json.industry }}\",\n    \"city\": \"{{ $json.city }}\",\n    \"limit\": {{ $json.limit }},\n    \"channel\": \"{{ $json.channel }}\",\n    \"autoApproveOutreach\": {{ $json.autoApproveOutreach }}\n  }\n}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "f401d013-1111-4000-8000-000000000003",
+      "name": "HTTP Request → Start Pipeline Run",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        700,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=http://localhost:3000/api/automation/pipeline/{{ $json.run.id }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-automation-secret",
+              "value": "={{ $env.WEBSITEBANJA_AUTOMATION_SECRET }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "f401d013-1111-4000-8000-000000000004",
+      "name": "HTTP Request → Fetch Run Details & Handoff",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        940,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3000/api/automation/pipeline/advance-clock",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-automation-secret",
+              "value": "={{ $env.WEBSITEBANJA_AUTOMATION_SECRET }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\n  \"days\": 3\n}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "f401d013-1111-4000-8000-000000000005",
+      "name": "HTTP Request → Advance Clock & Process Follow-ups",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1180,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const prev = $('HTTP Request → Fetch Run Details & Handoff').first().json;\nconst clock = $input.first().json;\n\nreturn {\n  runId: prev.run.id,\n  status: prev.run.status,\n  currentStage: prev.run.currentStage,\n  stats: prev.run.stats,\n  handoffSummary: prev.handoff ? {\n    leadsDiscovered: prev.handoff.conversionFunnel.leadsDiscovered,\n    leadsQualified: prev.handoff.conversionFunnel.leadsQualified,\n    previewsCreated: prev.handoff.conversionFunnel.previewsCreated,\n    outreachSent: prev.handoff.conversionFunnel.outreachSent,\n    estimatedCostUsd: prev.handoff.costMetrics.estimatedCostUsd\n  } : null,\n  followUpsExecutedOnDay3: clock.processed ? clock.processed.executed.length : 0,\n  completedAt: new Date().toISOString()\n};"
+      },
+      "id": "f401d013-1111-4000-8000-000000000006",
+      "name": "Format Pipeline Execution Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1420,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "When Executed by Trigger": {
+      "main": [
+        [
+          {
+            "node": "Set Pipeline Criteria",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Pipeline Criteria": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request → Start Pipeline Run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request → Start Pipeline Run": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request → Fetch Run Details & Handoff",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request → Fetch Run Details & Handoff": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request → Advance Clock & Process Follow-ups",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request → Advance Clock & Process Follow-ups": {
+      "main": [
+        [
+          {
+            "node": "Format Pipeline Execution Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

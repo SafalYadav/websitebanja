@@ -18,6 +18,12 @@ export interface GenerationResult {
     spacingDensity: string;
     motionLevel: string;
   };
+  fileContents?: Record<string, string>;
+}
+
+export interface GenerateComponentsOptions {
+  writeToDisk?: boolean;
+  outDir?: string;
 }
 
 /**
@@ -47,14 +53,17 @@ export function generateComponents(
   requirement: WebsiteRequirement,
   componentPlan: ComponentPlan,
   websitePlan?: WebsitePlan,
-  designPlan?: DesignPlan
+  designPlan?: DesignPlan,
+  options?: GenerateComponentsOptions
 ): GenerationResult {
-  const outDir = path.resolve(process.cwd(), "src", "generated");
-  if (!existsSync(outDir)) {
+  const outDir = options?.outDir || path.resolve(process.cwd(), "src", "generated");
+  const writeToDisk = options?.writeToDisk ?? true;
+  if (writeToDisk && !existsSync(outDir)) {
     mkdirSync(outDir, { recursive: true });
   }
 
   const generatedFiles: string[] = [];
+  const fileContents: Record<string, string> = {};
   const tokens: DesignTokens = websitePlan?.designTokens || designPlan?.designTokens || ({} as DesignTokens);
   const colors = tokens.colors || {
     primary: "#2563EB",
@@ -393,7 +402,10 @@ export default function Generated${safeName}() {
     }
 
     const filePath = path.join(outDir, `${safeName}.tsx`);
-    writeFileSync(filePath, componentCode, "utf8");
+    if (writeToDisk) {
+      writeFileSync(filePath, componentCode, "utf8");
+    }
+    fileContents[`${safeName}.tsx`] = componentCode;
     generatedFiles.push(`${safeName}.tsx`);
   }
 
@@ -453,7 +465,10 @@ ${componentPlan.components
 }
 `;
 
-  writeFileSync(path.join(outDir, "Website.tsx"), websitePageCode, "utf8");
+  if (writeToDisk) {
+    writeFileSync(path.join(outDir, "Website.tsx"), websitePageCode, "utf8");
+  }
+  fileContents["Website.tsx"] = websitePageCode;
   generatedFiles.push("Website.tsx");
 
   // 3. Generate index.ts exporting all components
@@ -465,12 +480,16 @@ ${componentPlan.components
     `export { default as GeneratedWebsite } from "./Website";`,
   ].join("\n");
 
-  writeFileSync(path.join(outDir, "index.ts"), indexExports, "utf8");
+  if (writeToDisk) {
+    writeFileSync(path.join(outDir, "index.ts"), indexExports, "utf8");
+  }
+  fileContents["index.ts"] = indexExports;
   generatedFiles.push("index.ts");
 
   return {
     outDir,
     files: generatedFiles,
+    fileContents,
     tokensApplied: {
       primaryColor: colors.primary,
       secondaryColor: colors.secondary,

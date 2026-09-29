@@ -5,7 +5,7 @@ import NavbarSection from "@/components/editor/NavbarSection";
 export default function GeneratedNavbar() {
   return (
     <NavbarSection
-      businessName="Prime Gym"
+      businessName="Tenant A Cleaners"
       phone=""
       whatsappNumber=""
     />

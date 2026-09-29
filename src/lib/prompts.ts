@@ -1,7 +1,11 @@
 import type { AiWorkspace, PlanningInput } from "@/types/aiWorkspace";
+import type { AIContextResult } from "@/lib/ai/contextBuilder";
 import { getUiUxSkillGuidance } from "@/lib/skills/uiUxSkill";
 // Reference: skills/ui-ux/skill.md (UI/UX Design Intelligence Architecture)
 import { generateDesignStrategy } from "@/lib/ai/designStrategy";
+import { generateDesignRules } from "@/lib/ai/design/designRules";
+import { compileDesignBrief, formatDesignBriefForPrompt, type DesignBrief } from "@/lib/ai/design/designBrief";
+import type { WebsiteRequirement } from "@/lib/ai/requirementModel";
 
 export type WebsitePromptData = Partial<Omit<PlanningInput, "projectId">> & {
   businessName: string;
@@ -11,6 +15,9 @@ export type WebsitePromptData = Partial<Omit<PlanningInput, "projectId">> & {
   recentFingerprints?: any[];
   designDirection?: string;
   selectedSkills?: string[];
+  aiContext?: AIContextResult;
+  designBrief?: DesignBrief;
+  cta?: string;
 };
 
 export function buildWebsitePrompt(data: WebsitePromptData, workspace: AiWorkspace) {
@@ -27,6 +34,33 @@ export function buildWebsitePrompt(data: WebsitePromptData, workspace: AiWorkspa
     recentFingerprints: data.recentFingerprints,
     threeDPreference: data.threeDPreference,
   });
+
+  const simulatedReq: WebsiteRequirement = {
+    intent: "generate",
+    business: {
+      name: data.businessName,
+      type: data.category,
+      industry: data.category,
+    },
+    audience: data.targetAudience,
+    brand: {
+      colors: {
+        primary: data.primaryColor,
+        secondary: data.secondaryColor,
+      },
+      style: data.style,
+    },
+    cta: data.cta,
+    contactInformation: {
+      phone: data.phone,
+      email: data.email,
+      address: data.address,
+    },
+  };
+
+  const designRules = generateDesignRules(simulatedReq);
+  const designBrief = data.designBrief || compileDesignBrief(strategy, designRules, simulatedReq);
+  const formattedBrief = formatDesignBriefForPrompt(designBrief);
 
   const uiUxGuidance = getUiUxSkillGuidance(data.category, data.style, {
     businessName: data.businessName,
@@ -46,6 +80,8 @@ You are an expert Autonomous Website Designer, UI/UX Architect, and Conversion C
 
 Create a bespoke business website designed specifically for "${data.businessName}".
 NEVER output a generic template. The design, sections, background, imagery, and interactions must directly serve this business.
+
+${formattedBrief}
 
 ==========================
 BUSINESS & STRATEGY DIRECTIVES
@@ -104,7 +140,17 @@ DESIGN DIRECTION GUIDELINES
 ==========================
 ${data.designDirection}
 ` : ""}
-${uiUxGuidance ? `${uiUxGuidance}\n` : ""}
+${uiUxGuidance ? `${uiUxGuidance}\n` : ""}${data.aiContext?.systemKnowledgePrompt ? `
+==========================
+TARGETED INDUSTRY KNOWLEDGE & ARCHITECTURAL PATTERNS
+==========================
+${data.aiContext.systemKnowledgePrompt}
+` : ""}${data.aiContext?.projectDataPrompt ? `
+==========================
+PROJECT VERIFIED FACTS & UNTRUSTED USER DATA
+==========================
+${data.aiContext.projectDataPrompt}
+` : ""}
 ==========================
 AI ENGINEERING WORKSPACE
 ==========================
@@ -188,6 +234,7 @@ JSON FORMAT
     "antiRepetitionFingerprint": "${strategy.antiRepetitionFingerprint || ""}",
     "skillExecutionPlan": ${JSON.stringify(strategy.skillExecutionPlan)}
   },
+  "designBrief": ${JSON.stringify(designBrief)},
   "skillExecutionPlan": ${JSON.stringify(strategy.skillExecutionPlan)},
   "hero": {
     "title": "",

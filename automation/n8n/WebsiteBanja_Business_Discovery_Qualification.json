@@ -1,0 +1,235 @@
+{
+  "name": "WebsiteBanja — Business Discovery & Qualification",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "e110a110-1001-4001-8001-000000000001",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        220,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "query",
+              "value": "restaurants"
+            },
+            {
+              "name": "location",
+              "value": "Vadodara, Gujarat"
+            },
+            {
+              "name": "provider",
+              "value": "local_deterministic"
+            }
+          ],
+          "number": [
+            {
+              "name": "limit",
+              "value": 10
+            },
+            {
+              "name": "radiusKm",
+              "value": 10
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "e110a110-1001-4001-8001-000000000002",
+      "name": "Discovery Search Criteria",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [
+        440,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\n\n// Construct criteria for WebsiteBanja Business Discovery API\nconst payload = {\n  query: item.query || 'restaurants',\n  location: item.location || 'Vadodara, Gujarat',\n  limit: item.limit || 10,\n  radiusKm: item.radiusKm || 10,\n  provider: item.provider || 'local_deterministic',\n  categories: ['restaurant']\n};\n\nreturn [{ json: payload }];"
+      },
+      "id": "e110a110-1001-4001-8001-000000000003",
+      "name": "Format Discovery Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3000/api/automation/discover-leads",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-automation-secret",
+              "value": "={{ $env.WEBSITEBANJA_AUTOMATION_SECRET }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "e110a110-1001-4001-8001-000000000004",
+      "name": "HTTP Request → Discover Leads",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        880,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.success }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "e110a110-1001-4001-8001-000000000005",
+      "name": "Discovery Succeeded?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const res = $input.first().json;\nconst summary = res.summary || {};\nconst qualified = res.qualifiedLeads || [];\n\n// Format handoff objects for Phase 9/10\nconst items = qualified.map((lead) => ({\n  json: {\n    status: 'qualified_lead_ready',\n    leadId: lead.leadId,\n    businessName: lead.businessName,\n    category: lead.category,\n    industry: lead.industry,\n    location: lead.city || 'Vadodara',\n    phone: lead.phone,\n    website: lead.website || null,\n    websiteStatus: lead.websiteStatus,\n    qualificationScore: lead.qualificationScore,\n    opportunityScore: lead.opportunityScore,\n    reasonCodes: lead.reasonCodes,\n    opportunityReasons: lead.opportunityReasons,\n    handoffPhase: 'phase9_audit_and_research',\n    discoverySummary: {\n      runId: summary.runId,\n      discoveredTotal: summary.discovered,\n      qualifiedTotal: summary.qualified,\n      duplicatesSuppressed: summary.duplicates\n    }\n  }\n}));\n\nreturn items;"
+      },
+      "id": "e110a110-1001-4001-8001-000000000006",
+      "name": "Format Qualified Leads for Phase 9/10",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1340,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "status",
+              "value": "discovery_failed_or_empty"
+            },
+            {
+              "name": "errorCode",
+              "value": "={{ $json.error ? $json.error.code : 'UNKNOWN_ERROR' }}"
+            },
+            {
+              "name": "errorMessage",
+              "value": "={{ $json.error ? $json.error.message : 'No leads discovered' }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "e110a110-1001-4001-8001-000000000007",
+      "name": "Record Discovery Error",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [
+        1340,
+        420
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Discovery Search Criteria",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Discovery Search Criteria": {
+      "main": [
+        [
+          {
+            "node": "Format Discovery Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Discovery Request": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request → Discover Leads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request → Discover Leads": {
+      "main": [
+        [
+          {
+            "node": "Discovery Succeeded?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Discovery Succeeded?": {
+      "main": [
+        [
+          {
+            "node": "Format Qualified Leads for Phase 9/10",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Record Discovery Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "f220a220-2002-4002-8002-000000000001",
+  "id": "WebsiteBanja_Discovery_Qualification",
+  "tags": []
+}

@@ -1372,19 +1372,24 @@ export async function dbCheckProjectExists(
     }
   }
 
-  const supabase = getServiceRoleClient();
-  const { data, error } = await supabase
-    .from("projects")
-    .select("id")
-    .eq("id", projectId)
-    .eq("user_id", userId)
-    .maybeSingle();
+  try {
+    const supabase = getServiceRoleClient();
+    const { data, error } = await supabase
+      .from("projects")
+      .select("id")
+      .eq("id", projectId)
+      .eq("user_id", userId)
+      .maybeSingle();
 
-  if (error) {
-    console.error("[dbCheckProjectExists Supabase Error]", error.message);
+    if (error) {
+      console.error("[dbCheckProjectExists Supabase Error]", error.message);
+      return false;
+    }
+    return !!data;
+  } catch (err) {
+    console.warn("[dbCheckProjectExists Fallback] Client unavailable, returning false:", (err as Error)?.message || err);
     return false;
   }
-  return !!data;
 }
 
 // ─── Subscription Queries ───────────────────────────────────────────────────

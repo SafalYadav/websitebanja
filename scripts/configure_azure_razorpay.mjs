@@ -6,11 +6,19 @@ const containerAppName = process.env.CONTAINER_APP_NAME || "websitebanja-app";
 const keyId = process.env.RAZORPAY_KEY_ID;
 const keySecret = process.env.RAZORPAY_KEY_SECRET;
 const cronSecret = process.env.CRON_SECRET;
+const googlePlacesApiKey = process.env.GOOGLE_PLACES_API_KEY;
+const gmailClientId = process.env.GMAIL_CLIENT_ID || "772812359409-okec2ndn9foc7cu514nos6c559jqpp1i.apps.googleusercontent.com";
+const gmailClientSecret = process.env.GMAIL_CLIENT_SECRET;
+const gmailRefreshToken = process.env.GMAIL_REFRESH_TOKEN;
+const gmailRedirectUri = process.env.GMAIL_REDIRECT_URI || "https://websitebanja-app.salmondesert-9c3e03bc.centralindia.azurecontainerapps.io/api/integrations/gmail/callback";
+const gmailSenderEmail = process.env.GMAIL_SENDER_EMAIL || "websitebanja@gmail.com";
+const automationSecret = process.env.WEBSITEBANJA_AUTOMATION_SECRET;
+const nextPublicAppUrl = process.env.NEXT_PUBLIC_APP_URL || "https://websitebanja-app.salmondesert-9c3e03bc.centralindia.azurecontainerapps.io";
 const imageTag = process.env.IMAGE_TAG;
 const clientId = process.env.AZURE_CLIENT_ID;
 
 console.log("================================================================================");
-console.log("CONFIGURING AZURE CONTAINER APP FOR RAZORPAY & BILLING CRON");
+console.log("CONFIGURING AZURE CONTAINER APP FOR PRODUCTION & REAL-WORLD INTEGRATIONS");
 console.log("================================================================================");
 console.log("Container App:", containerAppName);
 console.log("Resource Group:", resourceGroup);
@@ -18,6 +26,11 @@ console.log("Image Tag:", imageTag || "not specified");
 console.log("Razorpay Key ID configured:", Boolean(keyId));
 console.log("Razorpay Key Secret configured:", Boolean(keySecret));
 console.log("Billing CRON Secret configured:", Boolean(cronSecret));
+console.log("Google Places API Key configured:", Boolean(googlePlacesApiKey));
+console.log("Gmail Client ID configured:", Boolean(gmailClientId));
+console.log("Gmail Client Secret configured:", Boolean(gmailClientSecret));
+console.log("Gmail Refresh Token configured:", Boolean(gmailRefreshToken));
+console.log("Automation Secret configured:", Boolean(automationSecret));
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -63,6 +76,10 @@ async function main() {
   const secretsToSet = [];
   if (keySecret) secretsToSet.push({ name: "razorpay-key-secret", value: keySecret });
   if (cronSecret) secretsToSet.push({ name: "cron-secret", value: cronSecret });
+  if (googlePlacesApiKey) secretsToSet.push({ name: "google-places-api-key", value: googlePlacesApiKey });
+  if (gmailClientSecret) secretsToSet.push({ name: "gmail-client-secret", value: gmailClientSecret });
+  if (gmailRefreshToken) secretsToSet.push({ name: "gmail-refresh-token", value: gmailRefreshToken });
+  if (automationSecret) secretsToSet.push({ name: "automation-secret", value: automationSecret });
 
   if (secretsToSet.length > 0) {
     console.log(`\n[Step 2] Configuring secrets in Azure Container App Secret Store (${secretsToSet.map(s => s.name).join(", ")})...`);
@@ -119,15 +136,41 @@ async function main() {
     updateCmd += ` --image "${imageTag}"`;
   }
 
+  const envVarsToSet = [];
   if (keyId) {
-    updateCmd += ` --set-env-vars "RAZORPAY_KEY_ID=${keyId}" "NEXT_PUBLIC_RAZORPAY_KEY_ID=${keyId}"`;
+    envVarsToSet.push(`RAZORPAY_KEY_ID=${keyId}`);
+    envVarsToSet.push(`NEXT_PUBLIC_RAZORPAY_KEY_ID=${keyId}`);
     if (keySecret) {
-      updateCmd += ` "RAZORPAY_KEY_SECRET=secretref:razorpay-key-secret"`;
+      envVarsToSet.push(`RAZORPAY_KEY_SECRET=secretref:razorpay-key-secret`);
     }
   }
-
   if (cronSecret) {
-    updateCmd += ` "CRON_SECRET=secretref:cron-secret"`;
+    envVarsToSet.push(`CRON_SECRET=secretref:cron-secret`);
+  }
+  if (googlePlacesApiKey) {
+    envVarsToSet.push(`GOOGLE_PLACES_API_KEY=secretref:google-places-api-key`);
+  }
+  if (gmailClientSecret) {
+    envVarsToSet.push(`GMAIL_CLIENT_SECRET=secretref:gmail-client-secret`);
+  }
+  if (gmailRefreshToken) {
+    envVarsToSet.push(`GMAIL_REFRESH_TOKEN=secretref:gmail-refresh-token`);
+    envVarsToSet.push(`GOOGLE_REFRESH_TOKEN=secretref:gmail-refresh-token`);
+  }
+  if (automationSecret) {
+    envVarsToSet.push(`WEBSITEBANJA_AUTOMATION_SECRET=secretref:automation-secret`);
+    envVarsToSet.push(`WEBSITEBANJA_AUTOMATION_ENABLED=true`);
+  }
+  envVarsToSet.push(`GMAIL_CLIENT_ID=${gmailClientId}`);
+  envVarsToSet.push(`GOOGLE_CLIENT_ID=${gmailClientId}`);
+  envVarsToSet.push(`GMAIL_REDIRECT_URI=${gmailRedirectUri}`);
+  envVarsToSet.push(`GMAIL_SENDER_EMAIL=${gmailSenderEmail}`);
+  envVarsToSet.push(`NEXT_PUBLIC_APP_URL=${nextPublicAppUrl}`);
+  envVarsToSet.push(`AUTO_SEND_ENABLED=false`);
+  envVarsToSet.push(`COMMUNICATION_DRY_RUN=false`);
+
+  if (envVarsToSet.length > 0) {
+    updateCmd += ` --set-env-vars ${envVarsToSet.map((v) => `"${v}"`).join(" ")}`;
   }
 
   let updated = false;
@@ -171,6 +214,27 @@ async function main() {
           if (cronSecret) {
             envMap.set("CRON_SECRET", { name: "CRON_SECRET", secretRef: "cron-secret" });
           }
+          if (googlePlacesApiKey) {
+            envMap.set("GOOGLE_PLACES_API_KEY", { name: "GOOGLE_PLACES_API_KEY", secretRef: "google-places-api-key" });
+          }
+          if (gmailClientSecret) {
+            envMap.set("GMAIL_CLIENT_SECRET", { name: "GMAIL_CLIENT_SECRET", secretRef: "gmail-client-secret" });
+          }
+          if (gmailRefreshToken) {
+            envMap.set("GMAIL_REFRESH_TOKEN", { name: "GMAIL_REFRESH_TOKEN", secretRef: "gmail-refresh-token" });
+            envMap.set("GOOGLE_REFRESH_TOKEN", { name: "GOOGLE_REFRESH_TOKEN", secretRef: "gmail-refresh-token" });
+          }
+          if (automationSecret) {
+            envMap.set("WEBSITEBANJA_AUTOMATION_SECRET", { name: "WEBSITEBANJA_AUTOMATION_SECRET", secretRef: "automation-secret" });
+            envMap.set("WEBSITEBANJA_AUTOMATION_ENABLED", { name: "WEBSITEBANJA_AUTOMATION_ENABLED", value: "true" });
+          }
+          envMap.set("GMAIL_CLIENT_ID", { name: "GMAIL_CLIENT_ID", value: gmailClientId });
+          envMap.set("GOOGLE_CLIENT_ID", { name: "GOOGLE_CLIENT_ID", value: gmailClientId });
+          envMap.set("GMAIL_REDIRECT_URI", { name: "GMAIL_REDIRECT_URI", value: gmailRedirectUri });
+          envMap.set("GMAIL_SENDER_EMAIL", { name: "GMAIL_SENDER_EMAIL", value: gmailSenderEmail });
+          envMap.set("NEXT_PUBLIC_APP_URL", { name: "NEXT_PUBLIC_APP_URL", value: nextPublicAppUrl });
+          envMap.set("AUTO_SEND_ENABLED", { name: "AUTO_SEND_ENABLED", value: "false" });
+          envMap.set("COMMUNICATION_DRY_RUN", { name: "COMMUNICATION_DRY_RUN", value: "false" });
 
           container.env = Array.from(envMap.values());
 
