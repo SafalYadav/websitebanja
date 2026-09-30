@@ -88,6 +88,7 @@ export interface DraftOutreachRequest {
   previewId?: string;
   userId?: string;
   regenerate?: boolean;
+  recipientEmail?: string;
 
   // Optional overrides for offline unit testing
   overrideLead?: unknown;
@@ -112,6 +113,7 @@ export interface UpdateOutreachStatusRequest {
   status: OutreachStatus;
   editedSubject?: string;
   editedMessage?: string;
+  recipientEmail?: string;
   notes?: string;
   userId?: string;
 }

@@ -76,6 +76,7 @@ export default function AdminOutreachCenter({ sessionToken, onNavigateTab }: Adm
 
   // Selected for edit/view modal
   const [selectedRecord, setSelectedRecord] = useState<OutreachRecord | null>(null);
+  const [editRecipientEmail, setEditRecipientEmail] = useState("");
   const [editSubject, setEditSubject] = useState("");
   const [editMessage, setEditMessage] = useState("");
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
@@ -213,6 +214,7 @@ export default function AdminOutreachCenter({ sessionToken, onNavigateTab }: Adm
           status: selectedRecord.status,
           editedSubject: editSubject,
           editedMessage: editMessage,
+          recipientEmail: editRecipientEmail,
         }),
       });
       const data = await res.json();
@@ -228,6 +230,7 @@ export default function AdminOutreachCenter({ sessionToken, onNavigateTab }: Adm
 
   const openModal = (record: OutreachRecord) => {
     setSelectedRecord(record);
+    setEditRecipientEmail(record.business.email || "");
     setEditSubject(record.subject || "");
     setEditMessage(record.message || "");
   };
@@ -599,14 +602,26 @@ export default function AdminOutreachCenter({ sessionToken, onNavigateTab }: Adm
 
                 {/* Edit Form */}
                 {selectedRecord.channel === "email" && (
-                  <div>
-                    <label className="block text-xs font-medium text-neutral-400 mb-1">Subject Line</label>
-                    <input
-                      type="text"
-                      value={editSubject}
-                      onChange={(e) => setEditSubject(e.target.value)}
-                      className="w-full bg-neutral-950 border border-neutral-800 rounded-lg p-2.5 text-xs text-neutral-200 focus:outline-none focus:border-neutral-600"
-                    />
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium text-neutral-400 mb-1">Recipient Email</label>
+                      <input
+                        type="email"
+                        value={editRecipientEmail}
+                        onChange={(e) => setEditRecipientEmail(e.target.value)}
+                        placeholder="contact@business.com"
+                        className="w-full bg-neutral-950 border border-neutral-800 rounded-lg p-2.5 text-xs text-neutral-200 focus:outline-none focus:border-neutral-600"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-neutral-400 mb-1">Subject Line</label>
+                      <input
+                        type="text"
+                        value={editSubject}
+                        onChange={(e) => setEditSubject(e.target.value)}
+                        className="w-full bg-neutral-950 border border-neutral-800 rounded-lg p-2.5 text-xs text-neutral-200 focus:outline-none focus:border-neutral-600"
+                      />
+                    </div>
                   </div>
                 )}
 

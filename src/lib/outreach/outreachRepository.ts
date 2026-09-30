@@ -194,6 +194,9 @@ export class OutreachRepository {
     if (request.editedMessage !== undefined) {
       record.message = request.editedMessage;
     }
+    if (request.recipientEmail !== undefined) {
+      record.business.email = request.recipientEmail;
+    }
     if (request.notes !== undefined) {
       record.notes = request.notes;
     }

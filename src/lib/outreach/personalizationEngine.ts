@@ -391,7 +391,7 @@ export async function generateOutreachDraft(
     name: lead.businessName,
     industry: lead.industry || lead.category,
     location: lead.city ? `${lead.city}, ${lead.state || "India"}` : lead.address || "Vadodara, Gujarat",
-    email: lead.email,
+    email: request.recipientEmail || lead.email,
     phone: lead.phone,
     website: lead.website,
   };
