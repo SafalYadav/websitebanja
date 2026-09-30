@@ -11,6 +11,7 @@ export type OutreachStatus =
   | "review"
   | "approved"
   | "queued"
+  | "sent"
   | "simulated_sent"
   | "rejected"
   | "cancelled"

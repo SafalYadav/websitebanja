@@ -264,8 +264,10 @@ export default function AdminOutreachCenter({ sessionToken, onNavigateTab }: Adm
         return <span className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-950/60 text-amber-300 border border-amber-800">In Review</span>;
       case "approved":
         return <span className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-950/60 text-blue-300 border border-blue-800">Approved</span>;
+      case "sent":
+        return <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-950/60 text-emerald-300 border border-emerald-800">Sent (Live Gmail)</span>;
       case "simulated_sent":
-        return <span className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-950/60 text-emerald-300 border border-emerald-800">Simulated Sent</span>;
+        return <span className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-950/60 text-purple-300 border border-purple-800">Simulated Sent</span>;
       case "rejected":
         return <span className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-rose-950/60 text-rose-300 border border-rose-800">Rejected</span>;
       default:
@@ -299,7 +301,7 @@ export default function AdminOutreachCenter({ sessionToken, onNavigateTab }: Adm
               Personalized Outreach Foundation
             </h1>
             <p className="text-sm text-neutral-400 mt-1">
-              Human-in-the-Loop Review, Approval & Sandboxed Outreach Queue
+              Human-in-the-Loop Review, Approval & Outreach Queue (Controlled Live Mode)
             </p>
           </div>
 
@@ -411,7 +413,7 @@ export default function AdminOutreachCenter({ sessionToken, onNavigateTab }: Adm
         {/* Filters Bar */}
         <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-neutral-900/40 border border-neutral-800 rounded-xl p-4">
           <div className="flex flex-wrap gap-2 w-full md:w-auto">
-            {["all", "draft", "review", "approved", "simulated_sent", "rejected"].map((st) => (
+            {["all", "draft", "review", "approved", "sent", "simulated_sent", "rejected"].map((st) => (
               <button
                 key={st}
                 onClick={() => setStatusFilter(st)}
@@ -421,7 +423,7 @@ export default function AdminOutreachCenter({ sessionToken, onNavigateTab }: Adm
                     : "text-neutral-400 hover:text-neutral-200"
                 }`}
               >
-                {st === "simulated_sent" ? "Simulated Sent" : st}
+                {st === "sent" ? "Sent (Live)" : st === "simulated_sent" ? "Simulated Sent" : st}
               </button>
             ))}
           </div>
@@ -535,13 +537,23 @@ export default function AdminOutreachCenter({ sessionToken, onNavigateTab }: Adm
                           )}
 
                           {r.status === "approved" && (
-                            <button
-                              onClick={() => handleUpdateStatus(r.outreachId, "simulated_sent")}
-                              className="px-2.5 py-1 rounded bg-emerald-600 hover:bg-emerald-500 text-neutral-950 font-medium text-[11px] inline-flex items-center gap-1"
-                              title="Simulate dispatch to local outbox"
-                            >
-                              <Send className="w-3 h-3" /> Simulate Send
-                            </button>
+                            <>
+                              <button
+                                onClick={() => handleSendLiveGmail(r.outreachId)}
+                                disabled={sendingLive}
+                                className="px-2.5 py-1 rounded bg-emerald-600 hover:bg-emerald-500 text-white font-medium text-[11px] inline-flex items-center gap-1 shadow-sm transition disabled:opacity-50"
+                                title="Send Live via Gmail API"
+                              >
+                                <Send className="w-3 h-3" /> Send Live
+                              </button>
+                              <button
+                                onClick={() => handleUpdateStatus(r.outreachId, "simulated_sent")}
+                                className="px-2 py-1 rounded bg-neutral-800 hover:bg-neutral-700 text-neutral-300 font-medium text-[11px] inline-flex items-center gap-1 transition"
+                                title="Simulate dispatch to local outbox"
+                              >
+                                Simulate
+                              </button>
+                            </>
                           )}
                         </div>
                       </td>

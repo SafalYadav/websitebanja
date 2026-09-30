@@ -26,6 +26,8 @@ const { leadRepository } = jiti("./src/lib/discovery/leadRepository.ts");
 const { outreachRepository } = jiti("./src/lib/outreach/outreachRepository.ts");
 const { crmRepository } = jiti("./src/lib/crm/crmRepository.ts");
 const { FollowUpQueue } = jiti("./src/lib/automation/followUpQueue.ts");
+const { PipelineOrchestrator } = jiti("./src/lib/automation/pipelineOrchestrator.ts");
+const { PipelineQueue } = jiti("./src/lib/automation/pipelineQueue.ts");
 
 // API Route Handlers
 const { GET: getIntegrationsStatus } = jiti("./src/app/api/integrations/status/route.ts");
@@ -592,5 +594,78 @@ describe("Phase 16 — Real-World Integrations (Google Places + Gmail + Reply Ha
     const data = await res.json();
     assert.equal(data.success, false);
     assert.equal(data.error.code, "PREFLIGHT_CHECK_FAILED");
+  });
+
+  test("28. Google Places normalization handles place items with missing address component types without throwing", () => {
+    const provider = new GooglePlacesDiscoveryProvider();
+    const rawPlaceWithMissingTypes = {
+      id: "places/ChIJtest123",
+      displayName: { text: "Vadodara Fine Dining" },
+      formattedAddress: "Alkapuri, Vadodara, Gujarat 390007, India",
+      addressComponents: [
+        { longText: "Alkapuri", shortText: "Alkapuri" }, // Notice missing types array!
+        { longText: "Vadodara", shortText: "Vadodara", types: ["locality", "political"] },
+        { longText: "Gujarat", shortText: "GJ", types: ["administrative_area_level_1", "political"] },
+        { longText: "India", shortText: "IN", types: ["country", "political"] },
+        { longText: "390007", shortText: "390007", types: ["postal_code"] },
+      ],
+      internationalPhoneNumber: "+91 98765 43210",
+      rating: 4.6,
+      userRatingCount: 150,
+      businessStatus: "OPERATIONAL",
+    };
+
+    // Private method normalizePlace accessible via any casting
+    const normalized = provider.normalizePlace(rawPlaceWithMissingTypes, {
+      query: "fine dining restaurant",
+      location: "Vadodara",
+    });
+
+    assert.equal(normalized.name, "Vadodara Fine Dining");
+    assert.equal(normalized.city, "Vadodara");
+    assert.equal(normalized.state, "Gujarat");
+    assert.equal(normalized.country, "India");
+    assert.equal(normalized.postalCode, "390007");
+    assert.equal(normalized.source, "google_places");
+  });
+
+  test("29. Pipeline orchestrator discovery retry succeeds when retrying a failed run", async () => {
+    const failedRunId = `run_pipe_${Date.now()}_testfail`;
+    const failedRun = {
+      id: failedRunId,
+      status: "FAILED",
+      currentStage: "DISCOVERY",
+      criteria: {
+        industry: "restaurant",
+        city: "Vadodara",
+        limit: 1,
+        channel: "email",
+        autoApproveOutreach: false,
+      },
+      stats: {
+        discovered: 0,
+        qualified: 0,
+        audited: 0,
+        previewsGenerated: 0,
+        outreachDrafted: 0,
+        outreachDispatched: 0,
+        repliesReceived: 0,
+        interested: 0,
+        followUpsScheduled: 0,
+        failed: 0,
+      },
+      leads: {},
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      errors: ["Google Places search failed: Mock failure"],
+    };
+
+    await PipelineQueue.savePipelineRun(failedRun);
+
+    const retriedRun = await PipelineOrchestrator.retryFailedJobs(failedRunId, TEST_USER);
+    assert.ok(retriedRun);
+    assert.ok(retriedRun.status === "COMPLETED" || retriedRun.status === "PARTIAL_SUCCESS");
+    assert.ok(retriedRun.stats.discovered > 0, "Discovered leads must be > 0");
+    assert.ok(Object.keys(retriedRun.leads).length > 0, "Run leads must be populated");
   });
 });

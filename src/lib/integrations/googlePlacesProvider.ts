@@ -284,16 +284,17 @@ export class GooglePlacesDiscoveryProvider implements BusinessDiscoveryProvider 
     let country = criteria.country;
     let postalCode = criteria.postalCode;
 
-    if (place.addressComponents && place.addressComponents.length > 0) {
+    if (Array.isArray(place.addressComponents) && place.addressComponents.length > 0) {
       for (const comp of place.addressComponents) {
+        if (!comp || !Array.isArray(comp.types)) continue;
         if (comp.types.includes("locality")) {
-          city = comp.longText;
+          city = comp.longText || comp.shortText || city;
         } else if (comp.types.includes("administrative_area_level_1")) {
-          state = comp.longText;
+          state = comp.longText || comp.shortText || state;
         } else if (comp.types.includes("country")) {
-          country = comp.longText;
+          country = comp.longText || comp.shortText || country;
         } else if (comp.types.includes("postal_code")) {
-          postalCode = comp.longText;
+          postalCode = comp.longText || comp.shortText || postalCode;
         }
       }
     }

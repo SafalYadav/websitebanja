@@ -81,7 +81,7 @@ export class PipelineOrchestrator {
         metadata: { stage: "DISCOVERY" },
       });
 
-      const candidateLimit = Math.max((criteria.limit || 5) * 3, 6);
+      const candidateLimit = Math.min(Math.max((criteria.limit || 5) * 3, 6), 50);
       let discoveryResponse = await executeDiscoveryRun(
         {
           query: criteria.industry,
@@ -102,7 +102,7 @@ export class PipelineOrchestrator {
         discoveryResponse = await executeDiscoveryRun(
           {
             query: fallbackKeyword,
-            location: "Vadodara",
+            location: criteria.city || "Vadodara",
             limit: candidateLimit,
           },
           userId
@@ -323,7 +323,7 @@ export class PipelineOrchestrator {
       leadProgress.outreachId = draftResult.data.outreach.outreachId;
       run.stats.outreachDrafted += 1;
 
-      // STAGE 6: HUMAN APPROVAL / SIMULATED DISPATCH (Phase 11)
+      // STAGE 6: HUMAN APPROVAL / DISPATCH
       if (autoApprove) {
         run.currentStage = "SIMULATED_DISPATCH";
         const dispatchResult = await PipelineQueue.executeLeadStageSafe(
@@ -336,7 +336,7 @@ export class PipelineOrchestrator {
               outreachId: draftResult.data!.outreach!.outreachId,
               status: "approved",
               userId,
-              notes: "Auto-approved by autonomous pipeline run",
+              notes: "Auto-approved by autonomous pipeline run (dry-run)",
             });
 
             // Simulate dispatch
@@ -386,14 +386,14 @@ export class PipelineOrchestrator {
           leadProgress.completedAt = new Date().toISOString();
         }
       } else {
-        // Requires human approval: pause at HUMAN_APPROVAL stage
+        // Controlled Live Mode: Requires explicit human approval before sending
         leadProgress.currentStage = "HUMAN_APPROVAL";
         leadProgress.status = "pending";
         leadProgress.timeline.push({
           stage: "HUMAN_APPROVAL",
           status: "started",
           timestamp: new Date().toISOString(),
-          details: "Awaiting human review in outreach queue",
+          details: "Awaiting human review in outreach queue before live send",
         });
       }
 
@@ -510,6 +510,110 @@ export class PipelineOrchestrator {
   static async retryFailedJobs(runId: string, userId?: string): Promise<PipelineRun> {
     const run = await PipelineQueue.getPipelineRun(runId);
     if (!run) throw new Error(`Pipeline run '${runId}' not found`);
+
+    // Handle discovery stage failure retry
+    if (run.status === "FAILED" && (run.currentStage === "DISCOVERY" || Object.keys(run.leads).length === 0)) {
+      run.status = "RUNNING";
+      run.error = undefined;
+      run.updatedAt = new Date().toISOString();
+      await PipelineQueue.savePipelineRun(run);
+
+      try {
+        const candidateLimit = Math.min(Math.max((run.criteria.limit || 5) * 3, 6), 50);
+        let discoveryResponse = await executeDiscoveryRun(
+          {
+            query: run.criteria.industry,
+            location: run.criteria.city,
+            limit: candidateLimit,
+          },
+          userId
+        );
+
+        if (discoveryResponse.qualifiedLeads.length === 0) {
+          const words = run.criteria.industry.toLowerCase().split(/\s+/);
+          const fallbackKeyword =
+            words.find((w) =>
+              ["restaurant", "cafe", "hotel", "coffee", "bistro", "bakery", "dining"].includes(w)
+            ) || "restaurant";
+
+          discoveryResponse = await executeDiscoveryRun(
+            {
+              query: fallbackKeyword,
+              location: run.criteria.city || "Vadodara",
+              limit: candidateLimit,
+            },
+            userId
+          );
+        }
+
+        const targetLimit = run.criteria.limit || 5;
+        discoveryResponse.qualifiedLeads = discoveryResponse.qualifiedLeads.slice(0, targetLimit);
+        run.stats.discovered =
+          discoveryResponse.summary?.discovered ?? discoveryResponse.qualifiedLeads.length;
+        run.stats.qualified = discoveryResponse.qualifiedLeads.length;
+
+        const now = new Date().toISOString();
+        for (const lead of discoveryResponse.qualifiedLeads) {
+          run.leads[lead.leadId] = {
+            leadId: lead.leadId,
+            businessName: lead.businessName,
+            currentStage: "QUALIFICATION",
+            status: "pending",
+            retryCount: 0,
+            maxAttempts: 3,
+            errorHistory: [],
+            timeline: [
+              {
+                stage: "DISCOVERY",
+                status: "completed",
+                timestamp: now,
+                details: `Discovered with qualification score ${lead.qualificationScore ?? "N/A"}`,
+              },
+              {
+                stage: "QUALIFICATION",
+                status: "completed",
+                timestamp: now,
+              },
+            ],
+          };
+        }
+
+        await PipelineQueue.savePipelineRun(run);
+
+        if (discoveryResponse.qualifiedLeads.length === 0) {
+          run.status = "COMPLETED";
+          run.completedAt = new Date().toISOString();
+          run.updatedAt = new Date().toISOString();
+          await PipelineQueue.savePipelineRun(run);
+          return run;
+        }
+
+        await this.processLeadBatch(run, discoveryResponse.qualifiedLeads, userId);
+
+        const leadProgressList = Object.values(run.leads);
+        const allFailed = leadProgressList.length > 0 && leadProgressList.every((l) => l.status === "failed");
+        const someFailed = leadProgressList.some((l) => l.status === "failed");
+
+        if (allFailed) {
+          run.status = "FAILED";
+        } else if (someFailed) {
+          run.status = "PARTIAL_SUCCESS";
+        } else {
+          run.status = "COMPLETED";
+        }
+        run.completedAt = new Date().toISOString();
+        run.updatedAt = new Date().toISOString();
+        await PipelineQueue.savePipelineRun(run);
+        return run;
+      } catch (err) {
+        const errMsg = (err as Error)?.message || String(err);
+        run.status = "FAILED";
+        run.error = errMsg;
+        run.updatedAt = new Date().toISOString();
+        await PipelineQueue.savePipelineRun(run);
+        return run;
+      }
+    }
 
     const failedLeads = Object.values(run.leads).filter((l) => l.status === "failed");
     if (failedLeads.length === 0) {

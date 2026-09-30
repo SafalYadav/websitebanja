@@ -50,7 +50,7 @@ export default function AdminAutomationPipeline({ sessionToken, onNavigateTab }:
   const [city, setCity] = useState("Jaipur");
   const [limit, setLimit] = useState(3);
   const [channel, setChannel] = useState<"email" | "whatsapp" | "instagram">("email");
-  const [autoApprove, setAutoApprove] = useState(true);
+  const [autoApprove, setAutoApprove] = useState(false);
 
   // Reply simulation modal state
   const [showReplyModal, setShowReplyModal] = useState(false);
@@ -504,8 +504,8 @@ export default function AdminAutomationPipeline({ sessionToken, onNavigateTab }:
               <p className="text-[10px] text-zinc-500 mt-1">Pitch Generation</p>
             </div>
             <div className="p-3 rounded-lg border border-blue-200 bg-blue-50/50 dark:bg-blue-950/20 dark:border-blue-800/40">
-              <div className="font-bold text-blue-700 dark:text-blue-400">5. Simulated Send</div>
-              <p className="text-[10px] text-zinc-500 mt-1">Sandboxed Dispatch</p>
+              <div className="font-bold text-blue-700 dark:text-blue-400">5. Review & Approval</div>
+              <p className="text-[10px] text-zinc-500 mt-1">Controlled Live Dispatch</p>
             </div>
             <div className="p-3 rounded-lg border border-amber-200 bg-amber-50/50 dark:bg-amber-950/20 dark:border-amber-800/40">
               <div className="font-bold text-amber-700 dark:text-amber-400">6. Follow-Up (Max 2)</div>
@@ -757,7 +757,7 @@ export default function AdminAutomationPipeline({ sessionToken, onNavigateTab }:
           <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6 text-xs">
             <h3 className="text-base font-bold text-zinc-900 mb-1">Trigger Autonomous Pipeline Run</h3>
             <p className="text-zinc-500 mb-4">
-              Executes Discovery → Audit → Preview → Outreach Drafting → Simulated Send → Follow-Up Queue.
+              Executes Discovery → Research & Audit → Personalized Preview → Outreach Drafting → Human Review & Approval.
             </p>
 
             <form onSubmit={handleStartRun} className="space-y-3">
@@ -802,9 +802,9 @@ export default function AdminAutomationPipeline({ sessionToken, onNavigateTab }:
                     onChange={(e) => setChannel(e.target.value as any)}
                     className="w-full border border-zinc-200 rounded-lg p-2 text-xs bg-white"
                   >
-                    <option value="email">Email</option>
-                    <option value="whatsapp">WhatsApp</option>
-                    <option value="instagram">Instagram DM</option>
+                    <option value="email">Email (Gmail API)</option>
+                    <option value="whatsapp" disabled>WhatsApp (Disabled — Manual contact required)</option>
+                    <option value="instagram" disabled>Instagram DM (Planned)</option>
                   </select>
                 </div>
               </div>
@@ -817,10 +817,10 @@ export default function AdminAutomationPipeline({ sessionToken, onNavigateTab }:
                     onChange={(e) => setAutoApprove(e.target.checked)}
                     className="rounded text-indigo-600"
                   />
-                  <span className="font-medium text-zinc-800">Auto-Approve & Simulate Dispatch</span>
+                  <span className="font-medium text-zinc-800">Auto-Approve Drafts into Follow-Up Queue</span>
                 </label>
                 <p className="text-[10px] text-zinc-500 ml-5">
-                  If unchecked, the pipeline pauses at HUMAN_APPROVAL for review in Outreach Queue.
+                  Controlled Live Mode: Drafts remain staged in HUMAN_APPROVAL until explicitly approved for live sending.
                 </p>
               </div>
 

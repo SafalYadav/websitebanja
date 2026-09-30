@@ -500,7 +500,7 @@ export default function AdminLeadCommandCenter({ sessionToken, onNavigateTab }: 
                   Controlled Live Mode
                 </span>
                 <span className="text-[10px] font-mono px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/30 flex items-center gap-1 font-semibold">
-                  WhatsApp: Disabled (Manual contact required)
+                  WhatsApp: Disabled — Manual contact required
                 </span>
               </div>
               <p className="text-xs text-slate-400 mt-0.5">
@@ -648,7 +648,7 @@ export default function AdminLeadCommandCenter({ sessionToken, onNavigateTab }: 
         )}
 
         {/* 2. KPI Strip (Non-Fabricated Metrics) */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 xl:grid-cols-10 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 xl:grid-cols-5 2xl:grid-cols-10 gap-2.5">
           {[
             { label: "Total Leads", value: kpis?.totalLeads ?? 0, color: "text-white" },
             { label: "Qualified", value: kpis?.qualifiedLeads ?? 0, color: "text-sky-400" },
@@ -657,12 +657,12 @@ export default function AdminLeadCommandCenter({ sessionToken, onNavigateTab }: 
             { label: "Awaiting Reply", value: kpis?.awaitingReply ?? 0, color: "text-purple-400" },
             { label: "Interested", value: kpis?.interested ?? 0, color: "text-emerald-400" },
             { label: "Meetings", value: kpis?.meetingsRequested ?? 0, color: "text-teal-400" },
-            { label: "Follow-up Due", value: kpis?.followUpsDue ?? 0, color: "text-yellow-400" },
-            { label: "Conversion Rate", value: kpis?.conversionRate !== null && kpis?.conversionRate !== undefined ? `${kpis.conversionRate}%` : "0%", color: "text-emerald-400" },
-            { label: "Known AI Cost", value: kpis?.knownEstimatedCostUsd !== null && kpis?.knownEstimatedCostUsd !== undefined ? `$${kpis.knownEstimatedCostUsd.toFixed(4)}` : "$0.0000", color: "text-indigo-300" },
+            { label: "Follow-Ups", value: kpis?.followUpsDue ?? 0, color: "text-yellow-400" },
+            { label: "Conversion", value: kpis?.conversionRate !== null && kpis?.conversionRate !== undefined ? `${kpis.conversionRate}%` : "0%", color: "text-emerald-400" },
+            { label: "AI Cost", value: kpis?.knownEstimatedCostUsd !== null && kpis?.knownEstimatedCostUsd !== undefined ? `$${kpis.knownEstimatedCostUsd.toFixed(4)}` : "$0.0000", color: "text-indigo-300" },
           ].map((item, idx) => (
-            <div key={idx} className="p-3 rounded-xl bg-slate-900 border border-slate-800 flex flex-col justify-between">
-              <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider truncate">
+            <div key={idx} className="p-3 rounded-xl bg-slate-900 border border-slate-800 flex flex-col justify-between hover:border-slate-700 transition" title={item.label}>
+              <span className="text-[11px] text-slate-400 font-semibold uppercase tracking-wider leading-tight">
                 {item.label}
               </span>
               <span className={`text-xl font-bold font-mono mt-1 ${item.color}`}>{item.value}</span>
@@ -989,16 +989,18 @@ export default function AdminLeadCommandCenter({ sessionToken, onNavigateTab }: 
                         <td className={`${padClass} text-center`}>
                           <span
                             className={`px-2 py-0.5 rounded text-[10px] font-bold font-mono ${
-                              l.outreachStatus === "simulated_sent"
+                              l.outreachStatus === "sent"
+                                ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+                                : l.outreachStatus === "simulated_sent"
                                 ? "bg-purple-500/20 text-purple-300 border border-purple-500/30"
                                 : l.outreachStatus === "approved"
-                                ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+                                ? "bg-sky-500/20 text-sky-300 border border-sky-500/30"
                                 : l.outreachStatus === "review"
                                 ? "bg-amber-500/20 text-amber-300 border border-amber-500/30"
                                 : "text-slate-500"
                             }`}
                           >
-                            {l.outreachStatus}
+                            {l.outreachStatus === "sent" ? "sent (live)" : l.outreachStatus}
                           </span>
                         </td>
 
