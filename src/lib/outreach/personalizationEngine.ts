@@ -307,7 +307,27 @@ export async function generateOutreachDraft(
   // 3. Resolve Preview Record
   let preview: StoredPreviewRecord | null = null;
   if (request.overridePreview) {
-    preview = request.overridePreview as StoredPreviewRecord;
+    const rawPrev = request.overridePreview as any;
+    const resolvedUrl =
+      rawPrev.previewUrl ||
+      rawPrev.url ||
+      (rawPrev.id ? `https://websitebanja.com/preview/${rawPrev.id}` : `https://websitebanja.com/preview/prev_${lead.leadId}`);
+
+    preview = {
+      previewId: rawPrev.previewId || rawPrev.id || `prev_${lead.leadId}`,
+      slug: rawPrev.slug || `preview-${lead.leadId}`,
+      leadId: lead.leadId,
+      auditId: finalAudit.auditId,
+      businessName: lead.businessName,
+      industry: lead.industry || lead.category,
+      generatedAt: rawPrev.createdAt || rawPrev.generatedAt || new Date().toISOString(),
+      previewUrl: resolvedUrl,
+      qualityScore: rawPrev.qualityScore || 85,
+      designArchetype: rawPrev.designArchetype || "Modern Clean",
+      imageManifest: rawPrev.imageManifest || [],
+      generationStatus: "generated",
+      userId: request.userId,
+    };
   } else {
     const storedPreviews = readStoredPreviews();
     preview =

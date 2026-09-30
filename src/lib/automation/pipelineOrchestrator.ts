@@ -306,7 +306,13 @@ export class PipelineOrchestrator {
             channel,
             overrideLead: lead,
             overrideAudit: auditResult.data,
-            overridePreview: previewResult.data?.preview,
+            overridePreview: previewResult.data?.preview
+              ? {
+                  ...(previewResult.data.preview as any),
+                  previewId: previewResult.data.preview.id,
+                  previewUrl: previewResult.data.preview.url,
+                }
+              : undefined,
             userId,
           });
           if (!res.success || !res.outreach) {
