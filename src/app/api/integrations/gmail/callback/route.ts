@@ -19,8 +19,9 @@ export async function GET(req: Request) {
   const state = url.searchParams.get("state");
   const error = url.searchParams.get("error");
 
-  const baseUrl = `${url.protocol}//${url.host}`;
-  const redirectTarget = `${baseUrl}/admin?tab=integrations`;
+  const appBaseUrl =
+    process.env.NEXT_PUBLIC_APP_URL?.replace(/\/+$/, "") || "https://websitebanja.com";
+  const redirectTarget = `${appBaseUrl}/admin?tab=integrations`;
 
   if (error) {
     return NextResponse.redirect(
@@ -42,8 +43,9 @@ export async function GET(req: Request) {
     );
   }
 
-  // Exchange code for tokens
-  const exchangeResult = await GmailOAuthManager.exchangeCode(code);
+  // Pass current requested callback URI as candidate
+  const currentUri = `${url.protocol}//${url.host}${url.pathname}`;
+  const exchangeResult = await GmailOAuthManager.exchangeCode(code, currentUri);
   if (!exchangeResult.success) {
     return NextResponse.redirect(
       `${redirectTarget}&error=${encodeURIComponent(exchangeResult.error || "Token exchange failed.")}`

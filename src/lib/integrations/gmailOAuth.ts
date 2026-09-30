@@ -77,14 +77,12 @@ export class GmailOAuthManager {
     }
 
     const defaultRedirectUri =
-      process.env.NEXT_PUBLIC_APP_URL
-        ? `${process.env.NEXT_PUBLIC_APP_URL.replace(/\/+$/, "")}/api/integrations/gmail/callback`
-        : (process.env.NODE_ENV === "production" ? "https://websitebanja.com/api/integrations/gmail/callback" : "http://localhost:3000/api/integrations/gmail/callback");
-
-    const redirectUri =
-      redirectUriOverride ||
       (process.env.GMAIL_REDIRECT_URI || process.env.GOOGLE_REDIRECT_URI)?.trim() ||
-      defaultRedirectUri;
+      (process.env.NODE_ENV === "production"
+        ? "https://websitebanja-app.salmondesert-9c3e03bc.centralindia.azurecontainerapps.io/api/integrations/gmail/callback"
+        : "http://localhost:3000/api/integrations/gmail/callback");
+
+    const redirectUri = redirectUriOverride || defaultRedirectUri;
 
     const state = crypto.randomBytes(24).toString("hex");
 
@@ -136,84 +134,91 @@ export class GmailOAuthManager {
 
   /**
    * Exchanges authorization code for tokens and saves refresh token securely.
+   * Tries candidate redirect URIs to handle custom domains vs cloud container domains gracefully.
    */
   static async exchangeCode(code: string, redirectUriOverride?: string): Promise<{ success: boolean; error?: string }> {
     const clientId = (process.env.GMAIL_CLIENT_ID || process.env.GOOGLE_CLIENT_ID)?.trim();
     const clientSecret = (process.env.GMAIL_CLIENT_SECRET || process.env.GOOGLE_CLIENT_SECRET)?.trim();
-    const defaultRedirectUri =
-      process.env.NEXT_PUBLIC_APP_URL
-        ? `${process.env.NEXT_PUBLIC_APP_URL.replace(/\/+$/, "")}/api/integrations/gmail/callback`
-        : (process.env.NODE_ENV === "production" ? "https://websitebanja.com/api/integrations/gmail/callback" : "http://localhost:3000/api/integrations/gmail/callback");
-
-    const redirectUri =
-      redirectUriOverride ||
-      (process.env.GMAIL_REDIRECT_URI || process.env.GOOGLE_REDIRECT_URI)?.trim() ||
-      defaultRedirectUri;
 
     if (!clientId || !clientSecret) {
       return { success: false, error: "GMAIL_CLIENT_ID or GMAIL_CLIENT_SECRET is missing." };
     }
 
-    try {
-      const response = await fetch(GOOGLE_TOKEN_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({
-          code,
-          client_id: clientId,
-          client_secret: clientSecret,
-          redirect_uri: redirectUri,
-          grant_type: "authorization_code",
-        }),
-      });
+    const candidateUris = [
+      redirectUriOverride,
+      process.env.GMAIL_REDIRECT_URI,
+      process.env.GOOGLE_REDIRECT_URI,
+      "https://websitebanja-app.salmondesert-9c3e03bc.centralindia.azurecontainerapps.io/api/integrations/gmail/callback",
+      "https://websitebanja.com/api/integrations/gmail/callback",
+      "http://localhost:3000/api/integrations/gmail/callback",
+    ].filter((u): u is string => Boolean(u && u.trim().length > 0));
 
-      if (!response.ok) {
+    const uniqueUris = Array.from(new Set(candidateUris));
+    let lastError = "Token exchange failed.";
+
+    for (const testUri of uniqueUris) {
+      try {
+        const response = await fetch(GOOGLE_TOKEN_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({
+            code,
+            client_id: clientId,
+            client_secret: clientSecret,
+            redirect_uri: testUri,
+            grant_type: "authorization_code",
+          }),
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+
+          if (data.refresh_token) {
+            ConfigValidator.saveRefreshToken(data.refresh_token);
+          }
+
+          if (data.access_token) {
+            const expiresInSec = typeof data.expires_in === "number" ? data.expires_in : 3600;
+            cachedAccessToken = {
+              token: data.access_token,
+              expiresAt: Date.now() + (expiresInSec - 60) * 1000,
+            };
+          }
+
+          ConfigValidator.updateInternalState((state) => {
+            state.gmail.lastError = null;
+          });
+
+          emitAgentEvent({
+            event: "agent.provider_call",
+            agent: "mitra",
+            provider: "gmail",
+            metadata: { operation: "oauth.exchange.success", matchedRedirectUri: testUri },
+          });
+
+          return { success: true };
+        }
+
         const errorText = await response.text();
-        ConfigValidator.updateInternalState((state) => {
-          state.gmail.lastError = `OAuth exchange failed (${response.status}): ${errorText}`;
-        });
-        emitAgentEvent({
-          event: "agent.provider_call",
-          agent: "mitra",
-          provider: "gmail",
-          metadata: { operation: "oauth.exchange.failed", status: response.status },
-        });
-        return { success: false, error: `Token exchange failed: ${errorText}` };
+        lastError = errorText;
+        if (!errorText.includes("redirect_uri_mismatch")) {
+          break;
+        }
+      } catch (err: any) {
+        lastError = err.message || "Network error";
       }
-
-      const data = await response.json();
-
-      if (data.refresh_token) {
-        ConfigValidator.saveRefreshToken(data.refresh_token);
-      }
-
-      if (data.access_token) {
-        const expiresInSec = typeof data.expires_in === "number" ? data.expires_in : 3600;
-        cachedAccessToken = {
-          token: data.access_token,
-          expiresAt: Date.now() + (expiresInSec - 60) * 1000,
-        };
-      }
-
-      ConfigValidator.updateInternalState((state) => {
-        state.gmail.lastError = null;
-      });
-
-      emitAgentEvent({
-        event: "agent.provider_call",
-        agent: "mitra",
-        provider: "gmail",
-        metadata: { operation: "oauth.exchange.success" },
-      });
-
-      return { success: true };
-    } catch (err: any) {
-      const message = err.message || "Unknown error during token exchange.";
-      ConfigValidator.updateInternalState((state) => {
-        state.gmail.lastError = message;
-      });
-      return { success: false, error: message };
     }
+
+    ConfigValidator.updateInternalState((state) => {
+      state.gmail.lastError = `OAuth exchange failed: ${lastError}`;
+    });
+    emitAgentEvent({
+      event: "agent.provider_call",
+      agent: "mitra",
+      provider: "gmail",
+      metadata: { operation: "oauth.exchange.failed" },
+    });
+    return { success: false, error: `Token exchange failed: ${lastError}` };
   }
 
   /**
