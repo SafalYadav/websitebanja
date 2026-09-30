@@ -43,9 +43,8 @@ export async function GET(req: Request) {
     );
   }
 
-  // Pass current requested callback URI as candidate
-  const currentUri = `${url.protocol}//${url.host}${url.pathname}`;
-  const exchangeResult = await GmailOAuthManager.exchangeCode(code, currentUri);
+  // Exchange code for tokens
+  const exchangeResult = await GmailOAuthManager.exchangeCode(code);
   if (!exchangeResult.success) {
     return NextResponse.redirect(
       `${redirectTarget}&error=${encodeURIComponent(exchangeResult.error || "Token exchange failed.")}`

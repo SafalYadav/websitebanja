@@ -77,12 +77,12 @@ export class GmailOAuthManager {
     }
 
     const defaultRedirectUri =
-      (process.env.GMAIL_REDIRECT_URI || process.env.GOOGLE_REDIRECT_URI)?.trim() ||
+      redirectUriOverride ||
       (process.env.NODE_ENV === "production"
         ? "https://websitebanja-app.salmondesert-9c3e03bc.centralindia.azurecontainerapps.io/api/integrations/gmail/callback"
-        : "http://localhost:3000/api/integrations/gmail/callback");
+        : (process.env.GMAIL_REDIRECT_URI || process.env.GOOGLE_REDIRECT_URI || "http://localhost:3000/api/integrations/gmail/callback"));
 
-    const redirectUri = redirectUriOverride || defaultRedirectUri;
+    const redirectUri = defaultRedirectUri;
 
     const state = crypto.randomBytes(24).toString("hex");
 
@@ -145,13 +145,13 @@ export class GmailOAuthManager {
     }
 
     const candidateUris = [
+      "https://websitebanja-app.salmondesert-9c3e03bc.centralindia.azurecontainerapps.io/api/integrations/gmail/callback",
       redirectUriOverride,
       process.env.GMAIL_REDIRECT_URI,
       process.env.GOOGLE_REDIRECT_URI,
-      "https://websitebanja-app.salmondesert-9c3e03bc.centralindia.azurecontainerapps.io/api/integrations/gmail/callback",
       "https://websitebanja.com/api/integrations/gmail/callback",
       "http://localhost:3000/api/integrations/gmail/callback",
-    ].filter((u): u is string => Boolean(u && u.trim().length > 0));
+    ].filter((u): u is string => Boolean(u && u.trim().length > 0 && !u.includes("0.0.0.0")));
 
     const uniqueUris = Array.from(new Set(candidateUris));
     let lastError = "Token exchange failed.";
