@@ -22,43 +22,20 @@ import {
 import type { AutomationPreviewRequest, AutomationErrorResponse } from "@/lib/automation/types";
 
 const MAX_PAYLOAD_BYTES = 256 * 1024; // 256 KB
-const DEFAULT_LOCAL_AUTOMATION_SECRET = "wb-auto-secret-local-dev-2026";
-
-/**
- * Validates request authorization against WEBSITEBANJA_AUTOMATION_SECRET
- */
-function validateAutomationAuth(req: Request): boolean {
-  const configuredSecret =
-    process.env.WEBSITEBANJA_AUTOMATION_SECRET || DEFAULT_LOCAL_AUTOMATION_SECRET;
-
-  const headerSecret = req.headers.get("x-automation-secret");
-  if (headerSecret && headerSecret.trim() === configuredSecret) {
-    return true;
-  }
-
-  const authHeader = req.headers.get("authorization");
-  if (authHeader && authHeader.startsWith("Bearer ")) {
-    const token = authHeader.slice(7).trim();
-    if (token === configuredSecret) {
-      return true;
-    }
-  }
-
-  return false;
-}
+import { isAuthorized } from "@/lib/automation/auth";
 
 export async function POST(req: Request) {
   const requestId = `req_auto_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
   const startTime = Date.now();
 
   // 1. Authorization Check
-  if (!validateAutomationAuth(req)) {
+  if (!(await isAuthorized(req))) {
     emitAgentEvent({
       event: "automation.auth_failed",
       agent: "n8n_automation",
       requestId,
       status: "error",
-      metadata: { error: "Missing or invalid automation secret" },
+      metadata: { error: "Missing or invalid authorization" },
     });
 
     const errorBody: AutomationErrorResponse = {

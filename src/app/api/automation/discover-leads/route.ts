@@ -19,44 +19,21 @@ import {
 } from "@/lib/discovery/discoveryService";
 import { DiscoveryProviderError } from "@/lib/discovery/providers/types";
 import type { DiscoveryErrorResponse } from "@/lib/discovery/types";
+import { isAuthorized } from "@/lib/automation/auth";
 
 const MAX_PAYLOAD_BYTES = 256 * 1024; // 256 KB
-const DEFAULT_LOCAL_AUTOMATION_SECRET = "wb-auto-secret-local-dev-2026";
-
-/**
- * Validates request authorization against WEBSITEBANJA_AUTOMATION_SECRET
- */
-function validateAutomationAuth(req: Request): boolean {
-  const configuredSecret =
-    process.env.WEBSITEBANJA_AUTOMATION_SECRET || DEFAULT_LOCAL_AUTOMATION_SECRET;
-
-  const headerSecret = req.headers.get("x-automation-secret");
-  if (headerSecret && headerSecret.trim() === configuredSecret) {
-    return true;
-  }
-
-  const authHeader = req.headers.get("authorization");
-  if (authHeader && authHeader.startsWith("Bearer ")) {
-    const token = authHeader.slice(7).trim();
-    if (token === configuredSecret) {
-      return true;
-    }
-  }
-
-  return false;
-}
 
 export async function POST(req: Request) {
   const requestId = `req_disc_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
 
   // 1. Authorization Check
-  if (!validateAutomationAuth(req)) {
+  if (!(await isAuthorized(req))) {
     emitAgentEvent({
       event: "automation.auth_failed",
       agent: "n8n_automation",
       requestId,
       status: "error",
-      metadata: { error: "Missing or invalid automation secret" },
+      metadata: { error: "Missing or invalid authorization" },
     });
 
     const errorBody: DiscoveryErrorResponse = {
