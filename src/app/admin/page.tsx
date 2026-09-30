@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useState, useCallback, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { supabase } from "@/lib/supabase";
@@ -24,12 +24,25 @@ import {
   Lock,
   ArrowRight,
   Filter,
+  Compass,
+  Target,
+  Cpu,
+  MessageSquare,
+  Send,
+  BarChart3,
+  KeyRound,
+  Zap,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import AdminIntelligenceCenter from "@/components/admin/AdminIntelligenceCenter";
 import AdminUsersAccess from "@/components/admin/AdminUsersAccess";
 import AdminBossResearchPanel from "@/components/admin/AdminBossResearchPanel";
-import { Compass } from "lucide-react";
+import AdminLeadCommandCenter from "@/components/admin/AdminLeadCommandCenter";
+import AdminAutomationPipeline from "@/components/admin/AdminAutomationPipeline";
+import AdminCrmCenter from "@/components/admin/AdminCrmCenter";
+import AdminOutreachCenter from "@/components/admin/AdminOutreachCenter";
+import AdminAnalyticsCenter from "@/components/admin/AdminAnalyticsCenter";
+import AdminIntegrationsCenter from "@/components/admin/AdminIntegrationsCenter";
 
 interface AnalyticsData {
   adminUser: {
@@ -89,16 +102,51 @@ interface AnalyticsData {
   }>;
 }
 
-type TabType = "overview" | "ai_health" | "boss_research" | "usage" | "revenue" | "users" | "projects" | "activity";
+export type TabType =
+  | "overview"
+  | "ai_health"
+  | "boss_research"
+  | "leads"
+  | "automation"
+  | "crm"
+  | "outreach"
+  | "analytics"
+  | "integrations"
+  | "usage"
+  | "revenue"
+  | "users"
+  | "projects"
+  | "activity";
 
-export default function AdminDashboardPage() {
+function normalizeTab(raw: string | null): TabType {
+  if (!raw) return "overview";
+  const r = raw.toLowerCase().trim();
+  if (r === "leads" || r === "lead" || r === "command_center" || r === "command-center") return "leads";
+  if (r === "automation" || r === "pipeline" || r === "auto") return "automation";
+  if (r === "crm" || r === "replies") return "crm";
+  if (r === "outreach" || r === "dispatch") return "outreach";
+  if (r === "analytics" || r === "pipeline_analytics" || r === "metrics") return "analytics";
+  if (r === "integrations" || r === "integration") return "integrations";
+  if (r === "ai_health" || r === "ai-health" || r === "health") return "ai_health";
+  if (r === "boss_research" || r === "boss-research" || r === "boss") return "boss_research";
+  if (r === "usage") return "usage";
+  if (r === "revenue" || r === "billing") return "revenue";
+  if (r === "users" || r === "access") return "users";
+  if (r === "projects") return "projects";
+  if (r === "activity" || r === "audit") return "activity";
+  return "overview";
+}
+
+function AdminDashboardContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const tabParam = searchParams.get("tab") || searchParams.get("section");
 
   const [isLoading, setIsLoading] = useState(true);
   const [isUnauthorized, setIsUnauthorized] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [data, setData] = useState<AnalyticsData | null>(null);
-  const [activeTab, setActiveTab] = useState<TabType>("overview");
+  const [activeTab, setActiveTab] = useState<TabType>(() => normalizeTab(tabParam));
 
   // Filter & Search states
   const [projectSearch, setProjectSearch] = useState("");
@@ -107,6 +155,23 @@ export default function AdminDashboardPage() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [sessionToken, setSessionToken] = useState<string | undefined>(undefined);
+
+  // Sync tab with URL query parameter
+  useEffect(() => {
+    if (tabParam) {
+      const matched = normalizeTab(tabParam);
+      setActiveTab(matched);
+    }
+  }, [tabParam]);
+
+  const handleTabChange = useCallback((tab: TabType) => {
+    setActiveTab(tab);
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      url.searchParams.set("tab", tab);
+      window.history.replaceState(null, "", url.toString());
+    }
+  }, []);
 
   useEffect(() => {
     let isMounted = true;
@@ -279,7 +344,6 @@ export default function AdminDashboardPage() {
 
   const { overview, timeSeries, usersDirectory, projectsDirectory, recentActivity } = data;
 
-
   const filteredProjects = projectsDirectory.filter((p) => {
     return (
       p.name.toLowerCase().includes(projectSearch.toLowerCase()) ||
@@ -289,10 +353,38 @@ export default function AdminDashboardPage() {
     );
   });
 
+  const ALL_TABS: Array<{
+    id: TabType;
+    label: string;
+    icon: React.ComponentType<{ className?: string }>;
+    badge?: string;
+    group: "Overview & Intelligence" | "Lead Operations" | "Platform & Business";
+  }> = [
+    // Group 1: Core Intelligence
+    { id: "overview", label: "Overview KPI", icon: Activity, group: "Overview & Intelligence" },
+    { id: "ai_health", label: "AI Health & Agents", icon: Sparkles, group: "Overview & Intelligence" },
+    { id: "boss_research", label: "Boss Research & Skills", icon: Compass, group: "Overview & Intelligence" },
+
+    // Group 2: Growth & Autonomous Pipeline (Phase 11-16)
+    { id: "leads", label: "Lead Command Center", icon: Target, badge: "Phase 15", group: "Lead Operations" },
+    { id: "automation", label: "Automation", icon: Zap, group: "Lead Operations" },
+    { id: "crm", label: "CRM", icon: MessageSquare, group: "Lead Operations" },
+    { id: "outreach", label: "Outreach", icon: Send, group: "Lead Operations" },
+    { id: "analytics", label: "Pipeline Analytics", icon: BarChart3, group: "Lead Operations" },
+    { id: "integrations", label: "Integrations", icon: KeyRound, badge: "Phase 16", group: "Lead Operations" },
+
+    // Group 3: Platform & Business Operations
+    { id: "usage", label: "Usage & Telemetry", icon: TrendingUp, group: "Platform & Business" },
+    { id: "revenue", label: "Revenue & Subscriptions", icon: DollarSign, group: "Platform & Business" },
+    { id: "users", label: `Users & Access (${overview.totalUsers})`, icon: Users, group: "Platform & Business" },
+    { id: "projects", label: `Projects (${overview.totalProjects})`, icon: Layers, group: "Platform & Business" },
+    { id: "activity", label: "Audit Stream", icon: ShieldAlert, group: "Platform & Business" },
+  ];
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 dark:bg-[#09090B] dark:text-zinc-100 transition-colors duration-200">
       {/* Top Admin Navbar */}
-      <header className="sticky top-0 z-30 border-b border-zinc-200/80 bg-white/80 backdrop-blur-xl dark:border-white/10 dark:bg-[#09090B]/80">
+      <header className="sticky top-0 z-40 border-b border-zinc-200/80 bg-white/90 backdrop-blur-xl dark:border-white/10 dark:bg-[#09090B]/90">
         <div className="mx-auto flex h-18 max-w-7xl items-center justify-between px-6">
           <div className="flex items-center gap-3">
             <Link href="/" className="flex items-center gap-2 group">
@@ -334,44 +426,51 @@ export default function AdminDashboardPage() {
             </Link>
           </div>
         </div>
+
+        {/* Global Canonical Navigation Tab Strip */}
+        <div className="border-t border-zinc-200/60 dark:border-white/5 bg-zinc-50/70 dark:bg-zinc-950/40 px-6 py-2">
+          <div className="mx-auto max-w-7xl flex items-center overflow-x-auto gap-1.5 no-scrollbar py-0.5">
+            {ALL_TABS.map((tab) => {
+              const TabIcon = tab.icon;
+              const isActive = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => handleTabChange(tab.id)}
+                  className={cn(
+                    "flex items-center gap-2 py-1.5 px-3 rounded-xl text-xs font-bold transition whitespace-nowrap border shrink-0",
+                    isActive
+                      ? "bg-violet-600 text-white border-violet-600 shadow-sm shadow-violet-600/30"
+                      : "text-zinc-600 hover:bg-zinc-200/70 dark:text-zinc-400 dark:hover:bg-zinc-800/70 border-transparent"
+                  )}
+                >
+                  <TabIcon className="h-3.5 w-3.5" />
+                  <span>{tab.label}</span>
+                  {tab.badge && (
+                    <span
+                      className={cn(
+                        "text-[9px] px-1.5 py-0.2 rounded-full font-black tracking-wide uppercase",
+                        isActive
+                          ? "bg-white/20 text-white"
+                          : "bg-violet-100 text-violet-700 dark:bg-violet-950/60 dark:text-violet-300"
+                      )}
+                    >
+                      {tab.badge}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
       </header>
 
       {/* Main Container */}
-      <main className="mx-auto max-w-7xl px-6 py-10 space-y-8">
-        {/* Navigation Tabs */}
-        <div className="flex overflow-x-auto gap-2 border-b border-zinc-200 pb-3 dark:border-white/10 text-xs font-bold no-scrollbar">
-          {[
-            { id: "overview" as TabType, label: "Overview KPI", icon: Activity },
-            { id: "ai_health" as TabType, label: "AI Health & Agents", icon: Sparkles },
-            { id: "boss_research" as TabType, label: "Boss Research & Skills", icon: Compass },
-            { id: "usage" as TabType, label: "Usage & Telemetry", icon: TrendingUp },
-            { id: "revenue" as TabType, label: "Revenue & Subscriptions", icon: DollarSign },
-            { id: "users" as TabType, label: `Users & Access (${overview.totalUsers})`, icon: Users },
-            { id: "projects" as TabType, label: `Projects (${overview.totalProjects})`, icon: Layers },
-            { id: "activity" as TabType, label: "Audit Stream", icon: ShieldAlert },
-          ].map((tab) => {
-            const TabIcon = tab.icon;
-            const isActive = activeTab === tab.id;
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => setActiveTab(tab.id)}
-                className={cn(
-                  "flex items-center gap-2 py-2 px-4 rounded-xl transition whitespace-nowrap",
-                  isActive
-                    ? "bg-violet-600 text-white shadow-md shadow-violet-600/20"
-                    : "text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-900"
-                )}
-              >
-                <TabIcon className="h-4 w-4" />
-                <span>{tab.label}</span>
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Tab 1: Overview KPIs */}
+      <main className="mx-auto max-w-7xl px-6 py-8 space-y-8">
+        {/* ======================================================== */}
+        {/* Tab 1: Overview KPIs                                      */}
+        {/* ======================================================== */}
         {activeTab === "overview" && (
           <div className="space-y-8">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
@@ -523,20 +622,92 @@ export default function AdminDashboardPage() {
                 </div>
               </div>
             </div>
+
+            {/* Quick Link to Lead Command Center */}
+            <div className="rounded-3xl border border-violet-500/20 bg-gradient-to-r from-violet-500/10 via-indigo-500/5 to-transparent p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div>
+                <div className="inline-flex items-center gap-2 rounded-full bg-violet-500/10 px-3 py-1 text-xs font-bold text-violet-600 dark:text-violet-400 mb-2">
+                  <Target className="h-3.5 w-3.5" />
+                  <span>Phase 15 Growth Engine</span>
+                </div>
+                <h3 className="text-lg font-bold text-zinc-900 dark:text-white">
+                  Autonomous Lead Pipeline & Command Center
+                </h3>
+                <p className="text-xs text-zinc-500 mt-1 max-w-xl">
+                  Manage local business discovery, Google Places enrichment, multi-agent evaluation, human review queues, and multi-channel outreach directly in this console.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => handleTabChange("leads")}
+                className="inline-flex items-center gap-2 rounded-xl bg-violet-600 px-5 py-2.5 text-xs font-bold text-white shadow-md shadow-violet-600/20 hover:bg-violet-500 transition shrink-0"
+              >
+                <span>Open Lead Command Center</span>
+                <ArrowRight className="h-4 w-4" />
+              </button>
+            </div>
           </div>
         )}
 
-        {/* Tab: AI Health & Agents */}
+        {/* ======================================================== */}
+        {/* Tab 2: AI Health & Agents                                 */}
+        {/* ======================================================== */}
         {activeTab === "ai_health" && (
-          <AdminIntelligenceCenter sessionToken={sessionToken} />
+          <AdminIntelligenceCenter sessionToken={sessionToken} onNavigateTab={(tab) => handleTabChange(tab as TabType)} />
         )}
 
-        {/* Tab: Boss Research & Skill Discovery */}
+        {/* ======================================================== */}
+        {/* Tab 3: Boss Research & Skill Discovery                    */}
+        {/* ======================================================== */}
         {activeTab === "boss_research" && (
           <AdminBossResearchPanel sessionToken={sessionToken} />
         )}
 
-        {/* Tab 2: Usage & Charts */}
+        {/* ======================================================== */}
+        {/* Tab 4: Lead Command Center (Phase 15 Full Integration)    */}
+        {/* ======================================================== */}
+        {activeTab === "leads" && (
+          <AdminLeadCommandCenter onNavigateTab={(tab) => handleTabChange(tab as TabType)} />
+        )}
+
+        {/* ======================================================== */}
+        {/* Tab 5: Automation Pipeline (Phase 13 Control Center)      */}
+        {/* ======================================================== */}
+        {activeTab === "automation" && (
+          <AdminAutomationPipeline onNavigateTab={(tab) => handleTabChange(tab as TabType)} />
+        )}
+
+        {/* ======================================================== */}
+        {/* Tab 6: CRM & Replies (Phase 12/15 Reply Intelligence)     */}
+        {/* ======================================================== */}
+        {activeTab === "crm" && (
+          <AdminCrmCenter onNavigateTab={(tab) => handleTabChange(tab as TabType)} />
+        )}
+
+        {/* ======================================================== */}
+        {/* Tab 7: Outreach Dispatch (Phase 11/12 Human Review Queue) */}
+        {/* ======================================================== */}
+        {activeTab === "outreach" && (
+          <AdminOutreachCenter onNavigateTab={(tab) => handleTabChange(tab as TabType)} />
+        )}
+
+        {/* ======================================================== */}
+        {/* Tab 8: Pipeline Analytics (Phase 14 Cost & Conversion)    */}
+        {/* ======================================================== */}
+        {activeTab === "analytics" && (
+          <AdminAnalyticsCenter onNavigateTab={(tab) => handleTabChange(tab as TabType)} />
+        )}
+
+        {/* ======================================================== */}
+        {/* Tab 9: Integrations Hub (Phase 16 Google Places & Gmail)  */}
+        {/* ======================================================== */}
+        {activeTab === "integrations" && (
+          <AdminIntegrationsCenter onNavigateTab={(tab) => handleTabChange(tab as TabType)} />
+        )}
+
+        {/* ======================================================== */}
+        {/* Tab 10: Usage & Telemetry                                 */}
+        {/* ======================================================== */}
         {activeTab === "usage" && (
           <div className="space-y-6">
             <div className="rounded-3xl border border-zinc-200 bg-white p-8 dark:border-white/10 dark:bg-zinc-900/60 space-y-6">
@@ -577,7 +748,9 @@ export default function AdminDashboardPage() {
           </div>
         )}
 
-        {/* Tab 3: Revenue */}
+        {/* ======================================================== */}
+        {/* Tab 11: Revenue & Subscriptions                           */}
+        {/* ======================================================== */}
         {activeTab === "revenue" && (
           <div className="space-y-6">
             <div className="rounded-3xl border border-zinc-200 bg-white p-8 dark:border-white/10 dark:bg-zinc-900/60 space-y-6">
@@ -621,12 +794,16 @@ export default function AdminDashboardPage() {
           </div>
         )}
 
-        {/* Tab 4: Users & Access Management */}
+        {/* ======================================================== */}
+        {/* Tab 12: Users & Access Management                         */}
+        {/* ======================================================== */}
         {activeTab === "users" && (
           <AdminUsersAccess sessionToken={sessionToken} currentAdminEmail={userEmail} />
         )}
 
-        {/* Tab 5: Projects Catalog */}
+        {/* ======================================================== */}
+        {/* Tab 13: Projects Catalog                                  */}
+        {/* ======================================================== */}
         {activeTab === "projects" && (
           <div className="space-y-4">
             <div className="relative w-full sm:w-80">
@@ -704,7 +881,9 @@ export default function AdminDashboardPage() {
           </div>
         )}
 
-        {/* Tab 6: Audit Stream */}
+        {/* ======================================================== */}
+        {/* Tab 14: Audit Stream                                      */}
+        {/* ======================================================== */}
         {activeTab === "activity" && (
           <div className="space-y-4">
             <h3 className="text-sm font-bold text-zinc-900 dark:text-white">
@@ -741,5 +920,22 @@ export default function AdminDashboardPage() {
         )}
       </main>
     </div>
+  );
+}
+
+export default function AdminDashboardPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 dark:bg-[#09090B] text-zinc-600 dark:text-zinc-400">
+          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-tr from-blue-600 via-violet-600 to-indigo-600 text-white shadow-lg animate-pulse mb-3">
+            <Sparkles className="h-6 w-6" />
+          </div>
+          <p className="text-sm font-semibold">Loading Admin Console...</p>
+        </div>
+      }
+    >
+      <AdminDashboardContent />
+    </Suspense>
   );
 }

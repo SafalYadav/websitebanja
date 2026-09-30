@@ -20,17 +20,17 @@ export async function GET(req: Request) {
   const error = url.searchParams.get("error");
 
   const baseUrl = `${url.protocol}//${url.host}`;
-  const redirectTarget = `${baseUrl}/admin/integrations`;
+  const redirectTarget = `${baseUrl}/admin?tab=integrations`;
 
   if (error) {
     return NextResponse.redirect(
-      `${redirectTarget}?error=${encodeURIComponent(`Google OAuth denied: ${error}`)}`
+      `${redirectTarget}&error=${encodeURIComponent(`Google OAuth denied: ${error}`)}`
     );
   }
 
   if (!code || !state) {
     return NextResponse.redirect(
-      `${redirectTarget}?error=${encodeURIComponent("Missing authorization code or state parameter.")}`
+      `${redirectTarget}&error=${encodeURIComponent("Missing authorization code or state parameter.")}`
     );
   }
 
@@ -38,7 +38,7 @@ export async function GET(req: Request) {
   const isValidState = GmailOAuthManager.verifyState(state);
   if (!isValidState) {
     return NextResponse.redirect(
-      `${redirectTarget}?error=${encodeURIComponent("Invalid or expired OAuth CSRF state.")}`
+      `${redirectTarget}&error=${encodeURIComponent("Invalid or expired OAuth CSRF state.")}`
     );
   }
 
@@ -46,9 +46,9 @@ export async function GET(req: Request) {
   const exchangeResult = await GmailOAuthManager.exchangeCode(code);
   if (!exchangeResult.success) {
     return NextResponse.redirect(
-      `${redirectTarget}?error=${encodeURIComponent(exchangeResult.error || "Token exchange failed.")}`
+      `${redirectTarget}&error=${encodeURIComponent(exchangeResult.error || "Token exchange failed.")}`
     );
   }
 
-  return NextResponse.redirect(`${redirectTarget}?status=connected&provider=gmail`);
+  return NextResponse.redirect(`${redirectTarget}&status=connected&provider=gmail`);
 }
