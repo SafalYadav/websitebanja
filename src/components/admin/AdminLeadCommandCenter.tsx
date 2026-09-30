@@ -367,6 +367,78 @@ export default function AdminLeadCommandCenter({ sessionToken, onNavigateTab }: 
     }
   };
 
+  const handleApproveOutreach = async (outreachId: string) => {
+    setActionLoading(true);
+    try {
+      const headers = await getAuthHeaders();
+      const res = await fetch("/api/automation/outreach", {
+        method: "PATCH",
+        headers,
+        body: JSON.stringify({ outreachId, status: "approved" }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setSuccessMessage("Outreach draft approved! Ready for sending.");
+        fetchLeads(true);
+        if (activeLeadId) openLeadDetail(activeLeadId);
+      } else {
+        setErrorMessage(data.error?.message || "Failed to approve outreach draft");
+      }
+    } catch (err: any) {
+      setErrorMessage(err.message || "Failed to approve outreach draft");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleSendLiveGmail = async (outreachId: string) => {
+    setActionLoading(true);
+    try {
+      const headers = await getAuthHeaders();
+      const res = await fetch("/api/integrations/gmail/send", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ outreachId, forceSend: true }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setSuccessMessage(`Email dispatched via Gmail API! Message ID: ${data.messageId || "Delivered"}`);
+        fetchLeads(true);
+        if (activeLeadId) openLeadDetail(activeLeadId);
+      } else {
+        setErrorMessage(data.error?.message || data.error || "Failed to dispatch email via Gmail API");
+      }
+    } catch (err: any) {
+      setErrorMessage(err.message || "Failed to dispatch email via Gmail API");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleSimulateSend = async (outreachId: string) => {
+    setActionLoading(true);
+    try {
+      const headers = await getAuthHeaders();
+      const res = await fetch("/api/automation/outreach", {
+        method: "PATCH",
+        headers,
+        body: JSON.stringify({ outreachId, status: "simulated_sent" }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setSuccessMessage("Simulated send recorded!");
+        fetchLeads(true);
+        if (activeLeadId) openLeadDetail(activeLeadId);
+      } else {
+        setErrorMessage(data.error?.message || "Failed to simulate send");
+      }
+    } catch (err: any) {
+      setErrorMessage(err.message || "Failed to simulate send");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   // Bulk Operations
   const toggleSelectAll = () => {
     if (selectedLeadIds.size === leads.length) {
@@ -425,7 +497,10 @@ export default function AdminLeadCommandCenter({ sessionToken, onNavigateTab }: 
                 <h1 className="text-xl font-bold tracking-tight text-white">Lead Command Center</h1>
                 <span className="text-[10px] font-mono px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 flex items-center gap-1.5 font-semibold">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                  Simulation Mode (No Real Send)
+                  Controlled Live Mode
+                </span>
+                <span className="text-[10px] font-mono px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/30 flex items-center gap-1 font-semibold">
+                  WhatsApp: Disabled (Manual contact required)
                 </span>
               </div>
               <p className="text-xs text-slate-400 mt-0.5">
@@ -744,13 +819,13 @@ export default function AdminLeadCommandCenter({ sessionToken, onNavigateTab }: 
             </div>
             <div className="flex items-center space-x-2">
               <button
-                onClick={() => alert(`Local simulation: Batch retry initiated for ${selectedLeadIds.size} leads.`)}
+                onClick={() => alert(`Batch retry initiated for ${selectedLeadIds.size} leads.`)}
                 className="px-3 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs border border-slate-700"
               >
                 Retry Selected
               </button>
               <button
-                onClick={() => alert(`Local simulation: Batch paused for ${selectedLeadIds.size} leads.`)}
+                onClick={() => alert(`Batch paused for ${selectedLeadIds.size} leads.`)}
                 className="px-3 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs border border-slate-700"
               >
                 Pause Selected
@@ -1051,9 +1126,9 @@ export default function AdminLeadCommandCenter({ sessionToken, onNavigateTab }: 
             <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between">
               <div>
                 <span className="font-semibold text-white block">WhatsApp Cloud API</span>
-                <span className="text-[10px] text-slate-400 font-mono">Dedicated Business Number</span>
+                <span className="text-[10px] text-amber-400 font-mono">WhatsApp: Disabled — Manual contact required</span>
               </div>
-              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700 font-semibold">
+              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/30 font-semibold">
                 DISABLED
               </span>
             </div>
@@ -1304,6 +1379,44 @@ export default function AdminLeadCommandCenter({ sessionToken, onNavigateTab }: 
                               {leadDetail.outreach.message}
                             </div>
                           </div>
+
+                          {leadDetail.outreach.outreachId && (
+                            <div className="pt-3 border-t border-slate-900 flex flex-wrap items-center gap-2">
+                              {(leadDetail.outreach.status === "drafted" || leadDetail.outreach.status === "review") && (
+                                <button
+                                  onClick={() => handleApproveOutreach(leadDetail.outreach.outreachId!)}
+                                  disabled={actionLoading}
+                                  className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-sm transition disabled:opacity-50"
+                                >
+                                  Approve Outreach Draft
+                                </button>
+                              )}
+                              {leadDetail.outreach.status === "approved" && (
+                                <>
+                                  <button
+                                    onClick={() => handleSendLiveGmail(leadDetail.outreach.outreachId!)}
+                                    disabled={actionLoading}
+                                    className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-sm transition flex items-center gap-1.5 disabled:opacity-50"
+                                  >
+                                    <Send className="w-3.5 h-3.5" /> Send Live via Gmail
+                                  </button>
+                                  <button
+                                    onClick={() => handleSimulateSend(leadDetail.outreach.outreachId!)}
+                                    disabled={actionLoading}
+                                    className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition"
+                                  >
+                                    Simulate Send
+                                  </button>
+                                </>
+                              )}
+                              {(leadDetail.outreach.status === "sent" || leadDetail.outreach.status === "simulated_sent") && (
+                                <div className="text-emerald-400 font-semibold flex items-center gap-1 text-[11px]">
+                                  <CheckCircle2 className="w-3.5 h-3.5" />
+                                  <span>{leadDetail.outreach.status === "sent" ? "Delivered via Gmail API" : "Simulated Dispatch Recorded"}</span>
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </div>
                       ) : (
                         <div className="p-8 text-center text-slate-500 rounded-xl bg-slate-950 border border-slate-800">

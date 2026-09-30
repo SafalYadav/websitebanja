@@ -79,6 +79,7 @@ export default function AdminOutreachCenter({ sessionToken, onNavigateTab }: Adm
   const [editSubject, setEditSubject] = useState("");
   const [editMessage, setEditMessage] = useState("");
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
+  const [sendingLive, setSendingLive] = useState(false);
 
   const fetchRecords = useCallback(async () => {
     setLoading(true);
@@ -168,6 +169,35 @@ export default function AdminOutreachCenter({ sessionToken, onNavigateTab }: Adm
       fetchRecords();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Status update failed");
+    }
+  };
+  
+  const handleSendLiveGmail = async (outreachId: string) => {
+    setActionSuccess(null);
+    setError(null);
+    setSendingLive(true);
+    try {
+      const headers = await getAuthHeaders();
+      const res = await fetch("/api/integrations/gmail/send", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ outreachId, forceSend: true }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error?.message || data.error || "Failed to dispatch email via Gmail API");
+      }
+
+      setActionSuccess(`Email dispatched via Gmail API! Message ID: ${data.messageId || "Delivered"}`);
+      if (selectedRecord && selectedRecord.outreachId === outreachId) {
+        setSelectedRecord({ ...selectedRecord, status: "sent" as any, externalMessageId: data.messageId });
+      }
+      fetchRecords();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Live send failed");
+    } finally {
+      setSendingLive(false);
     }
   };
 
@@ -282,15 +312,13 @@ export default function AdminOutreachCenter({ sessionToken, onNavigateTab }: Adm
           </div>
         </div>
 
-        {/* Local Hard Lock Notice */}
-        <div className="bg-amber-950/30 border border-amber-800/60 rounded-xl p-4 flex items-start gap-3">
-          <ShieldAlert className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+        {/* Controlled Live Send Guard Notice */}
+        <div className="bg-indigo-950/30 border border-indigo-800/60 rounded-xl p-4 flex items-start gap-3">
+          <ShieldAlert className="w-5 h-5 text-indigo-400 shrink-0 mt-0.5" />
           <div className="text-sm">
-            <span className="font-semibold text-amber-200">Simulation Guard Active:</span>{" "}
-            <span className="text-amber-300/90">
-              External sending is strictly guarded. All approved messages are dispatched exclusively to the sandboxed simulation outbox (
-              <code className="text-xs bg-amber-950/80 px-1.5 py-0.5 rounded border border-amber-800/80">scratch/outreach/</code>
-              ). Zero live emails, WhatsApp messages, or DMs are dispatched without live clearance.
+            <span className="font-semibold text-indigo-200">Controlled Live Mode Active:</span>{" "}
+            <span className="text-indigo-300/90">
+              Outbound sending is strictly guarded by mandatory human review and approval gates. Approved email drafts dispatch via production Gmail API. WhatsApp remains disabled (manual contact required).
             </span>
           </div>
         </div>
@@ -633,12 +661,22 @@ export default function AdminOutreachCenter({ sessionToken, onNavigateTab }: Adm
                   )}
 
                   {selectedRecord.status === "approved" && (
-                    <button
-                      onClick={() => handleUpdateStatus(selectedRecord.outreachId, "simulated_sent")}
-                      className="px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-neutral-950 text-xs font-medium inline-flex items-center gap-1"
-                    >
-                      <Send className="w-3.5 h-3.5" /> Simulate Send
-                    </button>
+                    <>
+                      <button
+                        onClick={() => handleSendLiveGmail(selectedRecord.outreachId)}
+                        disabled={sendingLive}
+                        className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold inline-flex items-center gap-1.5 shadow-sm transition disabled:opacity-50"
+                      >
+                        <Send className="w-3.5 h-3.5" />
+                        <span>{sendingLive ? "Sending via Gmail..." : "Send Live via Gmail"}</span>
+                      </button>
+                      <button
+                        onClick={() => handleUpdateStatus(selectedRecord.outreachId, "simulated_sent")}
+                        className="px-3 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-300 text-xs font-medium inline-flex items-center gap-1"
+                      >
+                        Simulate Send
+                      </button>
+                    </>
                   )}
 
                   <button

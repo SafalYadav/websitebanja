@@ -101,6 +101,9 @@ jobs:
           ADMIN_EMAILS: ${{ secrets.ADMIN_EMAILS }}
           ADMIN_USER_IDS: ${{ secrets.ADMIN_USER_IDS }}
           NEXT_PUBLIC_APP_URL: "https://websitebanja.com"
+          GMAIL_REDIRECT_URI: "https://websitebanja.com/api/integrations/gmail/callback"
+          WEBSITEBANJA_RUNTIME_MODE: "production"
+          COMMUNICATION_DRY_RUN: "false"
           IMAGE_TAG: ${{ env.ACR_SERVER }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
         run: |
           node scripts/configure_azure_razorpay.mjs

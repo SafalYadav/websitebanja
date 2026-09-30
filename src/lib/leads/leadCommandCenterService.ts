@@ -163,7 +163,7 @@ export class LeadCommandCenterService {
         errorMessage = runInfo.error;
       } else {
         // Fallback inference from existing artifacts
-        if (outreach && outreach.status === "simulated_sent") {
+        if (outreach && (outreach.status === "simulated_sent" || (outreach as any).status === "sent")) {
           pipelineStage = "WAITING_FOR_REPLY";
         } else if (outreach && (outreach.status === "approved" || outreach.status === "review")) {
           pipelineStage = "HUMAN_APPROVAL";
@@ -196,7 +196,7 @@ export class LeadCommandCenterService {
 
       // CRM Status
       let crmStatus = "DISCOVERED" as CommandCenterLead["crmStatus"];
-      if (outreach && outreach.status === "simulated_sent") {
+      if (outreach && (outreach.status === "simulated_sent" || (outreach as any).status === "sent")) {
         crmStatus = "OUTREACH_SENT";
       } else if (preview) {
         crmStatus = "PREVIEW_READY";

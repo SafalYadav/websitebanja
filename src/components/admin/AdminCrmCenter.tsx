@@ -378,13 +378,13 @@ export default function AdminCrmCenter({ sessionToken, onNavigateTab }: AdminCrm
           </div>
         </div>
 
-        {/* Local Hard Lock Banner */}
-        <div className="bg-amber-950/30 border border-amber-800/60 rounded-xl p-3.5 flex items-start gap-3">
-          <ShieldAlert className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+        {/* Controlled Live Mode Banner */}
+        <div className="bg-indigo-950/30 border border-indigo-800/60 rounded-xl p-3.5 flex items-start gap-3">
+          <ShieldAlert className="w-5 h-5 text-indigo-400 shrink-0 mt-0.5" />
           <div className="text-xs">
-            <span className="font-semibold text-amber-200">Simulation Mode Active:</span>{" "}
-            <span className="text-amber-300/90">
-              External messaging networks are sandboxed. Incoming customer responses and status changes are simulated locally via deterministic heuristics and AI models. Zero live customer contacts are ever made.
+            <span className="font-semibold text-indigo-200">Controlled Live Mode:</span>{" "}
+            <span className="text-indigo-300/90">
+              Real discovery and Gmail are enabled. Outbound messages require explicit human approval before send. WhatsApp remains disabled (manual contact required).
             </span>
           </div>
         </div>

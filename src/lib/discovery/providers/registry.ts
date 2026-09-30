@@ -24,6 +24,18 @@ class ProviderRegistry {
 
   getProvider(providerId?: string): BusinessDiscoveryProvider {
     if (!providerId) {
+      // In production or when GOOGLE_PLACES_API_KEY is configured and valid, prefer Google Places
+      const apiKey = process.env.GOOGLE_PLACES_API_KEY?.trim();
+      const isPlacesConfigured = Boolean(
+        apiKey &&
+        apiKey.length > 5 &&
+        !apiKey.includes("<") &&
+        !apiKey.includes("your-api-key") &&
+        apiKey !== "placeholder"
+      );
+      if (isPlacesConfigured) {
+        return this.providers.get("google_places")!;
+      }
       return this.providers.get("local_deterministic")!;
     }
 

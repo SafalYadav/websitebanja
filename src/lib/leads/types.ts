@@ -69,7 +69,7 @@ export interface CommandCenterLead {
   previewId?: string;
   previewUrl?: string;
 
-  outreachStatus: "none" | "drafted" | "review" | "approved" | "rejected" | "simulated_sent";
+  outreachStatus: "none" | "drafted" | "review" | "approved" | "rejected" | "simulated_sent" | "sent";
   outreachId?: string;
   outreachChannel?: OutreachChannel;
 
@@ -184,7 +184,7 @@ export interface LeadDetailView {
   outreach: {
     outreachId?: string;
     channel?: OutreachChannel;
-    status: "none" | "drafted" | "review" | "approved" | "rejected" | "simulated_sent";
+    status: "none" | "drafted" | "review" | "approved" | "rejected" | "simulated_sent" | "sent";
     subject?: string;
     message?: string;
     personalizationFieldsUsed?: string[];

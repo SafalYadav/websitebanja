@@ -10,7 +10,7 @@ const googlePlacesApiKey = process.env.GOOGLE_PLACES_API_KEY;
 const gmailClientId = process.env.GMAIL_CLIENT_ID || "772812359409-okec2ndn9foc7cu514nos6c559jqpp1i.apps.googleusercontent.com";
 const gmailClientSecret = process.env.GMAIL_CLIENT_SECRET;
 const gmailRefreshToken = process.env.GMAIL_REFRESH_TOKEN;
-const gmailRedirectUri = process.env.GMAIL_REDIRECT_URI || "https://websitebanja-app.salmondesert-9c3e03bc.centralindia.azurecontainerapps.io/api/integrations/gmail/callback";
+const gmailRedirectUri = process.env.GMAIL_REDIRECT_URI || "https://websitebanja.com/api/integrations/gmail/callback";
 const gmailSenderEmail = process.env.GMAIL_SENDER_EMAIL || "websitebanja@gmail.com";
 const automationSecret = process.env.WEBSITEBANJA_AUTOMATION_SECRET;
 const defaultAdminEmails = "websitebanja@gmail.com,safalyadav0001@gmail.com,safalyadav07@gmail.com,safalyadavvv@gmail.com,safal@websitebanja.com,founder@websitebanja.com,admin@websitebanja.com,lead-admin@websitebanja.com";
@@ -177,6 +177,7 @@ async function main() {
   envVarsToSet.push(`NEXT_PUBLIC_APP_URL=${nextPublicAppUrl}`);
   envVarsToSet.push(`AUTO_SEND_ENABLED=false`);
   envVarsToSet.push(`COMMUNICATION_DRY_RUN=false`);
+  envVarsToSet.push(`WEBSITEBANJA_RUNTIME_MODE=production`);
 
   if (envVarsToSet.length > 0) {
     updateCmd += ` --set-env-vars ${envVarsToSet.map((v) => `"${v}"`).join(" ")}`;
@@ -246,6 +247,7 @@ async function main() {
           envMap.set("NEXT_PUBLIC_APP_URL", { name: "NEXT_PUBLIC_APP_URL", value: nextPublicAppUrl });
           envMap.set("AUTO_SEND_ENABLED", { name: "AUTO_SEND_ENABLED", value: "false" });
           envMap.set("COMMUNICATION_DRY_RUN", { name: "COMMUNICATION_DRY_RUN", value: "false" });
+          envMap.set("WEBSITEBANJA_RUNTIME_MODE", { name: "WEBSITEBANJA_RUNTIME_MODE", value: "production" });
 
           container.env = Array.from(envMap.values());
 

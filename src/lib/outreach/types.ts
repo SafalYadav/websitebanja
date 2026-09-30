@@ -73,6 +73,9 @@ export interface OutreachRecord {
   approvedAt?: string;
   rejectedAt?: string;
   simulatedAt?: string;
+  sentAt?: string;
+  externalMessageId?: string;
+  threadId?: string;
 
   userId?: string;
   handoffPhase: "phase12_reply_intelligence_crm";

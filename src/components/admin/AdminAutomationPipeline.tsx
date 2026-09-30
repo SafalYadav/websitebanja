@@ -313,10 +313,14 @@ export default function AdminAutomationPipeline({ sessionToken, onNavigateTab }:
 
   return (
     <div className="space-y-6 text-zinc-900 dark:text-zinc-100">
-      {/* Top Warning Banner */}
-      <div className="bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/20 px-4 py-2 text-xs font-semibold rounded-2xl text-center tracking-wide flex items-center justify-center gap-2 shadow-xs">
-        <span className="inline-block w-2 h-2 rounded-full bg-amber-500"></span>
-        Simulation Mode: All discovery, previews, outreach & replies are sandboxed (No Real Send)
+      {/* Top Status Banner */}
+      <div className="bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border border-indigo-500/20 px-4 py-2 text-xs font-semibold rounded-2xl text-center tracking-wide flex flex-wrap items-center justify-center gap-2 shadow-xs">
+        <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+        <span className="font-bold">Controlled Live Mode</span>
+        <span className="text-zinc-400 dark:text-zinc-500">•</span>
+        <span>Real discovery, audits, previews and Gmail are enabled. Outbound communication requires explicit approval.</span>
+        <span className="text-zinc-400 dark:text-zinc-500">•</span>
+        <span className="text-amber-600 dark:text-amber-400 font-medium">WhatsApp: Disabled — Manual contact required</span>
       </div>
 
       {/* Toolbar */}

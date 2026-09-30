@@ -76,10 +76,15 @@ export class GmailOAuthManager {
       throw new Error("GMAIL_CLIENT_ID or GOOGLE_CLIENT_ID is not configured in local environment.");
     }
 
+    const defaultRedirectUri =
+      process.env.NEXT_PUBLIC_APP_URL
+        ? `${process.env.NEXT_PUBLIC_APP_URL.replace(/\/+$/, "")}/api/integrations/gmail/callback`
+        : (process.env.NODE_ENV === "production" ? "https://websitebanja.com/api/integrations/gmail/callback" : "http://localhost:3000/api/integrations/gmail/callback");
+
     const redirectUri =
       redirectUriOverride ||
       (process.env.GMAIL_REDIRECT_URI || process.env.GOOGLE_REDIRECT_URI)?.trim() ||
-      "http://localhost:3000/api/integrations/gmail/callback";
+      defaultRedirectUri;
 
     const state = crypto.randomBytes(24).toString("hex");
 
@@ -135,10 +140,15 @@ export class GmailOAuthManager {
   static async exchangeCode(code: string, redirectUriOverride?: string): Promise<{ success: boolean; error?: string }> {
     const clientId = (process.env.GMAIL_CLIENT_ID || process.env.GOOGLE_CLIENT_ID)?.trim();
     const clientSecret = (process.env.GMAIL_CLIENT_SECRET || process.env.GOOGLE_CLIENT_SECRET)?.trim();
+    const defaultRedirectUri =
+      process.env.NEXT_PUBLIC_APP_URL
+        ? `${process.env.NEXT_PUBLIC_APP_URL.replace(/\/+$/, "")}/api/integrations/gmail/callback`
+        : (process.env.NODE_ENV === "production" ? "https://websitebanja.com/api/integrations/gmail/callback" : "http://localhost:3000/api/integrations/gmail/callback");
+
     const redirectUri =
       redirectUriOverride ||
       (process.env.GMAIL_REDIRECT_URI || process.env.GOOGLE_REDIRECT_URI)?.trim() ||
-      "http://localhost:3000/api/integrations/gmail/callback";
+      defaultRedirectUri;
 
     if (!clientId || !clientSecret) {
       return { success: false, error: "GMAIL_CLIENT_ID or GMAIL_CLIENT_SECRET is missing." };
