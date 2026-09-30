@@ -350,7 +350,7 @@ async function syncAdminRoleToDatabase(userId?: string, email?: string): Promise
  */
 export async function verifyAdminAuth(req: Request): Promise<AdminAuthResult> {
   try {
-    const authHeader = req.headers.get("Authorization");
+    const authHeader = req.headers.get("authorization") || req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
       return { isAdmin: false, error: "Unauthorized: Missing Bearer authorization token." };
     }
