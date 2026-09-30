@@ -7,7 +7,7 @@ import { FollowUpQueue } from "@/lib/automation/followUpQueue";
 import { sanitizeErrorOutput } from "@/lib/ai/router/modelConfig";
 
 export async function POST(req: Request) {
-  if (!isAuthorized(req)) {
+  if (!(await isAuthorized(req))) {
     return NextResponse.json(
       {
         success: false,

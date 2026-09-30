@@ -7,7 +7,7 @@ import { PipelineOrchestrator } from "@/lib/automation/pipelineOrchestrator";
 import { sanitizeErrorOutput } from "@/lib/ai/router/modelConfig";
 
 export async function POST(req: Request) {
-  if (!isAuthorized(req)) {
+  if (!(await isAuthorized(req))) {
     return NextResponse.json(
       {
         success: false,

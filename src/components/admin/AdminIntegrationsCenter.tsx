@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
+import { supabase } from "@/lib/supabase";
 import {
   ShieldCheck,
   CheckCircle2,
@@ -54,19 +55,39 @@ interface IntegrationStatusData {
 }
 
 export interface AdminIntegrationsCenterProps {
+  sessionToken?: string;
   onNavigateTab?: (tab: string) => void;
 }
 
-export default function AdminIntegrationsCenter({ onNavigateTab }: AdminIntegrationsCenterProps = {}) {
+export default function AdminIntegrationsCenter({ sessionToken, onNavigateTab }: AdminIntegrationsCenterProps = {}) {
   const [data, setData] = useState<IntegrationStatusData | null>(null);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [syncFeedback, setSyncFeedback] = useState<string | null>(null);
 
-  const fetchStatus = async () => {
+  // Helper to obtain fresh Bearer token
+  const getAuthHeaders = useCallback(async (): Promise<Record<string, string>> => {
+    let token = sessionToken;
+    if (!token) {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        token = session?.access_token;
+      } catch {
+        // Fallback
+      }
+    }
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
+    return headers;
+  }, [sessionToken]);
+
+  const fetchStatus = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/integrations/status");
+      const headers = await getAuthHeaders();
+      const res = await fetch("/api/integrations/status", { headers });
       if (res.ok) {
         const json = await res.json();
         setData(json);
@@ -76,17 +97,18 @@ export default function AdminIntegrationsCenter({ onNavigateTab }: AdminIntegrat
     } finally {
       setLoading(false);
     }
-  };
+  }, [getAuthHeaders]);
 
   useEffect(() => {
     fetchStatus();
-  }, []);
+  }, [fetchStatus]);
 
   const handleSyncReplies = async () => {
     setSyncing(true);
     setSyncFeedback(null);
     try {
-      const res = await fetch("/api/integrations/gmail/sync", { method: "POST" });
+      const headers = await getAuthHeaders();
+      const res = await fetch("/api/integrations/gmail/sync", { method: "POST", headers });
       const json = await res.json();
       if (json.success) {
         setSyncFeedback(
@@ -116,7 +138,7 @@ export default function AdminIntegrationsCenter({ onNavigateTab }: AdminIntegrat
               <div className="flex items-center space-x-2">
                 <h1 className="text-xl font-bold tracking-tight text-white">External Integrations Hub</h1>
                 <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 font-semibold">
-                  PHASE 16 LIVE
+                  LIVE INTEGRATIONS
                 </span>
               </div>
               <p className="text-xs text-slate-400">
@@ -484,8 +506,8 @@ export default function AdminIntegrationsCenter({ onNavigateTab }: AdminIntegrat
                 </tr>
                 <tr>
                   <td className="p-3 text-indigo-300 font-semibold">GOOGLE_REDIRECT_URI</td>
-                  <td className="p-3 text-slate-400">http://localhost:3000/api/integrations/gmail/callback</td>
-                  <td className="p-3 text-emerald-400">Default Built-in</td>
+                  <td className="p-3 text-slate-400">https://websitebanja.com/api/integrations/gmail/callback</td>
+                  <td className="p-3 text-emerald-400">Production Configured</td>
                   <td className="p-3 text-slate-300 font-sans">Authorized redirect URI in Google OAuth settings</td>
                 </tr>
                 <tr>

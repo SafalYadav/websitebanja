@@ -8,7 +8,7 @@ import type { TimeFilter } from "@/lib/analytics/types";
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
-  if (!isAuthorized(req)) {
+  if (!(await isAuthorized(req))) {
     return NextResponse.json(
       { error: "Unauthorized: Invalid or missing automation credentials" },
       { status: 401 }

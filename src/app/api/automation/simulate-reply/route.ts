@@ -24,7 +24,7 @@ export async function POST(req: Request) {
   const requestId = `req_p12_sim_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
 
   // 1. Authentication
-  if (!isAuthorized(req)) {
+  if (!(await isAuthorized(req))) {
     emitAgentEvent({
       event: "automation.auth_failed",
       agent: "n8n_automation",

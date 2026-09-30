@@ -5,6 +5,7 @@
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
+import { supabase } from "@/lib/supabase";
 import type {
   PipelineRun,
   PipelineStatus,
@@ -13,16 +14,35 @@ import type {
 } from "@/lib/automation/pipelineTypes";
 
 export interface AdminAutomationPipelineProps {
+  sessionToken?: string;
   onNavigateTab?: (tab: string) => void;
 }
 
-export default function AdminAutomationPipeline({ onNavigateTab }: AdminAutomationPipelineProps = {}) {
+export default function AdminAutomationPipeline({ sessionToken, onNavigateTab }: AdminAutomationPipelineProps = {}) {
   const [runs, setRuns] = useState<PipelineRun[]>([]);
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+  // Helper to obtain fresh Bearer token
+  const getAuthHeaders = async (): Promise<Record<string, string>> => {
+    let token = sessionToken;
+    if (!token) {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        token = session?.access_token;
+      } catch {
+        // Fallback
+      }
+    }
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
+    return headers;
+  };
 
   // Run creation modal state
   const [showRunModal, setShowRunModal] = useState(false);
@@ -44,7 +64,8 @@ export default function AdminAutomationPipeline({ onNavigateTab }: AdminAutomati
     setLoading(true);
     setErrorMessage(null);
     try {
-      const res = await fetch("/api/automation/pipeline");
+      const headers = await getAuthHeaders();
+      const res = await fetch("/api/automation/pipeline", { headers });
       const data = await res.json();
       if (data.success) {
         setRuns(data.runs || []);
@@ -73,9 +94,10 @@ export default function AdminAutomationPipeline({ onNavigateTab }: AdminAutomati
     setErrorMessage(null);
     setSuccessMessage(null);
     try {
+      const headers = await getAuthHeaders();
       const res = await fetch("/api/automation/pipeline/run", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({
           criteria: {
             industry,
@@ -107,9 +129,10 @@ export default function AdminAutomationPipeline({ onNavigateTab }: AdminAutomati
   const handlePauseRun = async (runId: string) => {
     setActionLoading(true);
     try {
+      const headers = await getAuthHeaders();
       const res = await fetch("/api/automation/pipeline/pause", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({ runId }),
       });
       const data = await res.json();
@@ -127,9 +150,10 @@ export default function AdminAutomationPipeline({ onNavigateTab }: AdminAutomati
   const handleResumeRun = async (runId: string) => {
     setActionLoading(true);
     try {
+      const headers = await getAuthHeaders();
       const res = await fetch("/api/automation/pipeline/resume", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({ runId }),
       });
       const data = await res.json();
@@ -147,9 +171,10 @@ export default function AdminAutomationPipeline({ onNavigateTab }: AdminAutomati
   const handleCancelRun = async (runId: string) => {
     setActionLoading(true);
     try {
+      const headers = await getAuthHeaders();
       const res = await fetch("/api/automation/pipeline/cancel", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({ runId, reason: "Cancelled via admin dashboard" }),
       });
       const data = await res.json();
@@ -167,9 +192,10 @@ export default function AdminAutomationPipeline({ onNavigateTab }: AdminAutomati
   const handleRetryRun = async (runId: string) => {
     setActionLoading(true);
     try {
+      const headers = await getAuthHeaders();
       const res = await fetch(`/api/automation/pipeline/${runId}/retry`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
       });
       const data = await res.json();
       if (data.success) {
@@ -186,9 +212,10 @@ export default function AdminAutomationPipeline({ onNavigateTab }: AdminAutomati
   const handleAdvanceClock = async () => {
     setActionLoading(true);
     try {
+      const headers = await getAuthHeaders();
       const res = await fetch("/api/automation/pipeline/advance-clock", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({ days: clockDays }),
       });
       const data = await res.json();
@@ -210,9 +237,10 @@ export default function AdminAutomationPipeline({ onNavigateTab }: AdminAutomati
     if (!selectedRunId || !replyLeadId) return;
     setActionLoading(true);
     try {
+      const headers = await getAuthHeaders();
       const res = await fetch(`/api/automation/pipeline/${selectedRunId}/simulate-reply`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({
           leadId: replyLeadId,
           messageText: replyText,
@@ -286,9 +314,9 @@ export default function AdminAutomationPipeline({ onNavigateTab }: AdminAutomati
   return (
     <div className="space-y-6 text-zinc-900 dark:text-zinc-100">
       {/* Top Warning Banner */}
-      <div className="bg-amber-500 text-slate-950 px-4 py-2 text-xs font-bold rounded-2xl text-center tracking-wide flex items-center justify-center gap-2 shadow-xs">
-        <span className="inline-block w-2 h-2 rounded-full bg-slate-950 animate-ping"></span>
-        PHASE 13 LOCAL ENVIRONMENT: ALL DISCOVERY, PREVIEWS, OUTREACH & REPLIES ARE SIMULATED LOCALLY (NO REAL SEND)
+      <div className="bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/20 px-4 py-2 text-xs font-semibold rounded-2xl text-center tracking-wide flex items-center justify-center gap-2 shadow-xs">
+        <span className="inline-block w-2 h-2 rounded-full bg-amber-500"></span>
+        Simulation Mode: All discovery, previews, outreach & replies are sandboxed (No Real Send)
       </div>
 
       {/* Toolbar */}
@@ -299,8 +327,8 @@ export default function AdminAutomationPipeline({ onNavigateTab }: AdminAutomati
               <span className="text-xl font-bold bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 bg-clip-text text-transparent">
                 WebsiteBanja
               </span>
-              <span className="text-xs px-2 py-0.5 rounded-full font-mono bg-indigo-50 text-indigo-700 border border-indigo-200">
-                Phase 13: Autonomous Pipeline
+              <span className="text-xs px-2.5 py-0.5 rounded-full font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200 dark:bg-indigo-950/60 dark:text-indigo-300 dark:border-indigo-800">
+                Autonomous Lead Pipeline
               </span>
             </div>
             <p className="text-xs text-zinc-500 mt-1">
@@ -455,33 +483,33 @@ export default function AdminAutomationPipeline({ onNavigateTab }: AdminAutomati
           </div>
 
           <div className="grid grid-cols-2 md:grid-cols-7 gap-2 text-center text-xs">
-            <div className="p-3 rounded-lg border border-indigo-200 bg-indigo-50/50">
-              <div className="font-bold text-indigo-700">1. Discovery</div>
-              <p className="text-[10px] text-zinc-500 mt-1">Phase 8</p>
+            <div className="p-3 rounded-lg border border-indigo-200 bg-indigo-50/50 dark:bg-indigo-950/20 dark:border-indigo-800/40">
+              <div className="font-bold text-indigo-700 dark:text-indigo-400">1. Discovery</div>
+              <p className="text-[10px] text-zinc-500 mt-1">Lead Crawl</p>
             </div>
-            <div className="p-3 rounded-lg border border-purple-200 bg-purple-50/50">
-              <div className="font-bold text-purple-700">2. Research/Audit</div>
-              <p className="text-[10px] text-zinc-500 mt-1">Phase 9</p>
+            <div className="p-3 rounded-lg border border-purple-200 bg-purple-50/50 dark:bg-purple-950/20 dark:border-purple-800/40">
+              <div className="font-bold text-purple-700 dark:text-purple-400">2. Research/Audit</div>
+              <p className="text-[10px] text-zinc-500 mt-1">Scoring & Audit</p>
             </div>
-            <div className="p-3 rounded-lg border border-emerald-200 bg-emerald-50/50">
-              <div className="font-bold text-emerald-700">3. Personalized Preview</div>
-              <p className="text-[10px] text-zinc-500 mt-1">Phase 10</p>
+            <div className="p-3 rounded-lg border border-emerald-200 bg-emerald-50/50 dark:bg-emerald-950/20 dark:border-emerald-800/40">
+              <div className="font-bold text-emerald-700 dark:text-emerald-400">3. Personalized Preview</div>
+              <p className="text-[10px] text-zinc-500 mt-1">Live Mockup</p>
             </div>
-            <div className="p-3 rounded-lg border border-cyan-200 bg-cyan-50/50">
-              <div className="font-bold text-cyan-700">4. Outreach Draft</div>
-              <p className="text-[10px] text-zinc-500 mt-1">Phase 11</p>
+            <div className="p-3 rounded-lg border border-cyan-200 bg-cyan-50/50 dark:bg-cyan-950/20 dark:border-cyan-800/40">
+              <div className="font-bold text-cyan-700 dark:text-cyan-400">4. Outreach Draft</div>
+              <p className="text-[10px] text-zinc-500 mt-1">Pitch Generation</p>
             </div>
-            <div className="p-3 rounded-lg border border-blue-200 bg-blue-50/50">
-              <div className="font-bold text-blue-700">5. Simulated Send</div>
-              <p className="text-[10px] text-zinc-500 mt-1">Simulation</p>
+            <div className="p-3 rounded-lg border border-blue-200 bg-blue-50/50 dark:bg-blue-950/20 dark:border-blue-800/40">
+              <div className="font-bold text-blue-700 dark:text-blue-400">5. Simulated Send</div>
+              <p className="text-[10px] text-zinc-500 mt-1">Sandboxed Dispatch</p>
             </div>
-            <div className="p-3 rounded-lg border border-amber-200 bg-amber-50/50">
-              <div className="font-bold text-amber-700">6. Follow-Up (Max 2)</div>
-              <p className="text-[10px] text-zinc-500 mt-1">Simulated Clock</p>
+            <div className="p-3 rounded-lg border border-amber-200 bg-amber-50/50 dark:bg-amber-950/20 dark:border-amber-800/40">
+              <div className="font-bold text-amber-700 dark:text-amber-400">6. Follow-Up (Max 2)</div>
+              <p className="text-[10px] text-zinc-500 mt-1">Automated Cadence</p>
             </div>
-            <div className="p-3 rounded-lg border border-teal-200 bg-teal-50/50">
-              <div className="font-bold text-teal-700">7. Reply Intelligence</div>
-              <p className="text-[10px] text-zinc-500 mt-1">Phase 12</p>
+            <div className="p-3 rounded-lg border border-teal-200 bg-teal-50/50 dark:bg-teal-950/20 dark:border-teal-800/40">
+              <div className="font-bold text-teal-700 dark:text-teal-400">7. Reply Intelligence</div>
+              <p className="text-[10px] text-zinc-500 mt-1">CRM Triage</p>
             </div>
           </div>
         </div>
@@ -491,25 +519,33 @@ export default function AdminAutomationPipeline({ onNavigateTab }: AdminAutomati
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-6">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Left Column: Pipeline Runs List */}
-          <div className="lg:col-span-1 bg-white rounded-xl border border-zinc-200 shadow-sm overflow-hidden flex flex-col">
-            <div className="p-4 border-b border-zinc-100 flex items-center justify-between bg-zinc-50">
-              <h3 className="text-xs font-bold text-zinc-700 uppercase tracking-wider">
+          <div className="lg:col-span-1 bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-white/10 shadow-sm overflow-hidden flex flex-col">
+            <div className="p-4 border-b border-zinc-100 dark:border-white/5 flex items-center justify-between bg-zinc-50 dark:bg-zinc-800/50">
+              <h3 className="text-xs font-bold text-zinc-700 dark:text-zinc-300 uppercase tracking-wider">
                 Pipeline Runs ({runs.length})
               </h3>
               <button
                 onClick={fetchRuns}
-                className="text-xs text-indigo-600 hover:text-indigo-800 font-medium"
+                className="text-xs text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 font-medium"
               >
                 Refresh
               </button>
             </div>
 
-            <div className="divide-y divide-zinc-100 overflow-y-auto max-h-[600px]">
+            <div className="divide-y divide-zinc-100 dark:divide-white/5 overflow-y-auto max-h-[600px]">
               {loading && runs.length === 0 ? (
                 <div className="p-6 text-center text-xs text-zinc-400">Loading pipeline runs...</div>
               ) : runs.length === 0 ? (
-                <div className="p-6 text-center text-xs text-zinc-400">
-                  No pipeline runs found. Click "Start Autonomous Run" above.
+                <div className="p-8 text-center">
+                  <p className="text-xs font-bold text-zinc-800 dark:text-zinc-200">No pipeline runs yet</p>
+                  <p className="text-[11px] text-zinc-500 mt-1 mb-3">Launch an automated pipeline run to discover and engage new leads.</p>
+                  <button
+                    type="button"
+                    onClick={() => setShowRunModal(true)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg shadow-xs transition"
+                  >
+                    Start New Pipeline Run
+                  </button>
                 </div>
               ) : (
                 runs.map((r) => (

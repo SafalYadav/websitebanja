@@ -36,6 +36,7 @@ import type {
   CRMEvent,
 } from "@/lib/crm/types";
 import type { OutreachChannel } from "@/lib/outreach/types";
+import { supabase } from "@/lib/supabase";
 
 const STATUS_OPTIONS: CRMLeadStatus[] = [
   "DISCOVERED",
@@ -94,10 +95,11 @@ const PRESET_REPLIES = [
 ];
 
 export interface AdminCrmCenterProps {
+  sessionToken?: string;
   onNavigateTab?: (tab: string) => void;
 }
 
-export default function AdminCrmCenter({ onNavigateTab }: AdminCrmCenterProps = {}) {
+export default function AdminCrmCenter({ sessionToken, onNavigateTab }: AdminCrmCenterProps = {}) {
   const [leads, setLeads] = useState<LeadCRMState[]>([]);
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
   const [activeLead, setActiveLead] = useState<LeadCRMState | null>(null);
@@ -105,6 +107,24 @@ export default function AdminCrmCenter({ onNavigateTab }: AdminCrmCenterProps = 
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
+
+  // Helper to obtain fresh Bearer token
+  const getAuthHeaders = useCallback(async (): Promise<Record<string, string>> => {
+    let token = sessionToken;
+    if (!token) {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        token = session?.access_token;
+      } catch {
+        // Fallback
+      }
+    }
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
+    return headers;
+  }, [sessionToken]);
 
   // Simulation modal
   const [isSimModalOpen, setIsSimModalOpen] = useState(false);
@@ -123,9 +143,8 @@ export default function AdminCrmCenter({ onNavigateTab }: AdminCrmCenterProps = 
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/automation/crm", {
-        headers: { "x-automation-secret": "wb-auto-secret-local-dev-2026" },
-      });
+      const headers = await getAuthHeaders();
+      const res = await fetch("/api/automation/crm", { headers });
       if (!res.ok) throw new Error(`HTTP ${res.status}: Failed to fetch CRM leads`);
       const data = await res.json();
       const list: LeadCRMState[] = data.leads || [];
@@ -140,7 +159,7 @@ export default function AdminCrmCenter({ onNavigateTab }: AdminCrmCenterProps = 
     } finally {
       setLoading(false);
     }
-  }, [selectedLeadId]);
+  }, [selectedLeadId, getAuthHeaders]);
 
   useEffect(() => {
     fetchLeads();
@@ -149,9 +168,8 @@ export default function AdminCrmCenter({ onNavigateTab }: AdminCrmCenterProps = 
   // Fetch active lead details
   const fetchActiveLead = useCallback(async (leadId: string) => {
     try {
-      const res = await fetch(`/api/automation/crm/${leadId}`, {
-        headers: { "x-automation-secret": "wb-auto-secret-local-dev-2026" },
-      });
+      const headers = await getAuthHeaders();
+      const res = await fetch(`/api/automation/crm/${leadId}`, { headers });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       setActiveLead(data.leadState);
@@ -161,7 +179,7 @@ export default function AdminCrmCenter({ onNavigateTab }: AdminCrmCenterProps = 
     } catch (err: unknown) {
       console.error("Error loading active lead details:", err);
     }
-  }, []);
+  }, [getAuthHeaders]);
 
   useEffect(() => {
     if (selectedLeadId) {
@@ -179,12 +197,10 @@ export default function AdminCrmCenter({ onNavigateTab }: AdminCrmCenterProps = 
     setError(null);
 
     try {
+      const headers = await getAuthHeaders();
       const res = await fetch("/api/automation/simulate-reply", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-automation-secret": "wb-auto-secret-local-dev-2026",
-        },
+        headers,
         body: JSON.stringify({
           leadId: selectedLeadId,
           channel: simChannel,
@@ -218,12 +234,10 @@ export default function AdminCrmCenter({ onNavigateTab }: AdminCrmCenterProps = 
     setError(null);
 
     try {
+      const headers = await getAuthHeaders();
       const res = await fetch(`/api/automation/crm/${selectedLeadId}/status`, {
         method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          "x-automation-secret": "wb-auto-secret-local-dev-2026",
-        },
+        headers,
         body: JSON.stringify({
           newStatus,
           reason: statusReason.trim(),
@@ -341,7 +355,7 @@ export default function AdminCrmCenter({ onNavigateTab }: AdminCrmCenterProps = 
               Reply Intelligence & CRM Console
             </h1>
             <p className="text-xs md:text-sm text-neutral-400 mt-1">
-              Phase 12 Inbound Reply Classification, Deterministic Next Actions & Lead Timeline
+              Inbound Reply Classification, Deterministic Next Actions & Lead Timeline
             </p>
           </div>
 
@@ -368,9 +382,9 @@ export default function AdminCrmCenter({ onNavigateTab }: AdminCrmCenterProps = 
         <div className="bg-amber-950/30 border border-amber-800/60 rounded-xl p-3.5 flex items-start gap-3">
           <ShieldAlert className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
           <div className="text-xs">
-            <span className="font-semibold text-amber-200">Strict Local-Only Simulation Active:</span>{" "}
+            <span className="font-semibold text-amber-200">Simulation Mode Active:</span>{" "}
             <span className="text-amber-300/90">
-              External messaging networks are completely disabled in Phase 12. Incoming customer responses and status changes are simulated locally via deterministic heuristics and sandboxed AI models. Zero live customer contacts are ever made.
+              External messaging networks are sandboxed. Incoming customer responses and status changes are simulated locally via deterministic heuristics and AI models. Zero live customer contacts are ever made.
             </span>
           </div>
         </div>
@@ -428,8 +442,9 @@ export default function AdminCrmCenter({ onNavigateTab }: AdminCrmCenterProps = 
             {/* Lead list */}
             <div className="flex-1 overflow-y-auto divide-y divide-neutral-800/60">
               {filteredLeads.length === 0 ? (
-                <div className="p-8 text-center text-xs text-neutral-500">
-                  No leads found matching criteria.
+                <div className="p-8 text-center">
+                  <p className="text-xs font-semibold text-neutral-300">No CRM conversations yet</p>
+                  <p className="text-[11px] text-neutral-500 mt-1">Inbound replies and CRM conversations will appear here once leads respond.</p>
                 </div>
               ) : (
                 filteredLeads.map((lead) => {
@@ -887,7 +902,7 @@ export default function AdminCrmCenter({ onNavigateTab }: AdminCrmCenterProps = 
                     disabled={simulating || !simText.trim()}
                     className="px-4 py-2 text-xs font-semibold rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white transition-colors disabled:opacity-50"
                   >
-                    {simulating ? "Simulating & Classifying..." : "Simulate Incoming Reply (Local)"}
+                    {simulating ? "Simulating & Classifying..." : "Simulate Incoming Reply"}
                   </button>
                 </div>
               </form>

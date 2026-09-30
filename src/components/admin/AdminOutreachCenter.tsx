@@ -22,6 +22,7 @@ import {
   Check,
 } from "lucide-react";
 import type { OutreachRecord, OutreachChannel, OutreachStatus } from "@/lib/outreach/types";
+import { supabase } from "@/lib/supabase";
 
 const PIPELINE_STAGES = [
   "DISCOVERED",
@@ -36,13 +37,32 @@ const PIPELINE_STAGES = [
 ];
 
 export interface AdminOutreachCenterProps {
+  sessionToken?: string;
   onNavigateTab?: (tab: string) => void;
 }
 
-export default function AdminOutreachCenter({ onNavigateTab }: AdminOutreachCenterProps = {}) {
+export default function AdminOutreachCenter({ sessionToken, onNavigateTab }: AdminOutreachCenterProps = {}) {
   const [records, setRecords] = useState<OutreachRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Helper to obtain fresh Bearer token
+  const getAuthHeaders = useCallback(async (): Promise<Record<string, string>> => {
+    let token = sessionToken;
+    if (!token) {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        token = session?.access_token;
+      } catch {
+        // Fallback
+      }
+    }
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
+    return headers;
+  }, [sessionToken]);
 
   // Filters
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -69,7 +89,8 @@ export default function AdminOutreachCenter({ onNavigateTab }: AdminOutreachCent
       if (channelFilter !== "all") params.set("channel", channelFilter);
       if (searchQuery.trim()) params.set("search", searchQuery.trim());
 
-      const res = await fetch(`/api/automation/outreach?${params.toString()}`);
+      const headers = await getAuthHeaders();
+      const res = await fetch(`/api/automation/outreach?${params.toString()}`, { headers });
       if (!res.ok) throw new Error(`HTTP ${res.status}: Failed to load outreach records`);
       const data = await res.json();
       setRecords(data.records || []);
@@ -78,7 +99,7 @@ export default function AdminOutreachCenter({ onNavigateTab }: AdminOutreachCent
     } finally {
       setLoading(false);
     }
-  }, [statusFilter, channelFilter, searchQuery]);
+  }, [statusFilter, channelFilter, searchQuery, getAuthHeaders]);
 
   useEffect(() => {
     fetchRecords();
@@ -93,12 +114,10 @@ export default function AdminOutreachCenter({ onNavigateTab }: AdminOutreachCent
     setError(null);
 
     try {
+      const headers = await getAuthHeaders();
       const res = await fetch("/api/automation/generate-outreach-draft", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-automation-secret": "wb-auto-secret-local-dev-2026",
-        },
+        headers,
         body: JSON.stringify({
           leadId: genLeadId.trim(),
           channel: genChannel,
@@ -124,9 +143,10 @@ export default function AdminOutreachCenter({ onNavigateTab }: AdminOutreachCent
     setActionSuccess(null);
     setError(null);
     try {
+      const headers = await getAuthHeaders();
       const res = await fetch("/api/automation/outreach", {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({ outreachId, status }),
       });
 
@@ -154,9 +174,10 @@ export default function AdminOutreachCenter({ onNavigateTab }: AdminOutreachCent
   const handleSaveEdit = async () => {
     if (!selectedRecord) return;
     try {
+      const headers = await getAuthHeaders();
       const res = await fetch("/api/automation/outreach", {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({
           outreachId: selectedRecord.outreachId,
           status: selectedRecord.status,
@@ -245,7 +266,7 @@ export default function AdminOutreachCenter({ onNavigateTab }: AdminOutreachCent
               Personalized Outreach Foundation
             </h1>
             <p className="text-sm text-neutral-400 mt-1">
-              Phase 11 Human-in-the-Loop Review, Approval & Local Simulation Outbox
+              Human-in-the-Loop Review, Approval & Sandboxed Outreach Queue
             </p>
           </div>
 
@@ -265,11 +286,11 @@ export default function AdminOutreachCenter({ onNavigateTab }: AdminOutreachCent
         <div className="bg-amber-950/30 border border-amber-800/60 rounded-xl p-4 flex items-start gap-3">
           <ShieldAlert className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
           <div className="text-sm">
-            <span className="font-semibold text-amber-200">Strict Local-Only Hard Lock Active:</span>{" "}
+            <span className="font-semibold text-amber-200">Simulation Guard Active:</span>{" "}
             <span className="text-amber-300/90">
-              External sending is completely disabled in Phase 11. All approved messages are dispatched exclusively to the local simulation outbox (
+              External sending is strictly guarded. All approved messages are dispatched exclusively to the sandboxed simulation outbox (
               <code className="text-xs bg-amber-950/80 px-1.5 py-0.5 rounded border border-amber-800/80">scratch/outreach/</code>
-              ). Zero real emails, WhatsApp messages, or DMs are ever sent.
+              ). Zero live emails, WhatsApp messages, or DMs are dispatched without live clearance.
             </span>
           </div>
         </div>

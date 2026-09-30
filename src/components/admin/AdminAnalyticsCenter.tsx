@@ -5,6 +5,7 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
+import { supabase } from "@/lib/supabase";
 import type {
   PipelineAnalyticsDashboard,
   TimeFilter,
@@ -13,10 +14,11 @@ import type {
 } from "@/lib/analytics/types";
 
 export interface AdminAnalyticsCenterProps {
+  sessionToken?: string;
   onNavigateTab?: (tab: string) => void;
 }
 
-export default function AdminAnalyticsCenter({ onNavigateTab }: AdminAnalyticsCenterProps = {}) {
+export default function AdminAnalyticsCenter({ sessionToken, onNavigateTab }: AdminAnalyticsCenterProps = {}) {
   const [timeFilter, setTimeFilter] = useState<TimeFilter>("all");
   const [data, setData] = useState<PipelineAnalyticsDashboard | null>(null);
   const [loading, setLoading] = useState(true);
@@ -24,17 +26,32 @@ export default function AdminAnalyticsCenter({ onNavigateTab }: AdminAnalyticsCe
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"overview" | "funnel" | "performance" | "cost" | "optimization">("overview");
 
+  // Helper to obtain fresh Bearer token
+  const getAuthHeaders = useCallback(async (): Promise<Record<string, string>> => {
+    let token = sessionToken;
+    if (!token) {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        token = session?.access_token;
+      } catch {
+        // Fallback
+      }
+    }
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
+    return headers;
+  }, [sessionToken]);
+
   const fetchAnalytics = useCallback(async (filter: TimeFilter, isManual = false) => {
     if (isManual) setRefreshing(true);
     else setLoading(true);
     setErrorMessage(null);
 
     try {
-      const res = await fetch(`/api/automation/analytics?timeRange=${filter}`, {
-        headers: {
-          "x-automation-secret": "wb-auto-secret-local-dev-2026",
-        },
-      });
+      const headers = await getAuthHeaders();
+      const res = await fetch(`/api/automation/analytics?timeRange=${filter}`, { headers });
       const json = await res.json();
       if (json.success && json.data) {
         setData(json.data);
@@ -47,7 +64,7 @@ export default function AdminAnalyticsCenter({ onNavigateTab }: AdminAnalyticsCe
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [getAuthHeaders]);
 
   useEffect(() => {
     fetchAnalytics(timeFilter);
@@ -88,11 +105,8 @@ export default function AdminAnalyticsCenter({ onNavigateTab }: AdminAnalyticsCe
                 <h1 className="text-xl font-bold tracking-tight text-white">
                   Pipeline Analytics & Optimization
                 </h1>
-                <span className="text-xs px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/30 font-mono">
-                  Phase 14
-                </span>
-                <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 font-mono">
-                  LOCAL ONLY
+                <span className="text-xs px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 font-semibold font-mono">
+                  ACTIVE TELEMETRY
                 </span>
               </div>
               <p className="text-xs text-slate-400 mt-0.5">
@@ -653,18 +667,18 @@ export default function AdminAnalyticsCenter({ onNavigateTab }: AdminAnalyticsCe
               </div>
             )}
 
-            {/* Phase 15 Integration Readiness Card */}
+            {/* Provider Integration Readiness Card */}
             <div className="p-5 rounded-2xl bg-slate-900/60 border border-slate-800/80 space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-2">
-                  <span className="text-xs px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 font-mono">
-                    Phase 15 Contract
+                  <span className="text-xs px-2.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 font-semibold font-mono">
+                    Provider Ecosystem
                   </span>
                   <h4 className="text-sm font-semibold text-slate-200">
                     Real-World Provider Interfaces Readiness
                   </h4>
                 </div>
-                <span className="text-xs text-slate-400">Contracts Prepared for Lead Command Center</span>
+                <span className="text-xs text-slate-400">Contracts Active for Lead Command Center</span>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
                 <div className="p-3 rounded-xl bg-slate-950/80 border border-slate-800 flex items-center justify-between">

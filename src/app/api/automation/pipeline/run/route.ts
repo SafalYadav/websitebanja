@@ -8,7 +8,7 @@ import { sanitizeErrorOutput } from "@/lib/ai/router/modelConfig";
 import type { PipelineRunCriteria } from "@/lib/automation/pipelineTypes";
 
 export async function POST(req: Request) {
-  if (!isAuthorized(req)) {
+  if (!(await isAuthorized(req))) {
     return NextResponse.json(
       {
         success: false,

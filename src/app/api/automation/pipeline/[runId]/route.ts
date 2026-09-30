@@ -11,7 +11,7 @@ export async function GET(
   req: Request,
   { params }: { params: Promise<{ runId: string }> }
 ) {
-  if (!isAuthorized(req)) {
+  if (!(await isAuthorized(req))) {
     return NextResponse.json(
       {
         success: false,

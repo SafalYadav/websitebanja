@@ -5,6 +5,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import Link from "next/link";
+import { supabase } from "@/lib/supabase";
 import {
   Search,
   RefreshCw,
@@ -79,10 +80,11 @@ const PRESETS: Array<{ id: FilterPreset; label: string }> = [
 ];
 
 export interface AdminLeadCommandCenterProps {
+  sessionToken?: string;
   onNavigateTab?: (tab: string) => void;
 }
 
-export default function AdminLeadCommandCenter({ onNavigateTab }: AdminLeadCommandCenterProps = {}) {
+export default function AdminLeadCommandCenter({ sessionToken, onNavigateTab }: AdminLeadCommandCenterProps = {}) {
   // State
   const [leads, setLeads] = useState<CommandCenterLead[]>([]);
   const [kpis, setKpis] = useState<CommandCenterKPIs | null>(null);
@@ -138,14 +140,32 @@ export default function AdminLeadCommandCenter({ onNavigateTab }: AdminLeadComma
   const [clockDays, setClockDays] = useState(3);
   const [integrationStatuses, setIntegrationStatuses] = useState<any>(null);
 
+  const getAuthHeaders = useCallback(async (): Promise<Record<string, string>> => {
+    let token = sessionToken;
+    if (!token) {
+      const { data: { session } } = await supabase.auth.getSession();
+      token = session?.access_token;
+    }
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+    return headers;
+  }, [sessionToken]);
+
   useEffect(() => {
-    fetch("/api/integrations/status", {
-      headers: { "x-automation-secret": "wb-auto-secret-local-dev-2026" },
-    })
-      .then((r) => r.json())
-      .then((d) => setIntegrationStatuses(d))
-      .catch(() => null);
-  }, []);
+    async function fetchIntegrations() {
+      try {
+        const headers = await getAuthHeaders();
+        const r = await fetch("/api/integrations/status", { headers });
+        if (r.ok) {
+          const d = await r.json();
+          setIntegrationStatuses(d);
+        }
+      } catch {
+        // ignore
+      }
+    }
+    void fetchIntegrations();
+  }, [getAuthHeaders]);
 
   // 1. Fetch Leads List
   const fetchLeads = useCallback(
@@ -165,10 +185,9 @@ export default function AdminLeadCommandCenter({ onNavigateTab }: AdminLeadComma
         params.set("sortField", sortField);
         params.set("sortDir", sortDir);
 
+        const headers = await getAuthHeaders();
         const res = await fetch(`/api/automation/leads?${params.toString()}`, {
-          headers: {
-            "x-automation-secret": "wb-auto-secret-local-dev-2026",
-          },
+          headers,
         });
         const data = await res.json();
 
@@ -179,7 +198,7 @@ export default function AdminLeadCommandCenter({ onNavigateTab }: AdminLeadComma
           setKpis(data.kpis || null);
           setFacets(data.facets || null);
         } else {
-          setErrorMessage(data.error || "Failed to load leads");
+          setErrorMessage(data.error?.message || data.error || "Failed to load leads");
         }
       } catch {
         setErrorMessage("Network error fetching lead records");
@@ -188,7 +207,7 @@ export default function AdminLeadCommandCenter({ onNavigateTab }: AdminLeadComma
         setRefreshing(false);
       }
     },
-    [activePreset, searchQuery, selectedStage, selectedIndustry, currentPage, sortField, sortDir]
+    [activePreset, searchQuery, selectedStage, selectedIndustry, currentPage, sortField, sortDir, getAuthHeaders]
   );
 
   useEffect(() => {
@@ -201,14 +220,15 @@ export default function AdminLeadCommandCenter({ onNavigateTab }: AdminLeadComma
     setLoadingDetail(true);
     setDrawerTab("profile");
     try {
+      const headers = await getAuthHeaders();
       const res = await fetch(`/api/automation/leads/${leadId}`, {
-        headers: { "x-automation-secret": "wb-auto-secret-local-dev-2026" },
+        headers,
       });
       const data = await res.json();
       if (data.success && data.lead) {
         setLeadDetail(data.lead);
       } else {
-        setErrorMessage(data.error || "Failed to load lead details");
+        setErrorMessage(data.error?.message || data.error || "Failed to load lead details");
       }
     } catch {
       setErrorMessage("Network error fetching lead details");
@@ -221,13 +241,16 @@ export default function AdminLeadCommandCenter({ onNavigateTab }: AdminLeadComma
   const fetchReviewQueue = async () => {
     setLoadingReview(true);
     try {
+      const headers = await getAuthHeaders();
       const res = await fetch("/api/automation/leads/review-queue", {
-        headers: { "x-automation-secret": "wb-auto-secret-local-dev-2026" },
+        headers,
       });
       const data = await res.json();
       if (data.success) {
         setReviewItems(data.reviewQueue || []);
         setShowReviewQueueModal(true);
+      } else {
+        setErrorMessage(data.error?.message || data.error || "Failed to load review queue");
       }
     } catch {
       setErrorMessage("Network error loading review queue");
@@ -240,13 +263,16 @@ export default function AdminLeadCommandCenter({ onNavigateTab }: AdminLeadComma
   const fetchFollowUps = async () => {
     setLoadingFollowUps(true);
     try {
+      const headers = await getAuthHeaders();
       const res = await fetch("/api/automation/leads/follow-ups", {
-        headers: { "x-automation-secret": "wb-auto-secret-local-dev-2026" },
+        headers,
       });
       const data = await res.json();
       if (data.success) {
         setFollowUpsList(data.followUps || []);
         setShowFollowUpModal(true);
+      } else {
+        setErrorMessage(data.error?.message || data.error || "Failed to load follow-ups");
       }
     } catch {
       setErrorMessage("Network error loading follow-ups");
@@ -260,9 +286,10 @@ export default function AdminLeadCommandCenter({ onNavigateTab }: AdminLeadComma
     e.preventDefault();
     setActionLoading(true);
     try {
+      const headers = await getAuthHeaders();
       const res = await fetch("/api/automation/pipeline/run", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({
           criteria: {
             industry: runIndustry,
@@ -290,9 +317,10 @@ export default function AdminLeadCommandCenter({ onNavigateTab }: AdminLeadComma
   const handleAdvanceClock = async () => {
     setActionLoading(true);
     try {
+      const headers = await getAuthHeaders();
       const res = await fetch("/api/automation/pipeline/advance-clock", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({ days: clockDays }),
       });
       const data = await res.json();
@@ -313,9 +341,10 @@ export default function AdminLeadCommandCenter({ onNavigateTab }: AdminLeadComma
     if (!leadId) return;
     setActionLoading(true);
     try {
+      const headers = await getAuthHeaders();
       const res = await fetch("/api/automation/simulate-reply", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({
           leadId,
           messageText: replyText,
@@ -394,12 +423,9 @@ export default function AdminLeadCommandCenter({ onNavigateTab }: AdminLeadComma
             <div>
               <div className="flex items-center space-x-2.5 flex-wrap">
                 <h1 className="text-xl font-bold tracking-tight text-white">Lead Command Center</h1>
-                <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/30">
-                  Phase 15
-                </span>
-                <span className="text-[10px] font-mono px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 flex items-center gap-1.5">
+                <span className="text-[10px] font-mono px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 flex items-center gap-1.5 font-semibold">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                  LOCAL SIMULATION MODE
+                  Simulation Mode (No Real Send)
                 </span>
               </div>
               <p className="text-xs text-slate-400 mt-0.5">
@@ -412,18 +438,18 @@ export default function AdminLeadCommandCenter({ onNavigateTab }: AdminLeadComma
           <div className="flex items-center flex-wrap gap-2.5">
             <button
               onClick={() => setShowNewRunModal(true)}
-              className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-sm transition flex items-center space-x-1.5"
+              className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow-sm transition flex items-center space-x-1.5 shrink-0"
             >
               <Play className="w-3.5 h-3.5" />
-              <span>New Pipeline Run</span>
+              <span>Start New Pipeline Run</span>
             </button>
 
             <button
               onClick={fetchReviewQueue}
               disabled={loadingReview}
-              className="px-3 py-1.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 text-xs font-medium border border-amber-500/30 transition flex items-center space-x-1.5"
+              className="px-3.5 py-2 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 text-amber-200 text-xs font-semibold border border-amber-500/30 transition flex items-center space-x-1.5 shrink-0"
             >
-              <AlertTriangle className="w-3.5 h-3.5" />
+              <AlertTriangle className="w-3.5 h-3.5 text-amber-300" />
               <span>Review Queue</span>
               {facets?.presets?.needs_review > 0 && (
                 <span className="px-1.5 py-0.2 rounded-full bg-amber-500 text-slate-950 font-bold text-[10px]">
@@ -435,9 +461,9 @@ export default function AdminLeadCommandCenter({ onNavigateTab }: AdminLeadComma
             <button
               onClick={fetchFollowUps}
               disabled={loadingFollowUps}
-              className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium border border-slate-700 transition flex items-center space-x-1.5"
+              className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-100 text-xs font-semibold border border-slate-700 transition flex items-center space-x-1.5 shrink-0"
             >
-              <Clock className="w-3.5 h-3.5" />
+              <Clock className="w-3.5 h-3.5 text-indigo-400" />
               <span>Follow-ups</span>
               {kpis?.followUpsDue && kpis.followUpsDue > 0 ? (
                 <span className="px-1.5 py-0.2 rounded-full bg-indigo-500 text-white font-bold text-[10px]">
@@ -449,9 +475,9 @@ export default function AdminLeadCommandCenter({ onNavigateTab }: AdminLeadComma
             <button
               onClick={() => fetchLeads(true)}
               disabled={refreshing || loading}
-              className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium border border-slate-700 transition flex items-center space-x-1.5"
+              className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-100 text-xs font-semibold border border-slate-700 transition flex items-center space-x-1.5 shrink-0"
             >
-              <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? "animate-spin" : ""}`} />
+              <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? "animate-spin text-indigo-400" : ""}`} />
               <span>{refreshing ? "Refreshing..." : "Refresh"}</span>
             </button>
 
@@ -462,28 +488,28 @@ export default function AdminLeadCommandCenter({ onNavigateTab }: AdminLeadComma
                 <button
                   type="button"
                   onClick={() => onNavigateTab("automation")}
-                  className="px-2.5 py-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 text-xs transition"
+                  className="px-3 py-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-200 border border-slate-700/60 text-xs font-medium transition shrink-0"
                 >
                   Pipeline Queue →
                 </button>
                 <button
                   type="button"
                   onClick={() => onNavigateTab("crm")}
-                  className="px-2.5 py-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 text-xs transition"
+                  className="px-3 py-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-200 border border-slate-700/60 text-xs font-medium transition shrink-0"
                 >
                   CRM Inbox →
                 </button>
                 <button
                   type="button"
                   onClick={() => onNavigateTab("analytics")}
-                  className="px-2.5 py-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 text-xs transition"
+                  className="px-3 py-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-200 border border-slate-700/60 text-xs font-medium transition shrink-0"
                 >
                   Analytics →
                 </button>
                 <button
                   type="button"
                   onClick={() => onNavigateTab("integrations")}
-                  className="px-2.5 py-1.5 rounded-lg bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 text-xs font-semibold transition"
+                  className="px-3.5 py-1.5 rounded-xl bg-indigo-500/15 hover:bg-indigo-500/25 text-indigo-200 border border-indigo-500/40 text-xs font-bold transition shrink-0"
                 >
                   Integrations Hub →
                 </button>
@@ -492,25 +518,25 @@ export default function AdminLeadCommandCenter({ onNavigateTab }: AdminLeadComma
               <>
                 <Link
                   href="/admin?tab=automation"
-                  className="px-2.5 py-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 text-xs transition"
+                  className="px-3 py-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-200 border border-slate-700/60 text-xs font-medium transition shrink-0"
                 >
                   Pipeline Queue →
                 </Link>
                 <Link
                   href="/admin?tab=crm"
-                  className="px-2.5 py-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 text-xs transition"
+                  className="px-3 py-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-200 border border-slate-700/60 text-xs font-medium transition shrink-0"
                 >
                   CRM Inbox →
                 </Link>
                 <Link
                   href="/admin?tab=analytics"
-                  className="px-2.5 py-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 text-xs transition"
+                  className="px-3 py-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-200 border border-slate-700/60 text-xs font-medium transition shrink-0"
                 >
                   Analytics →
                 </Link>
                 <Link
                   href="/admin?tab=integrations"
-                  className="px-2.5 py-1.5 rounded-lg bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 text-xs font-semibold transition"
+                  className="px-3.5 py-1.5 rounded-xl bg-indigo-500/15 hover:bg-indigo-500/25 text-indigo-200 border border-indigo-500/40 text-xs font-bold transition shrink-0"
                 >
                   Integrations Hub →
                 </Link>
@@ -549,16 +575,16 @@ export default function AdminLeadCommandCenter({ onNavigateTab }: AdminLeadComma
         {/* 2. KPI Strip (Non-Fabricated Metrics) */}
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 xl:grid-cols-10 gap-3">
           {[
-            { label: "Total Leads", value: kpis?.totalLeads ?? "N/A", color: "text-white" },
-            { label: "Qualified", value: kpis?.qualifiedLeads ?? "N/A", color: "text-sky-400" },
-            { label: "Preview Ready", value: kpis?.previewReady ?? "N/A", color: "text-indigo-400" },
-            { label: "Outreach Ready", value: kpis?.outreachReady ?? "N/A", color: "text-amber-400" },
-            { label: "Awaiting Reply", value: kpis?.awaitingReply ?? "N/A", color: "text-purple-400" },
-            { label: "Interested", value: kpis?.interested ?? "N/A", color: "text-emerald-400" },
-            { label: "Meetings", value: kpis?.meetingsRequested ?? "N/A", color: "text-teal-400" },
-            { label: "Follow-up Due", value: kpis?.followUpsDue ?? "N/A", color: "text-yellow-400" },
-            { label: "Conversion Rate", value: kpis?.conversionRate !== null && kpis?.conversionRate !== undefined ? `${kpis.conversionRate}%` : "N/A", color: "text-emerald-400" },
-            { label: "Known AI Cost", value: kpis?.knownEstimatedCostUsd !== null && kpis?.knownEstimatedCostUsd !== undefined ? `$${kpis.knownEstimatedCostUsd.toFixed(4)}` : "N/A", color: "text-indigo-300" },
+            { label: "Total Leads", value: kpis?.totalLeads ?? 0, color: "text-white" },
+            { label: "Qualified", value: kpis?.qualifiedLeads ?? 0, color: "text-sky-400" },
+            { label: "Preview Ready", value: kpis?.previewReady ?? 0, color: "text-indigo-400" },
+            { label: "Outreach Ready", value: kpis?.outreachReady ?? 0, color: "text-amber-400" },
+            { label: "Awaiting Reply", value: kpis?.awaitingReply ?? 0, color: "text-purple-400" },
+            { label: "Interested", value: kpis?.interested ?? 0, color: "text-emerald-400" },
+            { label: "Meetings", value: kpis?.meetingsRequested ?? 0, color: "text-teal-400" },
+            { label: "Follow-up Due", value: kpis?.followUpsDue ?? 0, color: "text-yellow-400" },
+            { label: "Conversion Rate", value: kpis?.conversionRate !== null && kpis?.conversionRate !== undefined ? `${kpis.conversionRate}%` : "0%", color: "text-emerald-400" },
+            { label: "Known AI Cost", value: kpis?.knownEstimatedCostUsd !== null && kpis?.knownEstimatedCostUsd !== undefined ? `$${kpis.knownEstimatedCostUsd.toFixed(4)}` : "$0.0000", color: "text-indigo-300" },
           ].map((item, idx) => (
             <div key={idx} className="p-3 rounded-xl bg-slate-900 border border-slate-800 flex flex-col justify-between">
               <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider truncate">
@@ -770,10 +796,39 @@ export default function AdminLeadCommandCenter({ onNavigateTab }: AdminLeadComma
                   </tr>
                 ) : leads.length === 0 ? (
                   <tr>
-                    <td colSpan={11} className="py-12 text-center text-slate-500">
-                      No leads match current filter criteria.
-                    </td>
-                  </tr>
+                    <td colSpan={11} className="py-14 text-center text-slate-400">
+                        <div className="mx-auto w-12 h-12 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 mb-3">
+                          <Users className="w-6 h-6" />
+                        </div>
+                        <p className="font-bold text-white text-sm mb-1">No leads yet</p>
+                        <p className="text-slate-400 text-xs max-w-sm mx-auto mb-4">
+                          No local businesses have been processed through the pipeline or match your active filters.
+                        </p>
+                        <div className="flex items-center justify-center gap-3">
+                          <button
+                            type="button"
+                            onClick={() => setShowNewRunModal(true)}
+                            className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-sm"
+                          >
+                            <Play className="w-3.5 h-3.5" />
+                            <span>Start New Pipeline Run</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setActivePreset("all");
+                              setSelectedStage("ALL");
+                              setSelectedIndustry("ALL");
+                              setSearchQuery("");
+                              setCurrentPage(1);
+                            }}
+                            className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition"
+                          >
+                            Adjust Filters
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
                 ) : (
                   leads.map((l) => {
                     const isSelected = selectedLeadIds.has(l.leadId);
@@ -928,12 +983,12 @@ export default function AdminLeadCommandCenter({ onNavigateTab }: AdminLeadComma
           </div>
         </div>
 
-        {/* 7. Phase 16 External Integrations Status Strip */}
+        {/* 7. Connected Services & External Integrations Status Strip */}
         <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 space-y-2.5">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-2">
               <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">
-                Phase 16 External Integrations Status
+                Connected Services & Integrations
               </span>
               <span className="text-[11px] text-slate-400">• Official Google Places & Gmail</span>
             </div>

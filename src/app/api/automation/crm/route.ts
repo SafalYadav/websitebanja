@@ -17,7 +17,7 @@ import { isAuthorized } from "@/lib/automation/auth";
 
 
 export async function GET(req: Request) {
-  if (!isAuthorized(req)) {
+  if (!(await isAuthorized(req))) {
     return NextResponse.json(
       { success: false, error: { code: "UNAUTHORIZED", message: "Missing or invalid authorization." } },
       { status: 401 }

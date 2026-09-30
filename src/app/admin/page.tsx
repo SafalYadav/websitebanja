@@ -365,13 +365,13 @@ function AdminDashboardContent() {
     { id: "ai_health", label: "AI Health & Agents", icon: Sparkles, group: "Overview & Intelligence" },
     { id: "boss_research", label: "Boss Research & Skills", icon: Compass, group: "Overview & Intelligence" },
 
-    // Group 2: Growth & Autonomous Pipeline (Phase 11-16)
-    { id: "leads", label: "Lead Command Center", icon: Target, badge: "Phase 15", group: "Lead Operations" },
+    // Group 2: Growth & Autonomous Pipeline (Autonomous Lead Ops)
+    { id: "leads", label: "Lead Command Center", icon: Target, group: "Lead Operations" },
     { id: "automation", label: "Automation", icon: Zap, group: "Lead Operations" },
     { id: "crm", label: "CRM", icon: MessageSquare, group: "Lead Operations" },
     { id: "outreach", label: "Outreach", icon: Send, group: "Lead Operations" },
     { id: "analytics", label: "Pipeline Analytics", icon: BarChart3, group: "Lead Operations" },
-    { id: "integrations", label: "Integrations", icon: KeyRound, badge: "Phase 16", group: "Lead Operations" },
+    { id: "integrations", label: "Integrations", icon: KeyRound, group: "Lead Operations" },
 
     // Group 3: Platform & Business Operations
     { id: "usage", label: "Usage & Telemetry", icon: TrendingUp, group: "Platform & Business" },
@@ -628,7 +628,7 @@ function AdminDashboardContent() {
               <div>
                 <div className="inline-flex items-center gap-2 rounded-full bg-violet-500/10 px-3 py-1 text-xs font-bold text-violet-600 dark:text-violet-400 mb-2">
                   <Target className="h-3.5 w-3.5" />
-                  <span>Phase 15 Growth Engine</span>
+                  <span>Autonomous Growth Engine</span>
                 </div>
                 <h3 className="text-lg font-bold text-zinc-900 dark:text-white">
                   Autonomous Lead Pipeline & Command Center
@@ -664,45 +664,45 @@ function AdminDashboardContent() {
         )}
 
         {/* ======================================================== */}
-        {/* Tab 4: Lead Command Center (Phase 15 Full Integration)    */}
+        {/* Tab 4: Lead Command Center                                */}
         {/* ======================================================== */}
         {activeTab === "leads" && (
-          <AdminLeadCommandCenter onNavigateTab={(tab) => handleTabChange(tab as TabType)} />
+          <AdminLeadCommandCenter sessionToken={sessionToken} onNavigateTab={(tab) => handleTabChange(tab as TabType)} />
         )}
 
         {/* ======================================================== */}
-        {/* Tab 5: Automation Pipeline (Phase 13 Control Center)      */}
+        {/* Tab 5: Automation Pipeline Control Center                 */}
         {/* ======================================================== */}
         {activeTab === "automation" && (
-          <AdminAutomationPipeline onNavigateTab={(tab) => handleTabChange(tab as TabType)} />
+          <AdminAutomationPipeline sessionToken={sessionToken} onNavigateTab={(tab) => handleTabChange(tab as TabType)} />
         )}
 
         {/* ======================================================== */}
-        {/* Tab 6: CRM & Replies (Phase 12/15 Reply Intelligence)     */}
+        {/* Tab 6: CRM & Replies Intelligence                         */}
         {/* ======================================================== */}
         {activeTab === "crm" && (
-          <AdminCrmCenter onNavigateTab={(tab) => handleTabChange(tab as TabType)} />
+          <AdminCrmCenter sessionToken={sessionToken} onNavigateTab={(tab) => handleTabChange(tab as TabType)} />
         )}
 
         {/* ======================================================== */}
-        {/* Tab 7: Outreach Dispatch (Phase 11/12 Human Review Queue) */}
+        {/* Tab 7: Outreach Dispatch & Review Queue                   */}
         {/* ======================================================== */}
         {activeTab === "outreach" && (
-          <AdminOutreachCenter onNavigateTab={(tab) => handleTabChange(tab as TabType)} />
+          <AdminOutreachCenter sessionToken={sessionToken} onNavigateTab={(tab) => handleTabChange(tab as TabType)} />
         )}
 
         {/* ======================================================== */}
-        {/* Tab 8: Pipeline Analytics (Phase 14 Cost & Conversion)    */}
+        {/* Tab 8: Pipeline Analytics & Cost Tracking                 */}
         {/* ======================================================== */}
         {activeTab === "analytics" && (
-          <AdminAnalyticsCenter onNavigateTab={(tab) => handleTabChange(tab as TabType)} />
+          <AdminAnalyticsCenter sessionToken={sessionToken} onNavigateTab={(tab) => handleTabChange(tab as TabType)} />
         )}
 
         {/* ======================================================== */}
-        {/* Tab 9: Integrations Hub (Phase 16 Google Places & Gmail)  */}
+        {/* Tab 9: Integrations Hub                                   */}
         {/* ======================================================== */}
         {activeTab === "integrations" && (
-          <AdminIntegrationsCenter onNavigateTab={(tab) => handleTabChange(tab as TabType)} />
+          <AdminIntegrationsCenter sessionToken={sessionToken} onNavigateTab={(tab) => handleTabChange(tab as TabType)} />
         )}
 
         {/* ======================================================== */}

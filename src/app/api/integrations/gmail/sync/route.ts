@@ -14,7 +14,7 @@ import { GmailInboundService } from "@/lib/integrations/gmailInboundService";
 import { isAuthorized } from "@/lib/automation/auth";
 
 export async function POST(req: Request) {
-  if (!isAuthorized(req)) {
+  if (!(await isAuthorized(req))) {
     return NextResponse.json(
       { error: "Unauthorized. Valid automation secret or admin session required." },
       { status: 401 }

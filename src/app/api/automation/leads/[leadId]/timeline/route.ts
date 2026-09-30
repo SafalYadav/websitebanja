@@ -10,7 +10,7 @@ export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ leadId: string }> }
 ) {
-  if (!isAuthorized(req)) {
+  if (!(await isAuthorized(req))) {
     return NextResponse.json(
       { error: "Unauthorized: Invalid or missing automation credentials" },
       { status: 401 }
