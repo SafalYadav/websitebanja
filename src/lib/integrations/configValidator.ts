@@ -87,23 +87,24 @@ export class ConfigValidator {
   }
 
   /**
-   * Retrieves persistent refresh token from env or local scratch store.
+   * Retrieves persistent refresh token from local scratch store or environment.
    */
   static getStoredRefreshToken(): string | null {
-    const envToken = process.env.GMAIL_REFRESH_TOKEN?.trim() || process.env.GOOGLE_REFRESH_TOKEN?.trim();
-    if (envToken) {
-      return envToken;
-    }
     try {
       if (fs.existsSync(GMAIL_AUTH_FILE)) {
         const raw = fs.readFileSync(GMAIL_AUTH_FILE, "utf-8");
         const data = JSON.parse(raw);
-        if (data.refresh_token && typeof data.refresh_token === "string") {
+        if (data.refresh_token && typeof data.refresh_token === "string" && data.refresh_token.trim().length > 0) {
           return data.refresh_token.trim();
         }
       }
     } catch {
       // Ignore read error
+    }
+
+    const envToken = process.env.GMAIL_REFRESH_TOKEN?.trim() || process.env.GOOGLE_REFRESH_TOKEN?.trim();
+    if (envToken) {
+      return envToken;
     }
     return null;
   }
@@ -113,12 +114,17 @@ export class ConfigValidator {
    */
   static saveRefreshToken(token: string): void {
     ensureStorage();
+    const trimmed = token.trim();
     const payload = {
       account: "websitebanja@gmail.com",
-      refresh_token: token.trim(),
+      refresh_token: trimmed,
       updatedAt: new Date().toISOString(),
     };
-    fs.writeFileSync(GMAIL_AUTH_FILE, JSON.stringify(payload, null, 2), "utf-8");
+    try {
+      fs.writeFileSync(GMAIL_AUTH_FILE, JSON.stringify(payload, null, 2), "utf-8");
+    } catch {}
+    // Keep in-memory environment synced
+    process.env.GMAIL_REFRESH_TOKEN = trimmed;
   }
 
   static getGooglePlacesStatus(): GooglePlacesConfigStatus {

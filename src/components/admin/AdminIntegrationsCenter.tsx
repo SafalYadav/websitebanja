@@ -125,6 +125,26 @@ export default function AdminIntegrationsCenter({ sessionToken, onNavigateTab }:
     }
   };
 
+  const [connectingGmail, setConnectingGmail] = useState(false);
+
+  const handleConnectGmail = async () => {
+    setConnectingGmail(true);
+    try {
+      const headers = await getAuthHeaders();
+      const res = await fetch("/api/integrations/gmail/connect?json=true", { headers });
+      const data = await res.json();
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        alert(data.error || "Failed to generate authorization URL");
+      }
+    } catch (err: any) {
+      alert("Error initiating OAuth: " + err.message);
+    } finally {
+      setConnectingGmail(false);
+    }
+  };
+
   return (
     <div className="space-y-6 text-slate-100 font-sans">
       {/* Top Toolbar */}
@@ -367,13 +387,15 @@ export default function AdminIntegrationsCenter({ sessionToken, onNavigateTab }:
             </div>
 
             <div className="pt-4 border-t border-slate-800 mt-4 space-y-2">
-              <a
-                href="/api/integrations/gmail/connect"
-                className="w-full py-2 px-3 rounded-xl bg-gradient-to-r from-rose-600 to-indigo-600 hover:from-rose-500 hover:to-indigo-500 text-xs font-semibold text-white flex items-center justify-center space-x-1.5 shadow-lg transition-all"
+              <button
+                type="button"
+                onClick={handleConnectGmail}
+                disabled={connectingGmail}
+                className="w-full py-2 px-3 rounded-xl bg-gradient-to-r from-rose-600 to-indigo-600 hover:from-rose-500 hover:to-indigo-500 text-xs font-semibold text-white flex items-center justify-center space-x-1.5 shadow-lg transition-all disabled:opacity-50"
               >
-                <span>Connect websitebanja@gmail.com</span>
+                <span>{connectingGmail ? "Initiating Google Auth..." : "Connect websitebanja@gmail.com"}</span>
                 <ArrowRight className="w-3.5 h-3.5" />
-              </a>
+              </button>
               <button
                 onClick={handleSyncReplies}
                 disabled={syncing}
