@@ -31,8 +31,11 @@ export default async function PreviewPage({ params }: { params: Promise<{ id: st
       const fs = await import("fs");
       const path = await import("path");
       const localFile = path.join(process.cwd(), "scratch/previews", `${resolvedParams.id}.json`);
+      const publicFile = path.join(process.cwd(), "public/previews", `${resolvedParams.id}.json`);
       if (fs.existsSync(localFile)) {
         rawData = JSON.parse(fs.readFileSync(localFile, "utf-8"));
+      } else if (fs.existsSync(publicFile)) {
+        rawData = JSON.parse(fs.readFileSync(publicFile, "utf-8"));
       }
     } catch {}
   }

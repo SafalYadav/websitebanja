@@ -1,0 +1,151 @@
+{
+  "businessName": "Suryam Ceramics Studio",
+  "category": "Handcrafted Ceramics & Stoneware Studio",
+  "theme": {
+    "preset": "Modern",
+    "primaryColor": "#059669",
+    "secondaryColor": "#047857",
+    "colors": {
+      "background": "#0F172A",
+      "text": "#F8FAFC"
+    },
+    "fonts": {
+      "heading": "Playfair Display",
+      "body": "Inter"
+    }
+  },
+  "hero": {
+    "title": "Suryam Ceramics Studio",
+    "subtitle": "Artisanal stoneware, wheel-thrown planters & bespoke ceramic tableware handcrafted in Indiranagar, Bangalore.",
+    "button": "Explore Studio Collection",
+    "layoutVariant": "fullscreen_visual",
+    "image": "https://images.unsplash.com/photo-1565193566173-7a0ee3dbe261"
+  },
+  "about": {
+    "title": "Rooted in Earth and Craftsmanship",
+    "description": "Every ceramic piece is molded by master potters using natural clay bodies, mineral glazes, and high-fire reduction kilns.",
+    "story": "Founded by traditional artisans dedicated to reviving slow living and timeless tabletop ceramics."
+  },
+  "services": {
+    "title": "Studio Collections & Workshops",
+    "subtitle": "Handcrafted ceramics fired to cone 10 vitrification",
+    "items": [
+      {
+        "id": "s1",
+        "title": "Hand-Thrown Tableware",
+        "description": "Dinner plates, ramen bowls, and tea sets finished in matte celadon.",
+        "price": "₹850"
+      },
+      {
+        "id": "s2",
+        "title": "Ceramic Planters & Vases",
+        "description": "Porous terracotta and stoneware planters designed for indoor greens.",
+        "price": "₹1,200"
+      },
+      {
+        "id": "s3",
+        "title": "Weekend Pottery Workshops",
+        "description": "Beginner-friendly 3-hour hand-building and wheel-throwing sessions.",
+        "price": "₹2,500"
+      }
+    ]
+  },
+  "features": {
+    "title": "The Suryam Promise",
+    "subtitle": "Why our ceramics stand apart in durability and texture",
+    "items": [
+      {
+        "id": "f1",
+        "title": "100% Non-Toxic Food Safe",
+        "description": "Lead-free and cadmium-free natural glazes tested for daily dining."
+      },
+      {
+        "id": "f2",
+        "title": "Microwave & Dishwasher Safe",
+        "description": "High-fired at 1220°C for exceptional strength and thermal resistance."
+      },
+      {
+        "id": "f3",
+        "title": "Sustainable Studio",
+        "description": "Zero clay waste with closed-loop slip reclamation and rainwater recycling."
+      }
+    ]
+  },
+  "gallery": {
+    "title": "Studio Highlights & Creations",
+    "subtitle": "Grounded photo verification from our Bangalore pottery workshop",
+    "items": [
+      {
+        "id": "g1",
+        "url": "https://images.unsplash.com/photo-1565193566173-7a0ee3dbe261",
+        "caption": "Wheel-throwing stoneware bowls"
+      },
+      {
+        "id": "g2",
+        "url": "https://images.unsplash.com/photo-1610701596007-11502861dcfa",
+        "caption": "Matte glaze drying in the open air"
+      },
+      {
+        "id": "g3",
+        "url": "https://images.unsplash.com/photo-1578749556568-bc2c40e68b61",
+        "caption": "Custom tableware sets packaged with care"
+      }
+    ]
+  },
+  "reviews": {
+    "title": "Customer Testimonials",
+    "subtitle": "Verified Google Places ratings (4.9 ★ from 142 reviews)",
+    "items": [
+      {
+        "id": "r1",
+        "author": "Pooja Hegde",
+        "rating": 5,
+        "text": "The ramen bowls are simply magnificent. Weight, glaze, and finish are top tier."
+      },
+      {
+        "id": "r2",
+        "author": "Arjun Nair",
+        "rating": 5,
+        "text": "Attended their weekend pottery class in Indiranagar. The best experience ever!"
+      }
+    ]
+  },
+  "faq": {
+    "title": "Frequently Asked Questions",
+    "subtitle": "Care instructions and ordering details",
+    "items": [
+      {
+        "id": "q1",
+        "question": "Can I place custom bulk orders for cafes?",
+        "answer": "Yes, we collaborate with cafes and restaurants for bespoke branded tableware."
+      },
+      {
+        "id": "q2",
+        "question": "Do you ship worldwide?",
+        "answer": "We deliver pan-India with shatter-proof biodegradable packaging."
+      }
+    ]
+  },
+  "contact": {
+    "title": "Visit the Studio",
+    "subtitle": "Open Tuesday to Sunday: 10:00 AM - 7:00 PM",
+    "phone": "+91 98765 43210",
+    "email": "namaste@suryamceramics.com",
+    "address": "742 12th Main Road, HAL 2nd Stage, Indiranagar, Bangalore, Karnataka 560038"
+  },
+  "footer": {
+    "text": "Suryam Ceramics Studio. Handcrafted in Bharat.",
+    "copyright": "© 2026 Suryam Ceramics Studio Pvt Ltd. All rights reserved."
+  },
+  "sectionOrder": [
+    "hero",
+    "about",
+    "services",
+    "features",
+    "gallery",
+    "reviews",
+    "faq",
+    "contact",
+    "footer"
+  ]
+}
