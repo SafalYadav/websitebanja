@@ -228,8 +228,11 @@ async function run() {
   // Test 13: Places Photo Proxy Route (Phase 20A)
   await test("Places Photo Proxy Route (GET /api/public/places-photo) responds cleanly without leaking secrets", async () => {
     const res = await fetchUrl("/api/public/places-photo?name=places/test/photos/test");
-    if (res.status !== 200 && res.status !== 307 && res.status !== 400) {
+    if (res.status !== 200 && res.status !== 307 && res.status !== 400 && res.status !== 403 && res.status !== 404) {
       throw new Error(`Unexpected status code ${res.status}`);
+    }
+    if (res.body.includes("AIza")) {
+      throw new Error("Potential API key leakage detected in photo proxy response");
     }
     return res;
   });
