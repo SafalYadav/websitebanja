@@ -1,0 +1,194 @@
+{
+  "id": "WB_Ops_Agent_CRM",
+  "name": "WebsiteBanja — Ops Tool: CRM & Pipeline Management",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "trigger_1",
+      "name": "When Executed by Caller or Sub-Workflow",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "tool_name",
+              "name": "tool",
+              "value": "update_crm",
+              "type": "string"
+            },
+            {
+              "id": "req_id",
+              "name": "requestId",
+              "value": "={{ $json.requestId || ('req_' + $now.toMillis()) }}",
+              "type": "string"
+            },
+            {
+              "id": "task_id",
+              "name": "taskId",
+              "value": "={{ $json.taskId || 'task_ops_' + $now.toMillis() }}",
+              "type": "string"
+            },
+            {
+              "id": "tenant_id",
+              "name": "tenantId",
+              "value": "={{ $json.tenantId || null }}",
+              "type": "string"
+            },
+            {
+              "id": "lead_id",
+              "name": "leadId",
+              "value": "={{ $json.leadId || null }}",
+              "type": "string"
+            },
+            {
+              "id": "input_data",
+              "name": "input",
+              "value": "={{ $json.input || {} }}",
+              "type": "object"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "prep_payload",
+      "name": "Format Ops Tool Request",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        480,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ ($env.WEBSITEBANJA_API_URL || 'http://localhost:3000').replace(/\\/+$/, '') + '/api/automation/ops' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-automation-secret",
+              "value": "={{ $env.AUTOMATION_SECRET || '' }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"tool\": \"{{ $json.tool }}\",\n  \"input\": {{ JSON.stringify($json.input) }},\n  \"requestId\": \"{{ $json.requestId }}\",\n  \"taskId\": \"{{ $json.taskId }}\",\n  \"tenantId\": {{ $json.tenantId ? ('\"' + $json.tenantId + '\"') : 'null' }},\n  \"leadId\": {{ $json.leadId ? ('\"' + $json.leadId + '\"') : 'null' }}\n}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "http_ops_api",
+      "name": "Call WebsiteBanja Ops API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        720,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "out_success",
+              "name": "success",
+              "value": "={{ $json.success }}",
+              "type": "boolean"
+            },
+            {
+              "id": "out_tool",
+              "name": "tool",
+              "value": "={{ $json.tool || 'update_crm' }}",
+              "type": "string"
+            },
+            {
+              "id": "out_result",
+              "name": "result",
+              "value": "={{ $json.result }}",
+              "type": "object"
+            },
+            {
+              "id": "out_errors",
+              "name": "errors",
+              "value": "={{ $json.errors || [] }}",
+              "type": "array"
+            },
+            {
+              "id": "out_meta",
+              "name": "metadata",
+              "value": "={{ $json.metadata || {} }}",
+              "type": "object"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "format_response",
+      "name": "Normalize Ops Response",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        960,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "When Executed by Caller or Sub-Workflow": {
+      "main": [
+        [
+          {
+            "node": "Format Ops Tool Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Ops Tool Request": {
+      "main": [
+        [
+          {
+            "node": "Call WebsiteBanja Ops API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call WebsiteBanja Ops API": {
+      "main": [
+        [
+          {
+            "node": "Normalize Ops Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "1.0.0"
+}

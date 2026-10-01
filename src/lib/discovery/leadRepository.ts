@@ -100,9 +100,13 @@ class LeadRepository {
     return saved;
   }
 
-  async findLeadById(leadId: string, userId: string = DEFAULT_LOCAL_USER_ID): Promise<BusinessLead | null> {
+  async findLeadById(leadId: string, userId?: string): Promise<BusinessLead | null> {
     const existing = this.readLocalLeads();
-    const found = existing.find((l) => l.leadId === leadId && l.userId === userId);
+    if (userId) {
+      const match = existing.find((l) => l.leadId === leadId && l.userId === userId);
+      if (match) return match;
+    }
+    const found = existing.find((l) => l.leadId === leadId);
     return found || null;
   }
 

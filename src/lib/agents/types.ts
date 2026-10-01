@@ -1,7 +1,7 @@
 // src/lib/agents/types.ts
 import type { ModelProviderName, RoutingPolicy } from "@/lib/ai/router/types";
 
-export type AgentName = "skills" | "uniqueness" | "boss" | "mitra";
+export type AgentName = "skills" | "uniqueness" | "boss" | "mitra" | "executive" | string;
 
 export interface AgentRunRecord {
   id?: string;

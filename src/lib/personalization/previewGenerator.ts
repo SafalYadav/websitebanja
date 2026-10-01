@@ -26,6 +26,10 @@ import { validateWebsiteQuality } from "@/lib/ai/design/qualityValidator";
 import { resolveSemanticImage, canonicalizeImageUrl } from "@/lib/images/semanticImageSourcing";
 import { validateAndProtectHeroContrast } from "./heroContrastValidator";
 import { emitAgentEvent } from "@/lib/telemetry/agentTelemetry";
+import { groundedProfileStore } from "@/lib/intelligence/grounding/groundedProfileStore";
+import { groundedAssetSelector } from "@/lib/intelligence/grounding/groundedAssetSelector";
+import { applyGroundedAssetsToWebsite } from "@/lib/intelligence/grounding/groundedWebsiteGenerator";
+import type { GroundedBusinessProfile } from "@/lib/intelligence/grounding/types";
 import type { WebsiteRequirement } from "@/lib/ai/requirementModel";
 import type { WebsiteData, FAQ, Service, Feature } from "@/types/website";
 import type { BusinessLead } from "@/lib/discovery/types";
@@ -683,7 +687,7 @@ export async function generatePersonalizedPreview(
   );
 
   // 8. Assemble Full WebsiteData
-  const websiteData: WebsiteData = {
+  let websiteData: WebsiteData = {
     businessName,
     brand: {
       name: businessName,
@@ -763,6 +767,54 @@ export async function generatePersonalizedPreview(
       },
     ],
   };
+
+  // 8.1 Grounded Business Intelligence & Asset Integration (Phase 20A)
+  let groundedProfile: GroundedBusinessProfile | undefined = request.groundedProfile;
+  if (!groundedProfile) {
+    groundedProfile = await groundedProfileStore.getProfileByLeadId(lead.leadId, request.userId);
+  }
+  if (!groundedProfile && lead.businessName) {
+    const candidateId = `biz_${crypto.createHash("sha256").update(`${lead.businessName.trim().toLowerCase()}_${(lead.city || "").trim().toLowerCase()}`).digest("hex").slice(0, 12)}`;
+    groundedProfile = await groundedProfileStore.getProfile(candidateId, request.userId);
+  }
+
+  if (groundedProfile) {
+    const assetSelection = groundedAssetSelector.selectAssets(groundedProfile, {
+      category: normalizedInd,
+      photos: request.placesPhotos,
+      reviews: request.placesReviews,
+    });
+
+    websiteData = applyGroundedAssetsToWebsite(websiteData, assetSelection, groundedProfile);
+
+    // Update imageManifest with real business photos
+    if (assetSelection.summary.businessPhotosCount > 0) {
+      for (const asset of assetSelection.assets) {
+        if (asset.type === "BUSINESS_PHOTO" && asset.contentUrl) {
+          imageManifest.push({
+            role: asset.targetSection,
+            url: asset.contentUrl,
+            source: "google_places",
+            author: asset.attribution?.displayName || "Google Places Contributor",
+            intent: `Verified business photograph for ${asset.targetSection}`,
+            license: "Google Places API Commercial Attribution",
+          });
+        }
+      }
+    }
+
+    emitAgentEvent({
+      event: "preview.grounded_assets.applied",
+      agent: "n8n_automation",
+      requestId,
+      metadata: {
+        businessPhotosCount: assetSelection.summary.businessPhotosCount,
+        reviewsCount: assetSelection.summary.reviewsCount,
+        factsCount: assetSelection.summary.factsCount,
+        fallbacksCount: assetSelection.summary.fallbacksCount,
+      },
+    });
+  }
 
   // 9. Quality Validation (Phase 6 + Phase 10 Enhancements)
   emitAgentEvent({

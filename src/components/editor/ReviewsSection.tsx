@@ -170,6 +170,12 @@ export default function ReviewsSection({
         const role = (r.role || "Verified Customer").trim();
         return { name, text, role };
       })
+    : reviews !== undefined && Array.isArray(reviews)
+    ? [
+        { name: "Verified Service Standards", text: "Every client engagement is delivered according to verified standards and transparent pricing.", role: "Operating Principle" },
+        { name: "Direct Communication", text: "Direct, transparent communication with verified business personnel.", role: "Quality Standard" },
+        { name: "Uncompromising Craft", text: "Dedicated to measurable customer distinction and lasting excellence.", role: "Core Value" },
+      ]
     : getCategoryFallbackReviews(category);
 
   return (

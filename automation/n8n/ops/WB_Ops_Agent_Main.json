@@ -1,0 +1,162 @@
+{
+  "id": "WB_Ops_Agent_Main",
+  "name": "WebsiteBanja — Ops Agent (Main Orchestrator)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "wb-ops-agent",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "webhook_inbound",
+      "name": "Inbound CEO Task Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        180,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Validate CeoN8nTaskDispatch contract & initialize Ops State\nconst body = $input.first().json.body || $input.first().json;\n\nif (!body.taskId || !body.objective) {\n  throw new Error(\"Invalid task dispatch: taskId and objective are mandatory.\");\n}\n\n// Enforce security invariants\nconst constraints = body.constraints || [];\nconst allowedTools = body.allowedTools || [];\n\n// Check if WhatsApp is illegally requested\nif (allowedTools.includes(\"whatsapp\") || JSON.stringify(body).toLowerCase().includes(\"whatsapp\")) {\n  throw new Error(\"Security Violation: WhatsApp integration is strictly disabled in WebsiteBanja.\");\n}\n\nreturn {\n  json: {\n    taskId: body.taskId,\n    objective: body.objective,\n    priority: body.priority || \"medium\",\n    constraints,\n    allowedTools,\n    approvalRequired: Boolean(body.approvalRequired),\n    tenantId: body.tenantId || null,\n    leadId: body.leadId || null,\n    input: body.input || {},\n    actions: [],\n    results: {},\n    failures: [],\n    evidence: [],\n    status: \"in_progress\",\n    startTime: new Date().toISOString()\n  }\n};"
+      },
+      "id": "validate_and_init",
+      "name": "Enforce Security & Initialize State",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        420,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ 'Execute approved operational task: ' + $json.objective + '. Constraints: ' + JSON.stringify($json.constraints) + '. Allowed tools: ' + JSON.stringify($json.allowedTools) }}",
+        "options": {
+          "systemMessage": "You are the WebsiteBanja n8n Operations Agent.\\nYour role is to execute tactical workflows approved by the CEO.\\nYou must use available WebsiteBanja operational tools.\\nNever attempt WhatsApp messaging (strictly disabled).\\nAll email outreach must be created as drafts awaiting human approval.\\nReturn a complete summary of executed tools, outputs, and evidence."
+        }
+      },
+      "id": "n8n_ai_ops_agent",
+      "name": "n8n AI Ops Agent (Gemini)",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [
+        700,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-2.5-flash",
+        "options": {
+          "temperature": 0.2
+        }
+      },
+      "id": "gemini_model",
+      "name": "Google Gemini Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        700,
+        520
+      ],
+      "credentials": {
+        "googlePalmApi": {
+          "id": "google_gemini_api_creds",
+          "name": "Google Gemini API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ ($env.WEBSITEBANJA_API_URL || 'http://localhost:3000').replace(/\\/+$/, '') + '/api/automation/ops/callback' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-automation-secret",
+              "value": "={{ $env.AUTOMATION_SECRET || '' }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"taskId\": \"{{ $('Enforce Security & Initialize State').first().json.taskId }}\",\n  \"status\": \"completed\",\n  \"summary\": \"{{ $json.output ? $json.output.slice(0, 500) : 'Ops agent executed workflow successfully.' }}\",\n  \"actions\": $('Enforce Security & Initialize State').first().json.actions,\n  \"results\": $('Enforce Security & Initialize State').first().json.results,\n  \"failures\": $('Enforce Security & Initialize State').first().json.failures,\n  \"approvalRequired\": {{ $('Enforce Security & Initialize State').first().json.approvalRequired ? true : false }},\n  \"evidence\": $('Enforce Security & Initialize State').first().json.evidence,\n  \"report\": \"{{ $json.output || 'Operational workflow execution completed.' }}\",\n  \"timestamp\": \"{{ $now.toISO() }}\"\n}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "post_ceo_callback",
+      "name": "Send Callback to CEO",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1020,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Inbound CEO Task Webhook": {
+      "main": [
+        [
+          {
+            "node": "Enforce Security & Initialize State",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enforce Security & Initialize State": {
+      "main": [
+        [
+          {
+            "node": "n8n AI Ops Agent (Gemini)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "n8n AI Ops Agent (Gemini)",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "n8n AI Ops Agent (Gemini)": {
+      "main": [
+        [
+          {
+            "node": "Send Callback to CEO",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "1.0.0"
+}

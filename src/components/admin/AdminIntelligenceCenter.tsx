@@ -30,8 +30,20 @@ import {
   ListFilter,
   Trash2,
   ArrowRight,
+  Database,
+  Brain,
+  BookOpen,
+  FlaskConical,
+  GitFork,
+  Scale,
+  CornerDownRight,
+  Workflow,
+  Send,
+  Crown,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import CeoCommandCenterView from "./CeoCommandCenterView";
+import type { CeoCommandCenterData } from "@/lib/intelligence/commandCenter/commandCenterTypes";
 import type {
   BossReport,
   AgentHealthMetric,
@@ -61,6 +73,7 @@ const WINDOW_OPTIONS = [
 ];
 
 const ALL_AGENTS: AgentName[] = [
+  "executive",
   "mitra",
   "generator",
   "planner",
@@ -72,6 +85,7 @@ const ALL_AGENTS: AgentName[] = [
 ];
 
 const AGENT_LABELS: Record<string, { title: string; subtitle: string }> = {
+  executive: { title: "CEO / Executive Brain", subtitle: "Strategic Orchestration, Delegation & Verification" },
   mitra: { title: "Mitra Voice Agent", subtitle: "Multilingual Voice & Requirement Intake" },
   generator: { title: "Website Generator", subtitle: "Full-page HTML, layout & Tailwind synthesis" },
   planner: { title: "Architecture Planner", subtitle: "Component breakdown & structure generation" },
@@ -181,6 +195,255 @@ function getSeverityBadge(severity: IssueSeverity) {
   }
 }
 
+// ─── Phase 25: Governance Section Sub-Component ──────────────────────────────
+
+function GovernanceSection({ sessionToken }: { sessionToken?: string }) {
+  const [govData, setGovData] = useState<any | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [showRules, setShowRules] = useState(false);
+
+  const fetchGovernance = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const headers: Record<string, string> = {};
+      if (sessionToken) headers["Authorization"] = `Bearer ${sessionToken}`;
+      const res = await fetch(`/api/admin/intelligence/governance?t=${Date.now()}`, {
+        headers,
+        cache: "no-store",
+      });
+      const data = await res.json();
+      if (data.success) {
+        setGovData(data.governance);
+      } else {
+        setError(data.message || "Failed to load governance data.");
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Network error");
+    } finally {
+      setIsLoading(false);
+    }
+  }, [sessionToken]);
+
+  useEffect(() => {
+    void fetchGovernance();
+  }, [fetchGovernance]);
+
+  const summary = govData?.auditSummary;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="rounded-3xl border border-violet-500/20 bg-gradient-to-br from-violet-500/5 via-transparent to-transparent p-6 sm:p-8 space-y-5"
+    >
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-tr from-violet-600 to-purple-600 text-white shadow-md shadow-violet-600/20">
+            <ShieldCheck className="h-5 w-5" />
+          </div>
+          <div>
+            <h3 className="text-sm font-black text-zinc-900 dark:text-white flex items-center gap-2">
+              Governance &amp; Action Authority
+              <span className="rounded-md bg-violet-100 dark:bg-violet-950/60 px-2 py-0.5 text-[10px] font-bold text-violet-700 dark:text-violet-300 border border-violet-200 dark:border-violet-800">
+                PHASE 25
+              </span>
+              {govData && (
+                <span className="rounded-md bg-emerald-100 dark:bg-emerald-950/60 px-2 py-0.5 text-[10px] font-bold text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                  ACTIVE · DEFAULT-DENY
+                </span>
+              )}
+            </h3>
+            <p className="text-xs text-zinc-500">
+              Centralized policy engine governing all agent actions. CEO → Governance → Execution.
+            </p>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => void fetchGovernance()}
+          disabled={isLoading}
+          className="flex items-center gap-1.5 rounded-xl border border-zinc-200 bg-white px-3 py-1.5 text-xs font-bold text-zinc-700 hover:bg-zinc-50 dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-300 transition"
+        >
+          <RefreshCw className={cn("h-3 w-3", isLoading && "animate-spin text-violet-600")} />
+          Refresh
+        </button>
+      </div>
+
+      {error && (
+        <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 px-4 py-3 text-xs text-amber-600 dark:text-amber-400">
+          {error}
+        </div>
+      )}
+
+      {govData && (
+        <>
+          {/* Security Invariants Grid */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5">
+            {[
+              { label: "WhatsApp", value: "PERMANENTLY DISABLED", ok: false },
+              { label: "Telegram", value: "NOT YET IMPL.", ok: false },
+              { label: "Email Auto-Send", value: "BLOCKED — Human Approval Required", ok: false },
+              { label: "AI Self-Approval", value: "BLOCKED", ok: false },
+              { label: "CEO ≠ Human Approval", value: "ENFORCED", ok: true },
+              { label: "One-Time Approval", value: "ENFORCED", ok: true },
+              { label: "Cross-Tenant Approvals", value: "IMPOSSIBLE", ok: true },
+              { label: "Default-Deny", value: "ACTIVE", ok: true },
+            ].map((inv) => (
+              <div
+                key={inv.label}
+                className={cn(
+                  "rounded-xl border p-3 text-[10px] font-bold space-y-1",
+                  inv.ok
+                    ? "border-emerald-500/20 bg-emerald-500/5 text-emerald-700 dark:text-emerald-400"
+                    : "border-red-500/20 bg-red-500/5 text-red-700 dark:text-red-400"
+                )}
+              >
+                <div className="flex items-center gap-1">
+                  {inv.ok ? (
+                    <CheckCircle2 className="h-3 w-3 shrink-0" />
+                  ) : (
+                    <Lock className="h-3 w-3 shrink-0" />
+                  )}
+                  <span className="uppercase tracking-wide text-zinc-600 dark:text-zinc-400 font-semibold">
+                    {inv.label}
+                  </span>
+                </div>
+                <p className="leading-snug">{inv.value}</p>
+              </div>
+            ))}
+          </div>
+
+          {/* Audit Summary */}
+          {summary && (
+            <div className="grid grid-cols-4 gap-3">
+              {[
+                { label: "Total Decisions", value: summary.total, color: "text-zinc-900 dark:text-white" },
+                { label: "Allowed", value: summary.allowed, color: "text-emerald-600 dark:text-emerald-400" },
+                { label: "Require Approval", value: summary.requireApproval, color: "text-amber-600 dark:text-amber-400" },
+                { label: "Blocked", value: summary.blocked, color: "text-red-600 dark:text-red-400" },
+              ].map((stat) => (
+                <div
+                  key={stat.label}
+                  className="rounded-2xl border border-zinc-100 dark:border-white/5 bg-white dark:bg-zinc-900/60 p-4 text-center"
+                >
+                  <p className={cn("text-2xl font-black", stat.color)}>{stat.value}</p>
+                  <p className="text-[10px] font-bold text-zinc-400 uppercase mt-0.5">{stat.label}</p>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Pending Approvals */}
+          {govData.pendingApprovals > 0 && (
+            <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 px-4 py-3 flex items-center gap-2.5">
+              <AlertCircle className="h-4 w-4 text-amber-500 shrink-0" />
+              <span className="text-xs font-bold text-amber-600 dark:text-amber-400">
+                {govData.pendingApprovals} action{govData.pendingApprovals !== 1 ? "s" : ""} awaiting human approval
+              </span>
+            </div>
+          )}
+
+          {/* Recent Decisions */}
+          {govData.recentDecisions?.length > 0 && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-zinc-600 dark:text-zinc-300">Recent Governance Decisions</span>
+                <button
+                  type="button"
+                  onClick={() => setShowRules((p) => !p)}
+                  className="text-[10px] font-semibold text-violet-600 dark:text-violet-400 hover:underline"
+                >
+                  {showRules ? "Hide" : "Show"} Policy Rules ({govData.policyRules?.length ?? 0})
+                </button>
+              </div>
+              <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                {govData.recentDecisions.slice(0, 8).map((d: any) => (
+                  <div
+                    key={d.auditId}
+                    className="flex items-center gap-2.5 rounded-xl border border-zinc-100 dark:border-white/5 bg-white dark:bg-zinc-900/60 px-3 py-2 text-[10px]"
+                  >
+                    <span
+                      className={cn(
+                        "rounded-md px-1.5 py-0.5 font-bold border",
+                        d.decision === "ALLOW"
+                          ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
+                          : d.decision === "BLOCK"
+                          ? "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20"
+                          : "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20"
+                      )}
+                    >
+                      {d.decision}
+                    </span>
+                    <span className="font-mono text-zinc-700 dark:text-zinc-300 truncate max-w-[120px]">
+                      {d.action}
+                    </span>
+                    <span className="text-zinc-400 shrink-0">by {d.requestingAgent}</span>
+                    <span className="ml-auto text-zinc-400 shrink-0 font-mono">
+                      {d.policyId}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Policy Rules (collapsible) */}
+          {showRules && govData.policyRules?.length > 0 && (
+            <div className="space-y-1.5">
+              <span className="text-xs font-bold text-zinc-600 dark:text-zinc-300">Policy Rules</span>
+              <div className="grid gap-1.5">
+                {govData.policyRules.map((rule: any) => (
+                  <div
+                    key={rule.ruleId}
+                    className="flex items-center gap-2.5 rounded-xl border border-zinc-100 dark:border-white/5 bg-white dark:bg-zinc-900/60 px-3 py-2 text-[10px]"
+                  >
+                    <span className="font-mono text-zinc-400 w-5 shrink-0">{rule.priority}</span>
+                    <span
+                      className={cn(
+                        "rounded px-1.5 py-0.5 font-bold border shrink-0",
+                        rule.outcome === "ALLOW"
+                          ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20"
+                          : rule.outcome === "BLOCK"
+                          ? "bg-red-500/10 text-red-600 border-red-500/20"
+                          : "bg-amber-500/10 text-amber-600 border-amber-500/20"
+                      )}
+                    >
+                      {rule.outcome}
+                    </span>
+                    <span className="font-bold text-zinc-700 dark:text-zinc-300 truncate">{rule.ruleId}</span>
+                    <span className="text-zinc-400 truncate hidden sm:inline">{rule.description}</span>
+                    <span className="ml-auto text-zinc-400 shrink-0">{rule.authorityLevel}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
+      {isLoading && !govData && (
+        <div className="space-y-2">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="h-8 w-full bg-zinc-100 dark:bg-zinc-900/40 rounded-xl animate-pulse" />
+          ))}
+        </div>
+      )}
+
+      {/* Privacy Notice */}
+      <div className="rounded-xl bg-violet-500/5 border border-violet-500/20 p-3 flex items-center gap-2.5 text-xs text-violet-600 dark:text-violet-400">
+        <ShieldCheck className="h-4 w-4 shrink-0" />
+        <span>
+          Governance decisions are logged without secrets. Every action passes the policy engine before execution.
+          Default-deny applies to all unrecognized actions.
+        </span>
+      </div>
+    </motion.div>
+  );
+}
+
 export default function AdminIntelligenceCenter({ sessionToken, onNavigateTab }: AdminIntelligenceCenterProps) {
   const [windowMinutes, setWindowMinutes] = useState<number>(1440);
   const [report, setReport] = useState<BossReport | null>(null);
@@ -190,6 +453,12 @@ export default function AdminIntelligenceCenter({ sessionToken, onNavigateTab }:
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
   const [selectedAgentDetail, setSelectedAgentDetail] = useState<AgentHealthMetric | null>(null);
   const [severityFilter, setSeverityFilter] = useState<string>("ALL");
+
+  // Phase 26 CEO Command Center State
+  const [commandCenterData, setCommandCenterData] = useState<CeoCommandCenterData | null>(null);
+  const [isCommandCenterLoading, setIsCommandCenterLoading] = useState<boolean>(true);
+  const [commandCenterError, setCommandCenterError] = useState<string | null>(null);
+  const [activeViewTab, setActiveViewTab] = useState<"command_center" | "deep_dive">("command_center");
 
   // Real-time SSE State
   const [sseConnected, setSseConnected] = useState<boolean>(false);
@@ -208,6 +477,289 @@ export default function AdminIntelligenceCenter({ sessionToken, onNavigateTab }:
   const [telemetryEvents, setTelemetryEvents] = useState<AgentTelemetryEvent[]>([]);
   const [streamFilterAgent, setStreamFilterAgent] = useState<string>("ALL");
   const [streamFilterType, setStreamFilterType] = useState<string>("ALL");
+
+  // Executive CEO Layer State
+  const [executiveObjective, setExecutiveObjective] = useState<string>(
+    "Fine dining restaurant in Vadodara: analyze market, verify domain skills, and design personalized preview."
+  );
+  const [isExecutingStrategy, setIsExecutingStrategy] = useState<boolean>(false);
+  const [executiveResult, setExecutiveResult] = useState<any>(null);
+  const [executiveError, setExecutiveError] = useState<string | null>(null);
+
+  // Phase 18 Long-Term Memory & Learning State
+  const [memoryData, setMemoryData] = useState<{
+    strategies: any[];
+    lessons: any[];
+    runs: any[];
+    failures: any[];
+    experiments: any[];
+  } | null>(null);
+  const [isMemoryLoading, setIsMemoryLoading] = useState<boolean>(false);
+  const [memoryTab, setMemoryTab] = useState<"strategies" | "lessons" | "failures" | "experiments">("lessons");
+  const [promotingLessonId, setPromotingLessonId] = useState<string | null>(null);
+  const [promotionMessage, setPromotionMessage] = useState<string | null>(null);
+
+  const fetchMemoryData = useCallback(async () => {
+    setIsMemoryLoading(true);
+    try {
+      const headers: Record<string, string> = {};
+      if (sessionToken) headers["Authorization"] = `Bearer ${sessionToken}`;
+      const res = await fetch(`/api/admin/intelligence/memory?t=${Date.now()}`, {
+        headers,
+        cache: "no-store",
+      });
+      const data = await res.json();
+      if (data.success) {
+        setMemoryData({
+          strategies: data.strategies || [],
+          lessons: data.lessons || [],
+          runs: data.runs || [],
+          failures: data.failures || [],
+          experiments: data.experiments || [],
+        });
+      }
+    } catch (err) {
+      console.error("[Memory Fetch Error]:", err);
+    } finally {
+      setIsMemoryLoading(false);
+    }
+  }, [sessionToken]);
+
+  // Phase 19 Hierarchical Delegation State
+  const [delegationTrees, setDelegationTrees] = useState<any[]>([]);
+  const [selectedTree, setSelectedTree] = useState<any | null>(null);
+  const [isDelegationLoading, setIsDelegationLoading] = useState<boolean>(false);
+  const [isDelegating, setIsDelegating] = useState<boolean>(false);
+  const [delegationObjective, setDelegationObjective] = useState<string>(
+    "Vadodara gourmet restaurant: derive custom 8pt UI tokens, bento layout, and audit visual uniqueness against competitors."
+  );
+  const [delegationError, setDelegationError] = useState<string | null>(null);
+  const [delegationResult, setDelegationResult] = useState<any | null>(null);
+
+  const fetchDelegationData = useCallback(async () => {
+    setIsDelegationLoading(true);
+    try {
+      const headers: Record<string, string> = {};
+      if (sessionToken) headers["Authorization"] = `Bearer ${sessionToken}`;
+      const res = await fetch(`/api/admin/intelligence/delegation?t=${Date.now()}`, {
+        headers,
+        cache: "no-store",
+      });
+      const data = await res.json();
+      if (data.success && Array.isArray(data.trees)) {
+        setDelegationTrees(data.trees);
+        if (data.trees.length > 0 && !selectedTree) {
+          setSelectedTree(data.trees[0]);
+        }
+      }
+    } catch (err) {
+      console.error("[Delegation Fetch Error]:", err);
+    } finally {
+      setIsDelegationLoading(false);
+    }
+  }, [sessionToken, selectedTree]);
+
+  // Phase 22 n8n Ops Agent State
+  const [opsData, setOpsData] = useState<{
+    agent: {
+      name: string;
+      status: string;
+      executionMode: string;
+      webhookConfigured: boolean;
+    };
+    securityInvariants: {
+      whatsappStatus: string;
+      emailAutoSend: string;
+      optOutCompliance: string;
+      secretRedaction: string;
+    };
+    tools: Array<{ name: string; available: boolean; type: string }>;
+    recentReports: any[];
+  } | null>(null);
+  const [isOpsLoading, setIsOpsLoading] = useState<boolean>(false);
+  const [isOpsDispatching, setIsOpsDispatching] = useState<boolean>(false);
+  const [opsObjective, setOpsObjective] = useState<string>(
+    "Discover 3 local dental clinics in Kathmandu, audit their web presence, and draft personalized preview outreach."
+  );
+  const [opsDispatchError, setOpsDispatchError] = useState<string | null>(null);
+  const [opsDispatchResult, setOpsDispatchResult] = useState<any | null>(null);
+
+  const fetchOpsData = useCallback(async () => {
+    setIsOpsLoading(true);
+    try {
+      const headers: Record<string, string> = {};
+      if (sessionToken) headers["Authorization"] = `Bearer ${sessionToken}`;
+      const res = await fetch(`/api/admin/intelligence/ops?t=${Date.now()}`, {
+        headers,
+        cache: "no-store",
+      });
+      const data = await res.json();
+      if (data.success) {
+        setOpsData(data);
+      }
+    } catch (err) {
+      console.error("[Ops Agent Fetch Error]:", err);
+    } finally {
+      setIsOpsLoading(false);
+    }
+  }, [sessionToken]);
+
+  const fetchCommandCenterData = useCallback(async () => {
+    setIsCommandCenterLoading(true);
+    setCommandCenterError(null);
+    try {
+      const headers: Record<string, string> = {};
+      if (sessionToken) headers["Authorization"] = `Bearer ${sessionToken}`;
+      const res = await fetch(`/api/admin/intelligence/command-center?t=${Date.now()}`, {
+        headers,
+        cache: "no-store",
+      });
+      const json = await res.json();
+      if (json.success && json.data) {
+        setCommandCenterData(json.data);
+      } else {
+        setCommandCenterError(json.message || "Failed to load CEO Command Center data.");
+      }
+    } catch (err) {
+      setCommandCenterError(err instanceof Error ? err.message : "Network error");
+    } finally {
+      setIsCommandCenterLoading(false);
+    }
+  }, [sessionToken]);
+
+  const handleExecuteOpsDispatch = async (overrideObjective?: string) => {
+    const obj = overrideObjective || opsObjective;
+    if (!obj.trim()) return;
+
+    setIsOpsDispatching(true);
+    setOpsDispatchError(null);
+    setOpsDispatchResult(null);
+
+    try {
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (sessionToken) headers["Authorization"] = `Bearer ${sessionToken}`;
+
+      const res = await fetch("/api/admin/intelligence/ops", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          objective: obj.trim(),
+          priority: "high",
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        setOpsDispatchError(data.message || "Failed to dispatch ops task.");
+      } else {
+        setOpsDispatchResult(data.callback);
+        await fetchOpsData();
+      }
+    } catch (err) {
+      setOpsDispatchError(err instanceof Error ? err.message : "Network error");
+    } finally {
+      setIsOpsDispatching(false);
+    }
+  };
+
+  const handleExecuteDelegation = async (overrideObjective?: string) => {
+    const obj = overrideObjective || delegationObjective;
+    if (!obj.trim()) return;
+
+    setIsDelegating(true);
+    setDelegationError(null);
+    setDelegationResult(null);
+
+    try {
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (sessionToken) headers["Authorization"] = `Bearer ${sessionToken}`;
+
+      const res = await fetch("/api/admin/intelligence/delegation", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          objective: obj.trim(),
+          riskLevel: "low",
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        setDelegationError(data.message || "Failed to execute delegation.");
+      } else {
+        setDelegationResult(data.result);
+        if (data.tree) {
+          setSelectedTree(data.tree);
+          setDelegationTrees((prev) => [data.tree, ...prev.filter((t) => t.taskId !== data.tree.taskId)]);
+        }
+      }
+    } catch (err) {
+      setDelegationError(err instanceof Error ? err.message : "Network error");
+    } finally {
+      setIsDelegating(false);
+    }
+  };
+
+  const handlePromoteLesson = async (lessonId: string) => {
+    setPromotingLessonId(lessonId);
+    setPromotionMessage(null);
+    try {
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (sessionToken) headers["Authorization"] = `Bearer ${sessionToken}`;
+      const res = await fetch("/api/admin/intelligence/memory", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          action: "promote_lesson",
+          lessonId,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        setPromotionMessage(`Promotion blocked: ${json.message || "Failed"}`);
+      } else {
+        setPromotionMessage(`Lesson successfully promoted to Strategic Memory!`);
+        await fetchMemoryData();
+      }
+    } catch (err) {
+      setPromotionMessage(err instanceof Error ? err.message : "Error promoting lesson");
+    } finally {
+      setPromotingLessonId(null);
+    }
+  };
+
+  const handleExecuteExecutiveTask = async (objectiveOverride?: string) => {
+    const targetObj = objectiveOverride || executiveObjective;
+    if (!targetObj.trim()) return;
+
+    setIsExecutingStrategy(true);
+    setExecutiveError(null);
+
+    try {
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (sessionToken) headers["Authorization"] = `Bearer ${sessionToken}`;
+
+      const res = await fetch("/api/admin/intelligence/executive", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          objective: targetObj.trim(),
+          priority: "high",
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        setExecutiveError(data.message || data.error || "Failed to execute executive task.");
+      } else {
+        setExecutiveResult(data.result);
+      }
+    } catch (err) {
+      setExecutiveError(err instanceof Error ? err.message : "Network error");
+    } finally {
+      setIsExecutingStrategy(false);
+    }
+  };
 
   const fetchDiagnostics = useCallback(
     async (isManualRefresh = false) => {
@@ -255,8 +807,12 @@ export default function AdminIntelligenceCenter({ sessionToken, onNavigateTab }:
   );
 
   useEffect(() => {
+    void fetchCommandCenterData();
     void fetchDiagnostics();
-  }, [fetchDiagnostics]);
+    void fetchMemoryData();
+    void fetchDelegationData();
+    void fetchOpsData();
+  }, [fetchCommandCenterData, fetchDiagnostics, fetchMemoryData, fetchDelegationData, fetchOpsData]);
 
   // Real-time Server-Sent Events (SSE) telemetry subscription
   useEffect(() => {
@@ -511,18 +1067,21 @@ export default function AdminIntelligenceCenter({ sessionToken, onNavigateTab }:
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2.5">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-tr from-violet-600 to-indigo-600 text-white shadow-md shadow-violet-600/20">
-              <Cpu className="h-5 w-5" />
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-tr from-amber-500 via-orange-600 to-indigo-600 text-white shadow-md shadow-amber-500/20">
+              <Crown className="h-5 w-5" />
             </div>
             <div>
               <h2 className="text-lg font-black tracking-tight text-zinc-900 dark:text-white flex items-center gap-2">
-                <span>AI Health & Agents</span>
-                <span className="rounded-md bg-violet-100 dark:bg-violet-950/60 px-2 py-0.5 text-[10px] font-bold text-violet-700 dark:text-violet-300 border border-violet-200 dark:border-violet-800">
-                  OBSERVABILITY
+                <span>CEO Command Center</span>
+                <span className="rounded-md bg-amber-500/10 dark:bg-amber-950/60 px-2 py-0.5 text-[10px] font-bold text-amber-700 dark:text-amber-300 border border-amber-500/30">
+                  PHASE 26
+                </span>
+                <span className="rounded-md bg-emerald-500/10 dark:bg-emerald-950/60 px-2 py-0.5 text-[10px] font-bold text-emerald-700 dark:text-emerald-300 border border-emerald-500/30">
+                  GOVERNED &bull; LIVE
                 </span>
               </h2>
               <p className="text-xs text-zinc-500">
-                Supervisory diagnostics and telemetry synthesized by Boss Agent
+                Central operational visibility layer for WebsiteBanja CEO &bull; Strategy, pipeline, memory, delegations, health &amp; governance
               </p>
             </div>
           </div>
@@ -566,11 +1125,14 @@ export default function AdminIntelligenceCenter({ sessionToken, onNavigateTab }:
           {/* Manual Refresh Button */}
           <button
             type="button"
-            onClick={() => void fetchDiagnostics(true)}
-            disabled={isRefreshing}
+            onClick={() => {
+              void fetchCommandCenterData();
+              void fetchDiagnostics(true);
+            }}
+            disabled={isRefreshing || isCommandCenterLoading}
             className="flex items-center gap-1.5 rounded-xl border border-zinc-200 bg-white px-3.5 py-2 text-xs font-bold text-zinc-700 hover:bg-zinc-100 dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800 transition shadow-xs"
           >
-            <RefreshCw className={cn("h-3.5 w-3.5", isRefreshing && "animate-spin text-violet-600")} />
+            <RefreshCw className={cn("h-3.5 w-3.5", (isRefreshing || isCommandCenterLoading) && "animate-spin text-amber-500")} />
             <span className="hidden md:inline">Refresh</span>
           </button>
 
@@ -580,8 +1142,80 @@ export default function AdminIntelligenceCenter({ sessionToken, onNavigateTab }:
         </div>
       </div>
 
-      {/* ─── SECTION 1: OVERALL AI SYSTEM HEALTH BANNER ──────────────────────── */}
-      {report && (
+      {/* Primary View Switcher: Command Center (15 Sections) vs Sub-System Controls & Deep Dive */}
+      <div className="flex items-center gap-2 border-b border-zinc-200/80 dark:border-white/10 pb-3">
+        <button
+          type="button"
+          onClick={() => setActiveViewTab("command_center")}
+          className={cn(
+            "flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition",
+            activeViewTab === "command_center"
+              ? "bg-amber-500 text-white shadow-sm shadow-amber-500/30"
+              : "text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800"
+          )}
+        >
+          <Crown className="h-3.5 w-3.5" />
+          <span>CEO Command Center (15 Sections)</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveViewTab("deep_dive")}
+          className={cn(
+            "flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition",
+            activeViewTab === "deep_dive"
+              ? "bg-violet-600 text-white shadow-sm shadow-violet-600/30"
+              : "text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800"
+          )}
+        >
+          <Cpu className="h-3.5 w-3.5" />
+          <span>Executive &amp; Supervisor Lab</span>
+        </button>
+      </div>
+
+      {/* Render Section: When in command_center view, render CeoCommandCenterView */}
+      {activeViewTab === "command_center" && commandCenterData && (
+        <CeoCommandCenterView
+          data={commandCenterData}
+          isLoading={isCommandCenterLoading}
+          onRefresh={() => {
+            void fetchCommandCenterData();
+            void fetchDiagnostics(true);
+          }}
+          sessionToken={sessionToken}
+          onActionApproved={() => void fetchCommandCenterData()}
+        />
+      )}
+
+      {activeViewTab === "command_center" && !commandCenterData && isCommandCenterLoading && (
+        <div className="space-y-4">
+          <div className="h-32 w-full bg-zinc-100 dark:bg-zinc-900 rounded-3xl animate-pulse" />
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            <div className="h-40 bg-zinc-100 dark:bg-zinc-900 rounded-3xl animate-pulse" />
+            <div className="h-40 bg-zinc-100 dark:bg-zinc-900 rounded-3xl animate-pulse" />
+            <div className="h-40 bg-zinc-100 dark:bg-zinc-900 rounded-3xl animate-pulse" />
+          </div>
+        </div>
+      )}
+
+      {activeViewTab === "command_center" && commandCenterError && !commandCenterData && (
+        <div className="rounded-3xl border border-red-500/20 bg-red-500/5 p-6 text-center space-y-3">
+          <AlertTriangle className="h-8 w-8 text-red-500 mx-auto" />
+          <p className="text-xs font-bold text-red-600">{commandCenterError}</p>
+          <button
+            type="button"
+            onClick={() => void fetchCommandCenterData()}
+            className="rounded-xl bg-violet-600 px-4 py-2 text-xs font-bold text-white"
+          >
+            Retry Loading Command Center
+          </button>
+        </div>
+      )}
+
+      {/* When in deep_dive view, render the existing supervisor panels */}
+      {activeViewTab === "deep_dive" && (
+        <div className="space-y-8">
+          {/* ─── SECTION 1: OVERALL AI SYSTEM HEALTH BANNER ──────────────────────── */}
+          {report && (
         <motion.div
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
@@ -720,6 +1354,1073 @@ export default function AdminIntelligenceCenter({ sessionToken, onNavigateTab }:
           })}
         </div>
       </div>
+
+      {/* ─── SECTION 1.5: CEO / EXECUTIVE STRATEGIC LAYER ─────────────────── */}
+      <div className="rounded-3xl border border-violet-500/30 bg-gradient-to-br from-violet-500/5 via-indigo-500/5 to-purple-500/5 p-6 backdrop-blur-xs space-y-5">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-tr from-violet-600 to-indigo-600 text-white shadow-lg shadow-violet-600/25">
+              <Sparkles className="h-5 w-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-base font-black tracking-tight text-zinc-900 dark:text-white">
+                  CEO / Executive Strategic Layer
+                </h3>
+                <span className="rounded-full bg-violet-600/10 border border-violet-600/20 px-2.5 py-0.5 text-[10px] font-bold text-violet-600 dark:text-violet-300">
+                  PHASE 17
+                </span>
+              </div>
+              <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                Orchestrates OBSERVE → UNDERSTAND → PLAN → DELEGATE → VERIFY → ESCALATE → LEARN → REPORT
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] font-mono text-zinc-400">
+              State: <strong className="text-violet-600 dark:text-violet-400 uppercase font-black">{executiveResult?.state || liveStatuses["executive"]?.state || "IDLE"}</strong>
+            </span>
+          </div>
+        </div>
+
+        {/* Input objective & Presets */}
+        <div className="space-y-3">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+            <input
+              type="text"
+              value={executiveObjective}
+              onChange={(e) => setExecutiveObjective(e.target.value)}
+              placeholder="Enter strategic business objective..."
+              className="flex-1 rounded-xl border border-zinc-200 dark:border-white/10 bg-white dark:bg-zinc-900 px-4 py-2.5 text-xs text-zinc-900 dark:text-white placeholder-zinc-400 focus:outline-hidden focus:ring-2 focus:ring-violet-500/50"
+            />
+            <button
+              type="button"
+              disabled={isExecutingStrategy}
+              onClick={() => handleExecuteExecutiveTask()}
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 px-5 py-2.5 text-xs font-bold text-white shadow-md shadow-violet-600/20 hover:from-violet-500 hover:to-indigo-500 disabled:opacity-50 transition cursor-pointer"
+            >
+              {isExecutingStrategy ? (
+                <>
+                  <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                  <span>Synthesizing...</span>
+                </>
+              ) : (
+                <>
+                  <Zap className="h-3.5 w-3.5" />
+                  <span>Execute Strategy</span>
+                </>
+              )}
+            </button>
+          </div>
+
+          {/* Quick Preset Buttons */}
+          <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+            <span className="text-zinc-400 text-[10px] font-bold uppercase tracking-wider mr-1">Presets:</span>
+            {[
+              {
+                label: "Vadodara Fine Dining",
+                obj: "Fine dining restaurant in Vadodara: analyze market, derive UI skills, and design personalized preview.",
+              },
+              {
+                label: "Ahmedabad Boutique",
+                obj: "Modern apparel boutique in Ahmedabad: derive UI tokens, build layout, and enforce anti-generic brand uniqueness.",
+              },
+              {
+                label: "Hospitality Lead Discovery",
+                obj: "Discover qualified resort & boutique hotel leads in Gujarat and evaluate technical opportunities.",
+              },
+            ].map((p) => (
+              <button
+                key={p.label}
+                type="button"
+                onClick={() => {
+                  setExecutiveObjective(p.obj);
+                  handleExecuteExecutiveTask(p.obj);
+                }}
+                className="rounded-lg border border-zinc-200 dark:border-white/10 bg-white/80 dark:bg-zinc-900/80 px-2.5 py-1 text-[10px] font-medium text-zinc-600 dark:text-zinc-300 hover:border-violet-500/40 hover:text-violet-600 dark:hover:text-violet-400 transition cursor-pointer"
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Error notice if any */}
+        {executiveError && (
+          <div className="rounded-xl border border-red-500/20 bg-red-500/10 p-3 text-xs text-red-600 dark:text-red-400 flex items-center gap-2">
+            <AlertCircle className="h-4 w-4 shrink-0" />
+            <span>{executiveError}</span>
+          </div>
+        )}
+
+        {/* Active / Recent Result Display */}
+        {executiveResult && (
+          <div className="rounded-2xl border border-zinc-200/80 dark:border-white/10 bg-white/90 dark:bg-zinc-900/90 p-4 space-y-4 text-xs">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-zinc-100 dark:border-white/5 gap-2">
+              <div className="flex items-center gap-2">
+                <span className="font-mono text-[10px] text-zinc-400">{executiveResult.runId}</span>
+                <span className="rounded-md bg-emerald-500/10 border border-emerald-500/30 px-2 py-0.5 text-[9px] font-bold text-emerald-600 dark:text-emerald-400">
+                  {executiveResult.state}
+                </span>
+                <span className="rounded-md bg-violet-500/10 border border-violet-500/30 px-2 py-0.5 text-[9px] font-bold text-violet-600 dark:text-violet-400 uppercase">
+                  {executiveResult.priority} PRIORITY
+                </span>
+              </div>
+              <span className="font-mono text-[10px] text-zinc-400">
+                Duration: {executiveResult.durationMs}ms | Repairs: {executiveResult.repairsApplied}
+              </span>
+            </div>
+
+            {/* Strategic Plan */}
+            <div className="space-y-1.5">
+              <span className="font-bold text-zinc-800 dark:text-zinc-200 text-[11px] uppercase tracking-wider">
+                Strategic Plan
+              </span>
+              <div className="space-y-1">
+                {executiveResult.decision?.plan?.map((step: string, i: number) => (
+                  <div key={i} className="flex items-start gap-2 text-zinc-600 dark:text-zinc-300 font-mono text-[11px]">
+                    <span className="text-violet-500 font-bold shrink-0">{i + 1}.</span>
+                    <span>{step}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Delegations Grid */}
+            <div className="space-y-1.5">
+              <span className="font-bold text-zinc-800 dark:text-zinc-200 text-[11px] uppercase tracking-wider">
+                Sub-Agent Delegations & Tools
+              </span>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {executiveResult.delegationResults?.map((d: any, idx: number) => (
+                  <div key={idx} className="rounded-xl border border-zinc-200/60 dark:border-white/5 p-2.5 bg-zinc-50/50 dark:bg-zinc-800/40 space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold capitalize text-zinc-800 dark:text-zinc-200">{d.agent} Agent</span>
+                      <span className={cn("text-[9px] font-bold rounded-full px-1.5 py-0.5 border", d.success ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/30" : "bg-red-500/10 text-red-600 border-red-500/30")}>
+                        {d.success ? "COMPLETED" : "FAILED"}
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-zinc-500 line-clamp-1">{d.task}</p>
+                  </div>
+                ))}
+                {executiveResult.toolCallResults?.map((t: any, idx: number) => (
+                  <div key={idx} className="rounded-xl border border-zinc-200/60 dark:border-white/5 p-2.5 bg-zinc-50/50 dark:bg-zinc-800/40 space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="font-mono text-zinc-800 dark:text-zinc-200">{t.tool}</span>
+                      <span className={cn("text-[9px] font-bold rounded-full px-1.5 py-0.5 border", t.success ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/30" : "bg-red-500/10 text-red-600 border-red-500/30")}>
+                        {t.success ? "EXECUTED" : "FAILED"}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Verifications & Safety Integrity */}
+            <div className="space-y-1.5">
+              <span className="font-bold text-zinc-800 dark:text-zinc-200 text-[11px] uppercase tracking-wider">
+                Verifications & Safety Gates
+              </span>
+              <div className="flex flex-wrap gap-1.5">
+                {executiveResult.verifications?.map((v: any, idx: number) => (
+                  <span
+                    key={idx}
+                    className={cn(
+                      "inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[10px] font-bold border",
+                      v.passed
+                        ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/30"
+                        : "bg-red-500/10 text-red-700 dark:text-red-300 border-red-500/30"
+                    )}
+                    title={v.details}
+                  >
+                    <span>{v.passed ? "✓" : "✗"}</span>
+                    <span>{v.rule}</span>
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            {/* Next Action */}
+            <div className="pt-2 border-t border-zinc-100 dark:border-white/5 flex items-center justify-between">
+              <span className="text-[11px] text-zinc-500">
+                Next Recommended Step: <strong className="text-zinc-800 dark:text-zinc-200">{executiveResult.decision?.next_action}</strong>
+              </span>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ─── SECTION 1.8: LONG-TERM MEMORY & REAL LEARNING (PHASE 18) ──────────── */}
+      <div className="rounded-3xl border border-indigo-500/30 bg-gradient-to-br from-indigo-500/5 via-violet-500/5 to-cyan-500/5 p-6 backdrop-blur-xs space-y-6">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-tr from-indigo-600 to-cyan-600 text-white shadow-lg shadow-indigo-600/25">
+              <Database className="h-5 w-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-base font-black tracking-tight text-zinc-900 dark:text-white">
+                  Long-Term Memory & Strategic Learning
+                </h3>
+                <span className="rounded-full bg-indigo-600/10 border border-indigo-600/20 px-2.5 py-0.5 text-[10px] font-bold text-indigo-600 dark:text-indigo-300">
+                  PHASE 18
+                </span>
+              </div>
+              <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                Working → Business → Experience → Strategic • Strict Evidence-Gated Promotion • Zero Model Hallucinations
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => void fetchMemoryData()}
+              disabled={isMemoryLoading}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-zinc-200 dark:border-white/10 bg-white/80 dark:bg-zinc-900/80 px-3 py-1.5 text-xs font-bold text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition cursor-pointer"
+            >
+              <RefreshCw className={cn("h-3 w-3", isMemoryLoading && "animate-spin text-indigo-600")} />
+              <span>Refresh Memory</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Memory Stats Pills */}
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+          <div className="rounded-2xl border border-zinc-200/60 dark:border-white/5 bg-white/70 dark:bg-zinc-900/70 p-3.5 flex flex-col justify-between">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">Active Strategies</span>
+            <div className="flex items-baseline gap-2 mt-1">
+              <span className="text-xl font-black text-indigo-600 dark:text-indigo-400">
+                {memoryData?.strategies?.filter((s) => s.status === "ACTIVE").length || 0}
+              </span>
+              <span className="text-[10px] text-zinc-400">deployed</span>
+            </div>
+          </div>
+          <div className="rounded-2xl border border-zinc-200/60 dark:border-white/5 bg-white/70 dark:bg-zinc-900/70 p-3.5 flex flex-col justify-between">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">Promoted Lessons</span>
+            <div className="flex items-baseline gap-2 mt-1">
+              <span className="text-xl font-black text-emerald-600 dark:text-emerald-400">
+                {memoryData?.lessons?.filter((l) => l.status === "PROMOTED").length || 0}
+              </span>
+              <span className="text-[10px] text-zinc-400">verified</span>
+            </div>
+          </div>
+          <div className="rounded-2xl border border-zinc-200/60 dark:border-white/5 bg-white/70 dark:bg-zinc-900/70 p-3.5 flex flex-col justify-between">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">Candidate Lessons</span>
+            <div className="flex items-baseline gap-2 mt-1">
+              <span className="text-xl font-black text-amber-600 dark:text-amber-400">
+                {memoryData?.lessons?.filter((l) => l.status === "CANDIDATE").length || 0}
+              </span>
+              <span className="text-[10px] text-zinc-400">evaluating</span>
+            </div>
+          </div>
+          <div className="rounded-2xl border border-zinc-200/60 dark:border-white/5 bg-white/70 dark:bg-zinc-900/70 p-3.5 flex flex-col justify-between">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">Known Failures</span>
+            <div className="flex items-baseline gap-2 mt-1">
+              <span className="text-xl font-black text-red-500">
+                {memoryData?.failures?.length || 0}
+              </span>
+              <span className="text-[10px] text-zinc-400">analyzed</span>
+            </div>
+          </div>
+          <div className="rounded-2xl border border-zinc-200/60 dark:border-white/5 bg-white/70 dark:bg-zinc-900/70 p-3.5 flex flex-col justify-between">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">A/B Experiments</span>
+            <div className="flex items-baseline gap-2 mt-1">
+              <span className="text-xl font-black text-cyan-600 dark:text-cyan-400">
+                {memoryData?.experiments?.length || 0}
+              </span>
+              <span className="text-[10px] text-zinc-400">hypotheses</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Tab Selection */}
+        <div className="flex items-center gap-2 border-b border-zinc-200/60 dark:border-white/5 pb-2 text-xs font-semibold">
+          {[
+            { id: "lessons", label: "Evidence-Based Lessons", icon: BookOpen },
+            { id: "strategies", label: "Versioned Strategies", icon: Brain },
+            { id: "failures", label: "Failure Log & Recovery", icon: AlertTriangle },
+            { id: "experiments", label: "A/B Experiments", icon: FlaskConical },
+          ].map((tab) => {
+            const Icon = tab.icon;
+            const active = memoryTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setMemoryTab(tab.id as any)}
+                className={cn(
+                  "flex items-center gap-1.5 px-3 py-1.5 rounded-xl transition cursor-pointer",
+                  active
+                    ? "bg-indigo-600 text-white shadow-xs font-bold"
+                    : "text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                )}
+              >
+                <Icon className="h-3.5 w-3.5" />
+                <span>{tab.label}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Feedback / Promotion Message */}
+        {promotionMessage && (
+          <div className="rounded-xl border border-indigo-500/30 bg-indigo-500/10 p-3 text-xs text-indigo-700 dark:text-indigo-300 flex items-center justify-between">
+            <span>{promotionMessage}</span>
+            <button
+              type="button"
+              onClick={() => setPromotionMessage(null)}
+              className="text-zinc-400 hover:text-zinc-600 dark:hover:text-white"
+            >
+              ×
+            </button>
+          </div>
+        )}
+
+        {/* Tab Content */}
+        {memoryTab === "lessons" && (
+          <div className="space-y-3">
+            {(!memoryData?.lessons || memoryData.lessons.length === 0) ? (
+              <div className="rounded-2xl border border-zinc-200/60 dark:border-white/5 bg-white/50 dark:bg-zinc-900/50 p-6 text-center text-xs text-zinc-500">
+                No lessons recorded yet. Run executive tasks with verification to accumulate verifiable lessons.
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {memoryData.lessons.map((lesson: any) => (
+                  <div
+                    key={lesson.id || lesson.lessonId}
+                    className="rounded-2xl border border-zinc-200/80 dark:border-white/10 bg-white/90 dark:bg-zinc-900/90 p-4 space-y-3 flex flex-col justify-between"
+                  >
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="font-mono text-[10px] text-zinc-400 uppercase tracking-wider">
+                          {lesson.domain || "general"}
+                        </span>
+                        <span
+                          className={cn(
+                            "rounded-full px-2 py-0.5 text-[9px] font-bold border",
+                            lesson.status === "PROMOTED"
+                              ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/30"
+                              : lesson.status === "REJECTED"
+                              ? "bg-red-500/10 text-red-600 border-red-500/30"
+                              : "bg-amber-500/10 text-amber-600 border-amber-500/30"
+                          )}
+                        >
+                          {lesson.status}
+                        </span>
+                      </div>
+
+                      <p className="text-xs font-semibold text-zinc-800 dark:text-zinc-200 leading-snug">
+                        {lesson.rule || lesson.insight}
+                      </p>
+
+                      <div className="flex flex-wrap gap-1 text-[10px] text-zinc-500">
+                        <span className="rounded-md bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5">
+                          Evidence: {Array.isArray(lesson.evidence) ? lesson.evidence.length : 0} items
+                        </span>
+                        <span className="rounded-md bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 font-mono">
+                          Confidence: {Math.round((lesson.confidenceScore || 0) * 100)}%
+                        </span>
+                      </div>
+                    </div>
+
+                    {lesson.status === "CANDIDATE" && (
+                      <div className="pt-2 border-t border-zinc-100 dark:border-white/5 flex items-center justify-end">
+                        <button
+                          type="button"
+                          disabled={promotingLessonId === (lesson.id || lesson.lessonId)}
+                          onClick={() => handlePromoteLesson(lesson.id || lesson.lessonId)}
+                          className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-[11px] font-bold text-white shadow-xs hover:bg-indigo-500 disabled:opacity-50 transition cursor-pointer"
+                        >
+                          {promotingLessonId === (lesson.id || lesson.lessonId) ? (
+                            <RefreshCw className="h-3 w-3 animate-spin" />
+                          ) : (
+                            <CheckCircle2 className="h-3 w-3" />
+                          )}
+                          <span>Review & Promote</span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {memoryTab === "strategies" && (
+          <div className="space-y-3">
+            {(!memoryData?.strategies || memoryData.strategies.length === 0) ? (
+              <div className="rounded-2xl border border-zinc-200/60 dark:border-white/5 bg-white/50 dark:bg-zinc-900/50 p-6 text-center text-xs text-zinc-500">
+                No versioned strategies stored.
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {memoryData.strategies.map((strategy: any) => (
+                  <div
+                    key={strategy.id || strategy.strategyId}
+                    className="rounded-2xl border border-zinc-200/80 dark:border-white/10 bg-white/90 dark:bg-zinc-900/90 p-4 space-y-2"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono font-bold text-xs text-zinc-800 dark:text-zinc-200">
+                          {strategy.name}
+                        </span>
+                        <span className="rounded-md bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 text-[10px] font-mono text-zinc-500">
+                          v{strategy.version}
+                        </span>
+                        <span className="rounded-md bg-indigo-500/10 border border-indigo-500/20 px-2 py-0.5 text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase">
+                          {strategy.domain}
+                        </span>
+                      </div>
+                      <span
+                        className={cn(
+                          "rounded-full px-2 py-0.5 text-[9px] font-bold border",
+                          strategy.status === "ACTIVE"
+                            ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/30"
+                            : strategy.status === "DEPRECATED"
+                            ? "bg-zinc-500/10 text-zinc-500 border-zinc-500/30"
+                            : "bg-blue-500/10 text-blue-600 border-blue-500/30"
+                        )}
+                      >
+                        {strategy.status}
+                      </span>
+                    </div>
+
+                    {strategy.description && (
+                      <p className="text-xs text-zinc-600 dark:text-zinc-300">{strategy.description}</p>
+                    )}
+
+                    {strategy.directives && Array.isArray(strategy.directives) && (
+                      <div className="space-y-1 pt-1">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">Directives:</span>
+                        <ul className="list-disc pl-4 space-y-0.5 text-[11px] text-zinc-600 dark:text-zinc-400">
+                          {strategy.directives.map((dir: string, idx: number) => (
+                            <li key={idx}>{dir}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {memoryTab === "failures" && (
+          <div className="space-y-3">
+            {(!memoryData?.failures || memoryData.failures.length === 0) ? (
+              <div className="rounded-2xl border border-zinc-200/60 dark:border-white/5 bg-white/50 dark:bg-zinc-900/50 p-6 text-center text-xs text-zinc-500">
+                No critical failure patterns logged. All agent runs healthy.
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {memoryData.failures.map((fail: any) => (
+                  <div
+                    key={fail.id || fail.failureId}
+                    className="rounded-2xl border border-red-500/20 bg-red-500/5 p-4 space-y-2 text-xs"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <AlertTriangle className="h-4 w-4 text-red-500" />
+                        <span className="font-bold text-red-700 dark:text-red-400">{fail.failureType}</span>
+                        <span className="font-mono text-[10px] text-zinc-400">Occurrences: {fail.occurrences || 1}</span>
+                      </div>
+                      <span className="font-mono text-[10px] text-zinc-400">{fail.domain || "general"}</span>
+                    </div>
+                    <p className="font-mono text-[11px] text-zinc-700 dark:text-zinc-300">{fail.errorMessage}</p>
+                    {fail.rootCause && (
+                      <div className="text-[11px] text-zinc-600 dark:text-zinc-400">
+                        <strong>Root Cause:</strong> {fail.rootCause}
+                      </div>
+                    )}
+                    {fail.recoveryStrategy && (
+                      <div className="text-[11px] text-emerald-700 dark:text-emerald-400">
+                        <strong>Applied Recovery:</strong> {fail.recoveryStrategy}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {memoryTab === "experiments" && (
+          <div className="space-y-3">
+            {(!memoryData?.experiments || memoryData.experiments.length === 0) ? (
+              <div className="rounded-2xl border border-zinc-200/60 dark:border-white/5 bg-white/50 dark:bg-zinc-900/50 p-6 text-center text-xs text-zinc-500">
+                No active A/B experiments.
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {memoryData.experiments.map((exp: any) => (
+                  <div
+                    key={exp.id || exp.experimentId}
+                    className="rounded-2xl border border-zinc-200/80 dark:border-white/10 bg-white/90 dark:bg-zinc-900/90 p-4 space-y-2 text-xs"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <FlaskConical className="h-4 w-4 text-cyan-600 dark:text-cyan-400" />
+                        <span className="font-bold text-zinc-800 dark:text-zinc-200">{exp.hypothesis}</span>
+                      </div>
+                      <span className="rounded-full bg-cyan-500/10 border border-cyan-500/30 px-2 py-0.5 text-[9px] font-bold text-cyan-600 dark:text-cyan-400">
+                        {exp.status}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-[11px] text-zinc-500">
+                      <div>Strategy A: <strong className="text-zinc-700 dark:text-zinc-300">{exp.strategyA}</strong></div>
+                      <div>Strategy B: <strong className="text-zinc-700 dark:text-zinc-300">{exp.strategyB}</strong></div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* ─── SECTION 1.6: HIERARCHICAL DELEGATION & EXECUTION TREE (PHASE 19) ───────── */}
+      <div className="rounded-3xl border border-zinc-200/80 dark:border-white/10 bg-zinc-50/50 dark:bg-zinc-950/40 p-6 space-y-6 shadow-sm">
+        {/* Deck Header */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-indigo-500/20 to-violet-500/20 border border-indigo-500/30 flex items-center justify-center text-indigo-600 dark:text-indigo-400">
+              <GitFork className="h-5 w-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-base font-bold text-zinc-900 dark:text-white">
+                  Hierarchical Delegation & Execution Tree
+                </h3>
+                <span className="rounded-full bg-violet-500/10 border border-violet-500/30 px-2 py-0.5 text-[10px] font-bold text-violet-600 dark:text-violet-400">
+                  PHASE 19
+                </span>
+              </div>
+              <p className="text-xs text-zinc-500">
+                CEO (Depth 0) → BOSS Supervisor (Depth 1) → Specialized Skills & Uniqueness (Depth 2)
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => void fetchDelegationData()}
+              disabled={isDelegationLoading}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-zinc-200 dark:border-white/10 bg-white dark:bg-zinc-900 px-3 py-1.5 text-xs font-semibold text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 disabled:opacity-50 transition cursor-pointer"
+            >
+              <RefreshCw className={cn("h-3.5 w-3.5", isDelegationLoading && "animate-spin")} />
+              <span>Refresh Trees</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Live Delegation Trigger Input */}
+        <div className="rounded-2xl border border-zinc-200/80 dark:border-white/10 bg-white/90 dark:bg-zinc-900/90 p-4 space-y-3">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+            <input
+              type="text"
+              value={delegationObjective}
+              onChange={(e) => setDelegationObjective(e.target.value)}
+              placeholder="Enter strategic task for CEO -> Boss -> Skills/Uniqueness delegation..."
+              className="flex-1 rounded-xl border border-zinc-200 dark:border-white/10 bg-white dark:bg-zinc-900 px-4 py-2 text-xs text-zinc-900 dark:text-white placeholder-zinc-400 focus:outline-hidden focus:ring-2 focus:ring-indigo-500/50"
+            />
+            <button
+              type="button"
+              disabled={isDelegating}
+              onClick={() => void handleExecuteDelegation()}
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 px-5 py-2 text-xs font-bold text-white shadow-md shadow-indigo-600/20 hover:from-indigo-500 hover:to-violet-500 disabled:opacity-50 transition cursor-pointer"
+            >
+              {isDelegating ? (
+                <>
+                  <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                  <span>Delegating...</span>
+                </>
+              ) : (
+                <>
+                  <Zap className="h-3.5 w-3.5" />
+                  <span>Run Delegation</span>
+                </>
+              )}
+            </button>
+          </div>
+
+          {/* Quick Presets */}
+          <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+            <span className="text-zinc-400 text-[10px] font-bold uppercase tracking-wider mr-1">Presets:</span>
+            {[
+              {
+                label: "Vadodara Fine Dining",
+                obj: "Fine dining restaurant in Vadodara: select bespoke 8pt UI skills, asymmetric hero, and enforce anti-generic visual differentiation.",
+              },
+              {
+                label: "Ahmedabad Boutique Hotel",
+                obj: "Boutique heritage hotel in Ahmedabad: derive typography tokens, conversion bento layout, and audit structural uniqueness.",
+              },
+              {
+                label: "Surat Textile Brand",
+                obj: "High-end artisanal textile studio in Surat: derive luxury color direction and verify zero layout duplication.",
+              },
+            ].map((p) => (
+              <button
+                key={p.label}
+                type="button"
+                onClick={() => {
+                  setDelegationObjective(p.obj);
+                  void handleExecuteDelegation(p.obj);
+                }}
+                className="rounded-lg border border-zinc-200 dark:border-white/10 bg-zinc-100/70 dark:bg-zinc-800/70 px-2.5 py-1 font-medium text-zinc-600 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition cursor-pointer"
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+
+          {delegationError && (
+            <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-xs text-red-600 dark:text-red-400 flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 shrink-0" />
+              <span>{delegationError}</span>
+            </div>
+          )}
+        </div>
+
+        {/* Split View: Tree List & Interactive Node Visualizer */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+          {/* Recent Trees List (4 Cols) */}
+          <div className="lg:col-span-4 rounded-2xl border border-zinc-200/80 dark:border-white/10 bg-white/70 dark:bg-zinc-900/70 p-4 space-y-3">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-400">
+              Execution Trees ({delegationTrees.length})
+            </span>
+
+            {delegationTrees.length === 0 ? (
+              <div className="p-6 text-center text-xs text-zinc-400">
+                No execution trees logged yet. Run a delegation above.
+              </div>
+            ) : (
+              <div className="space-y-2 max-h-[460px] overflow-y-auto pr-1">
+                {delegationTrees.map((tree: any) => {
+                  const isSelected = selectedTree?.taskId === tree.taskId;
+                  const isSuccess = tree.status === "COMPLETED";
+                  const isEscalated = tree.status === "ESCALATED";
+
+                  return (
+                    <div
+                      key={tree.taskId}
+                      onClick={() => setSelectedTree(tree)}
+                      className={cn(
+                        "rounded-xl border p-3 text-xs space-y-1.5 cursor-pointer transition",
+                        isSelected
+                          ? "border-indigo-500/60 bg-indigo-500/5 dark:bg-indigo-500/10"
+                          : "border-zinc-200/60 dark:border-white/5 bg-white/50 dark:bg-zinc-900/50 hover:border-zinc-300 dark:hover:border-white/15"
+                      )}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="font-mono text-[10px] text-zinc-400">{tree.taskId.slice(0, 16)}</span>
+                        <span
+                          className={cn(
+                            "rounded-full px-2 py-0.5 text-[9px] font-bold border",
+                            isSuccess
+                              ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
+                              : isEscalated
+                              ? "bg-orange-500/10 text-orange-600 dark:text-orange-400 border-orange-500/30"
+                              : "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/30"
+                          )}
+                        >
+                          {tree.status}
+                        </span>
+                      </div>
+                      <p className="font-semibold text-zinc-800 dark:text-zinc-200 line-clamp-2">
+                        {tree.objective}
+                      </p>
+                      <div className="flex items-center justify-between text-[10px] text-zinc-400 pt-1 border-t border-zinc-100 dark:border-white/5">
+                        <span>Depth: {tree.depth} (CEO)</span>
+                        <span>{tree.durationMs ? `${tree.durationMs.toFixed(0)}ms` : "Active"}</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Interactive Tree Hierarchy View (8 Cols) */}
+          <div className="lg:col-span-8 rounded-2xl border border-zinc-200/80 dark:border-white/10 bg-white/70 dark:bg-zinc-900/70 p-5 space-y-4">
+            {!selectedTree ? (
+              <div className="h-64 flex flex-col items-center justify-center text-xs text-zinc-400 gap-2">
+                <GitFork className="h-8 w-8 text-zinc-300 dark:text-zinc-700" />
+                <span>Select an execution tree on the left to inspect hierarchy</span>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {/* Tree Metadata Header */}
+                <div className="flex items-center justify-between border-b border-zinc-200/60 dark:border-white/5 pb-3">
+                  <div>
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">Tree Root</span>
+                    <h4 className="text-sm font-bold text-zinc-900 dark:text-white font-mono">
+                      {selectedTree.taskId}
+                    </h4>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-zinc-400">
+                      Total Duration: <strong>{selectedTree.durationMs ? `${selectedTree.durationMs.toFixed(0)}ms` : "N/A"}</strong>
+                    </span>
+                  </div>
+                </div>
+
+                {/* Level 0: CEO Root Card */}
+                <div className="rounded-xl border border-violet-500/30 bg-violet-500/5 p-4 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="rounded-md bg-violet-600 text-white font-mono text-[10px] font-bold px-2 py-0.5">
+                        DEPTH 0 • CEO
+                      </span>
+                      <strong className="text-xs text-zinc-800 dark:text-zinc-200">Executive Orchestration</strong>
+                    </div>
+                    <span className="rounded-full bg-violet-500/10 border border-violet-500/30 px-2 py-0.5 text-[9px] font-bold text-violet-600 dark:text-violet-400">
+                      {selectedTree.status}
+                    </span>
+                  </div>
+                  <p className="text-xs text-zinc-700 dark:text-zinc-300 font-medium">{selectedTree.objective}</p>
+                </div>
+
+                {/* Level 1: Boss Supervisor Card */}
+                {selectedTree.children && selectedTree.children.length > 0 && (
+                  <div className="pl-6 space-y-3 relative">
+                    <div className="absolute left-2.5 top-0 bottom-4 w-0.5 bg-indigo-500/30" />
+                    {selectedTree.children.map((bossNode: any) => (
+                      <div key={bossNode.taskId} className="space-y-3">
+                        <div className="rounded-xl border border-indigo-500/30 bg-indigo-500/5 p-4 space-y-2 relative">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <span className="rounded-md bg-indigo-600 text-white font-mono text-[10px] font-bold px-2 py-0.5">
+                                DEPTH 1 • BOSS
+                              </span>
+                              <strong className="text-xs text-zinc-800 dark:text-zinc-200">Supervisor & Aggregator</strong>
+                            </div>
+                            <span className="rounded-full bg-indigo-500/10 border border-indigo-500/30 px-2 py-0.5 text-[9px] font-bold text-indigo-600 dark:text-indigo-400">
+                              {bossNode.status}
+                            </span>
+                          </div>
+                          <p className="text-xs text-zinc-600 dark:text-zinc-400">{bossNode.objective}</p>
+                          <div className="text-[11px] text-zinc-500">
+                            Duration: <strong>{bossNode.durationMs ? `${bossNode.durationMs.toFixed(0)}ms` : "N/A"}</strong>
+                          </div>
+                        </div>
+
+                        {/* Level 2: Children (Skills & Uniqueness) */}
+                        {bossNode.children && bossNode.children.length > 0 && (
+                          <div className="pl-6 grid grid-cols-1 md:grid-cols-2 gap-3 relative">
+                            <div className="absolute left-2.5 top-0 bottom-4 w-0.5 bg-zinc-300 dark:bg-zinc-700" />
+                            {bossNode.children.map((child: any) => {
+                              const isSkill = child.agent === "skills";
+                              return (
+                                <div
+                                  key={child.taskId}
+                                  className={cn(
+                                    "rounded-xl border p-3.5 space-y-2 text-xs",
+                                    isSkill
+                                      ? "border-sky-500/30 bg-sky-500/5"
+                                      : "border-pink-500/30 bg-pink-500/5"
+                                  )}
+                                >
+                                  <div className="flex items-center justify-between">
+                                    <span
+                                      className={cn(
+                                        "rounded-md text-white font-mono text-[9px] font-bold px-1.5 py-0.5",
+                                        isSkill ? "bg-sky-600" : "bg-pink-600"
+                                      )}
+                                    >
+                                      DEPTH 2 • {child.agent.toUpperCase()}
+                                    </span>
+                                    <span className="text-[9px] font-bold text-zinc-400">{child.status}</span>
+                                  </div>
+                                  <p className="text-[11px] text-zinc-700 dark:text-zinc-300 font-medium line-clamp-2">
+                                    {child.objective}
+                                  </p>
+                                  <div className="text-[10px] text-zinc-400 pt-1 border-t border-zinc-200/40 dark:border-white/5 flex items-center justify-between">
+                                    <span>Task ID: {child.taskId.slice(0, 14)}</span>
+                                    <span>{child.durationMs ? `${child.durationMs.toFixed(0)}ms` : "0ms"}</span>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* ─── SECTION 1.9: n8n OPS AGENT & WORKFLOW EXECUTION (PHASE 22) ─────────────────── */}
+      <div className="rounded-3xl border border-sky-500/20 bg-gradient-to-br from-sky-500/5 via-transparent to-transparent p-6 sm:p-8 backdrop-blur-md relative overflow-hidden shadow-xs">
+        <div className="space-y-6">
+          {/* Header */}
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-tr from-sky-600 to-cyan-600 text-white shadow-md shadow-sky-600/20">
+                <Workflow className="h-5 w-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-zinc-900 dark:text-white flex items-center gap-2">
+                  <span>n8n Ops Agent & Tactical Workflows</span>
+                  <span className="rounded-md bg-sky-100 dark:bg-sky-950/60 px-2 py-0.5 text-[10px] font-bold text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-800">
+                    PHASE 22 — OPS EXECUTION
+                  </span>
+                </h3>
+                <p className="text-xs text-zinc-500">
+                  Operational workflow layer: executes discovery, website audit, preview synthesis, outreach drafts, and CRM sync.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <span className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold border border-sky-500/30 bg-sky-500/10 text-sky-600 dark:text-sky-400">
+                <span className="h-2 w-2 rounded-full bg-sky-500 animate-pulse" />
+                <span>
+                  {opsData?.agent.executionMode === "n8n_webhook" ? "N8N LIVE WEBHOOK" : "LOCAL EXECUTOR LOOP"}
+                </span>
+              </span>
+              <button
+                type="button"
+                onClick={() => void fetchOpsData()}
+                disabled={isOpsLoading}
+                className="p-1.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition"
+                title="Refresh Ops Agent state"
+              >
+                <RefreshCw className={cn("h-4 w-4", isOpsLoading && "animate-spin text-sky-600")} />
+              </button>
+            </div>
+          </div>
+
+          {/* Security & Policy Invariants Strip */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            <div className="rounded-xl border border-zinc-200 dark:border-white/10 bg-white/60 dark:bg-zinc-900/60 p-3 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="h-4 w-4 text-emerald-500" />
+                <span className="text-xs font-medium text-zinc-600 dark:text-zinc-300">WhatsApp Invariant</span>
+              </div>
+              <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400">
+                DISABLED
+              </span>
+            </div>
+
+            <div className="rounded-xl border border-zinc-200 dark:border-white/10 bg-white/60 dark:bg-zinc-900/60 p-3 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="h-4 w-4 text-emerald-500" />
+                <span className="text-xs font-medium text-zinc-600 dark:text-zinc-300">Email Auto-Send</span>
+              </div>
+              <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                DRAFT ONLY
+              </span>
+            </div>
+
+            <div className="rounded-xl border border-zinc-200 dark:border-white/10 bg-white/60 dark:bg-zinc-900/60 p-3 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="h-4 w-4 text-emerald-500" />
+                <span className="text-xs font-medium text-zinc-600 dark:text-zinc-300">Opt-Out Compliance</span>
+              </div>
+              <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                ENFORCED
+              </span>
+            </div>
+
+            <div className="rounded-xl border border-zinc-200 dark:border-white/10 bg-white/60 dark:bg-zinc-900/60 p-3 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Lock className="h-4 w-4 text-emerald-500" />
+                <span className="text-xs font-medium text-zinc-600 dark:text-zinc-300">Secret Scrubbing</span>
+              </div>
+              <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                ACTIVE
+              </span>
+            </div>
+          </div>
+
+          {/* Operational Tools Catalog Bar */}
+          <div className="rounded-2xl border border-zinc-200 dark:border-white/10 bg-white/40 dark:bg-zinc-900/40 p-4 space-y-2">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-400">
+              Operational Tool Catalog (12 Tools)
+            </span>
+            <div className="flex flex-wrap gap-2 pt-1">
+              {[
+                "discover_leads",
+                "qualify_lead",
+                "research_business",
+                "audit_website",
+                "generate_preview",
+                "validate_preview",
+                "create_outreach",
+                "get_lead_status",
+                "analyze_reply",
+                "schedule_followup",
+                "update_crm",
+                "report_to_ceo",
+              ].map((tool) => (
+                <span
+                  key={tool}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-mono font-semibold bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700"
+                >
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                  {tool}
+                </span>
+              ))}
+            </div>
+          </div>
+
+          {/* Interactive Dispatcher */}
+          <div className="rounded-2xl border border-zinc-200 dark:border-white/10 bg-white/60 dark:bg-zinc-900/60 p-5 space-y-4">
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-zinc-700 dark:text-zinc-300 flex items-center justify-between">
+                <span>Tactical Task Dispatcher</span>
+                <span className="text-[10px] text-zinc-400 font-normal">CEO Approved Tactical Directive</span>
+              </label>
+              <textarea
+                value={opsObjective}
+                onChange={(e) => setOpsObjective(e.target.value)}
+                rows={2}
+                placeholder="Enter tactical task objective for Ops Agent..."
+                className="w-full text-xs font-medium rounded-xl border border-zinc-200 dark:border-white/10 bg-white dark:bg-zinc-900 p-3 text-zinc-800 dark:text-zinc-200 outline-none focus:ring-2 focus:ring-sky-500"
+              />
+            </div>
+
+            {/* Quick Presets */}
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() =>
+                  setOpsObjective("Discover 3 local dental clinics in Kathmandu, audit their web presence, and draft personalized preview outreach.")
+                }
+                className="text-[11px] px-2.5 py-1 rounded-lg bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-800 hover:bg-sky-100 transition"
+              >
+                Kathmandu Dentists: Discover & Draft
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  setOpsObjective("Jaipur boutique hotel: conduct website audit, generate preview, and create personalized outreach copy.")
+                }
+                className="text-[11px] px-2.5 py-1 rounded-lg bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-800 hover:bg-sky-100 transition"
+              >
+                Jaipur Hotel: Audit & Preview
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  setOpsObjective("Inbound email received: analyze customer price objection, update CRM status, and queue follow-up.")
+                }
+                className="text-[11px] px-2.5 py-1 rounded-lg bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-800 hover:bg-sky-100 transition"
+              >
+                Analyze Objection & Follow-up
+              </button>
+            </div>
+
+            <div className="flex items-center justify-between pt-1">
+              <span className="text-[11px] text-zinc-500">
+                Dispatches to n8n Ops Agent with strict human approval gate for email sending.
+              </span>
+              <button
+                type="button"
+                onClick={() => void handleExecuteOpsDispatch()}
+                disabled={isOpsDispatching || !opsObjective.trim()}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold text-white bg-sky-600 hover:bg-sky-700 disabled:opacity-50 transition shadow-xs"
+              >
+                {isOpsDispatching ? (
+                  <>
+                    <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                    <span>Executing Task...</span>
+                  </>
+                ) : (
+                  <>
+                    <Send className="h-3.5 w-3.5" />
+                    <span>Dispatch to Ops Agent</span>
+                  </>
+                )}
+              </button>
+            </div>
+
+            {opsDispatchError && (
+              <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-xs text-red-600 dark:text-red-400">
+                {opsDispatchError}
+              </div>
+            )}
+          </div>
+
+          {/* Callback / Results Display */}
+          {opsDispatchResult && (
+            <motion.div
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="rounded-2xl border border-sky-500/30 bg-sky-500/5 p-5 space-y-4"
+            >
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-sky-500/20 pb-3">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                    <span className="text-xs font-bold text-zinc-900 dark:text-white">
+                      Task Callback Received: {opsDispatchResult.taskId}
+                    </span>
+                    <span className={cn(
+                      "px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase",
+                      opsDispatchResult.status === "completed"
+                        ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"
+                        : "bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20"
+                    )}>
+                      {opsDispatchResult.status}
+                    </span>
+                  </div>
+                  <p className="text-xs text-zinc-600 dark:text-zinc-300 mt-1">
+                    {opsDispatchResult.summary}
+                  </p>
+                </div>
+
+                {opsDispatchResult.approvalRequired && (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/30">
+                    <AlertCircle className="h-3.5 w-3.5" />
+                    <span>Human Approval Required (Outreach)</span>
+                  </span>
+                )}
+              </div>
+
+              {/* Actions List */}
+              {Array.isArray(opsDispatchResult.actions) && opsDispatchResult.actions.length > 0 && (
+                <div className="space-y-2">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-400">
+                    Executed Tool Actions ({opsDispatchResult.actions.length})
+                  </span>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {opsDispatchResult.actions.map((act: any, idx: number) => (
+                      <div
+                        key={idx}
+                        className="rounded-xl border border-zinc-200 dark:border-white/10 bg-white dark:bg-zinc-900 p-2.5 flex items-center justify-between text-xs"
+                      >
+                        <div className="flex items-center gap-2">
+                          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+                          <span className="font-mono font-bold text-zinc-800 dark:text-zinc-200">
+                            {act.tool}
+                          </span>
+                        </div>
+                        <span className="text-[10px] font-mono text-zinc-400">
+                          {act.status}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </motion.div>
+          )}
+        </div>
+      </div>
+
+      {/* ─── SECTION 1.95: GOVERNANCE & ACTION AUTHORITY (PHASE 25) ─────────────────── */}
+      <GovernanceSection sessionToken={sessionToken} />
 
       {/* ─── SECTION 2: SYSTEM OVERVIEW KPI METRICS ──────────────────────────── */}
       {systemOverview && (
@@ -1373,6 +3074,8 @@ export default function AdminIntelligenceCenter({ sessionToken, onNavigateTab }:
           ))}
         </div>
       </div>
+      </div>
+      )}
 
       {/* ─── MODAL: AGENT DETAIL INSPECTION ──────────────────────────────────── */}
       <AnimatePresence>

@@ -58,6 +58,9 @@ export interface PersonalizedPreviewRequest {
   forceFresh?: boolean;
   overrideLead?: Partial<BusinessLead>;
   overrideAudit?: Partial<LeadAuditReport>;
+  groundedProfile?: import("@/lib/intelligence/grounding/types").GroundedBusinessProfile;
+  placesPhotos?: import("@/lib/intelligence/grounding/assetTypes").RawPlacesPhoto[];
+  placesReviews?: import("@/lib/intelligence/grounding/assetTypes").RawPlacesReview[];
 }
 
 export interface PersonalizedPreviewResponse {

@@ -819,6 +819,15 @@ function stringToSeed(str: string): number {
  */
 export function canonicalizeImageUrl(url: string): string {
   if (!url) return "";
+  if (url.includes("places-photo")) {
+    try {
+      const q = new URL(url, "http://localhost");
+      const name = q.searchParams.get("name");
+      if (name) return `/api/public/places-photo?name=${name}`;
+    } catch {
+      // fallback
+    }
+  }
   return url.split("?")[0].trim();
 }
 

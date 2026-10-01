@@ -32,6 +32,7 @@ const KNOWN_AGENTS = [
   "skills",
   "uniqueness",
   "boss",
+  "executive",
 ] as const;
 
 /**
@@ -143,14 +144,47 @@ function updateAgentLiveStatus(event: AgentTelemetryEvent): void {
       break;
 
     case "agent.completed":
+    case "executive.completed":
       updated.state = "success";
-      updated.currentOperation = "Operation completed successfully";
+      updated.currentOperation = (event.metadata?.operation as string) || "Executive task completed successfully";
       break;
 
     case "agent.failed":
+    case "executive.failed":
       updated.state = "error";
-      updated.lastError = event.error ? sanitizeErrorOutput(event.error) : sanitizeErrorOutput(String(event.metadata?.error || "Agent execution failed"));
+      updated.lastError = event.error ? sanitizeErrorOutput(event.error) : sanitizeErrorOutput(String(event.metadata?.error || "Execution failed"));
       updated.currentOperation = undefined;
+      break;
+
+    case "executive.started":
+      updated.state = "running";
+      updated.startedAt = event.timestamp;
+      updated.currentOperation = (event.metadata?.operation as string) || "Observing and understanding task";
+      break;
+
+    case "executive.planning":
+      updated.state = "running";
+      updated.currentOperation = (event.metadata?.operation as string) || "Synthesizing executive plan";
+      break;
+
+    case "executive.delegating":
+      updated.state = "running";
+      updated.currentOperation = (event.metadata?.operation as string) || "Delegating to sub-agents / tools";
+      break;
+
+    case "executive.verifying":
+      updated.state = "running";
+      updated.currentOperation = (event.metadata?.operation as string) || "Verifying domain coherence & quality";
+      break;
+
+    case "executive.repaired":
+      updated.state = "fallback";
+      updated.currentOperation = (event.metadata?.operation as string) || "Repairing verification failure";
+      break;
+
+    case "executive.escalated":
+      updated.state = "fallback";
+      updated.currentOperation = (event.metadata?.operation as string) || "Escalated for human / admin review";
       break;
 
     default:

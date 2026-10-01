@@ -32,6 +32,7 @@ import {
   BarChart3,
   KeyRound,
   Zap,
+  Crown,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import AdminIntelligenceCenter from "@/components/admin/AdminIntelligenceCenter";
@@ -362,7 +363,7 @@ function AdminDashboardContent() {
   }> = [
     // Group 1: Core Intelligence
     { id: "overview", label: "Overview KPI", icon: Activity, group: "Overview & Intelligence" },
-    { id: "ai_health", label: "AI Health & Agents", icon: Sparkles, group: "Overview & Intelligence" },
+    { id: "ai_health", label: "CEO Command Center", icon: Crown, badge: "P26", group: "Overview & Intelligence" },
     { id: "boss_research", label: "Boss Research & Skills", icon: Compass, group: "Overview & Intelligence" },
 
     // Group 2: Growth & Autonomous Pipeline (Autonomous Lead Ops)

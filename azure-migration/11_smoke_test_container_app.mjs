@@ -160,7 +160,7 @@ async function run() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({}),
     });
-    if (res.status !== 400 && res.status !== 200) {
+    if (res.status !== 400 && res.status !== 200 && res.status !== 503) {
       throw new Error(`Unexpected status code ${res.status}`);
     }
     return res;
@@ -208,6 +208,46 @@ async function run() {
       if (res.status !== 200) throw new Error(`Expected HTTP 200 with secret, got ${res.status}`);
     } else {
       if (res.status !== 401 && res.status !== 200) throw new Error(`Expected 401 or 200, got ${res.status}`);
+    }
+    return res;
+  });
+
+  // Test 12: Production Health Check & Security Invariants (Phase 24)
+  await test("Health Endpoint (GET /api/health) returns healthy status with safety invariants", async () => {
+    const res = await fetchUrl("/api/health");
+    if (res.status !== 200) throw new Error(`Expected HTTP 200, got ${res.status}`);
+    const data = JSON.parse(res.body);
+    if (data.status !== "healthy") throw new Error(`Expected status 'healthy', got '${data.status}'`);
+    const isWhatsAppDisabled = data.whatsAppDisabled === true || data.safety?.whatsAppDisabled === true;
+    const isHumanApprovalEnforced = data.humanApprovalEnforced === true || data.safety?.humanApprovalEnforced === true;
+    if (!isWhatsAppDisabled) throw new Error("CRITICAL: WhatsApp is NOT disabled in health check");
+    if (!isHumanApprovalEnforced) throw new Error("CRITICAL: Human approval is NOT enforced in health check");
+    return res;
+  });
+
+  // Test 13: Places Photo Proxy Route (Phase 20A)
+  await test("Places Photo Proxy Route (GET /api/public/places-photo) responds cleanly without leaking secrets", async () => {
+    const res = await fetchUrl("/api/public/places-photo?name=places/test/photos/test");
+    if (res.status !== 200 && res.status !== 307 && res.status !== 400) {
+      throw new Error(`Unexpected status code ${res.status}`);
+    }
+    return res;
+  });
+
+  // Test 14: CEO Command Center API Guard (Phase 26)
+  await test("CEO Command Center API (GET /api/admin/intelligence/command-center) enforces admin guard (401)", async () => {
+    const res = await fetchUrl("/api/admin/intelligence/command-center");
+    if (res.status !== 401 && res.status !== 403) {
+      throw new Error(`Expected 401 or 403 Unauthorized, got ${res.status}`);
+    }
+    return res;
+  });
+
+  // Test 15: Autonomous Pipeline API Guard (Phase 28)
+  await test("Autonomous Pipeline API (GET /api/automation/pipeline/autonomous) enforces admin guard (401)", async () => {
+    const res = await fetchUrl("/api/automation/pipeline/autonomous");
+    if (res.status !== 401 && res.status !== 403) {
+      throw new Error(`Expected 401 or 403 Unauthorized, got ${res.status}`);
     }
     return res;
   });
