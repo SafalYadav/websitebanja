@@ -86,6 +86,8 @@ jobs:
       - name: Ensure External n8n Ops Agent in Azure
         id: n8n-deploy
         continue-on-error: true
+        env:
+          WEBSITEBANJA_AUTOMATION_SECRET: ${{ secrets.WEBSITEBANJA_AUTOMATION_SECRET }}
         run: |
           echo "Checking external n8n Ops Agent Container App in $RESOURCE_GROUP..."
           if ! az containerapp show --name n8n-app --resource-group "$RESOURCE_GROUP" >/dev/null 2>&1; then
@@ -101,12 +103,30 @@ jobs:
               --memory 1.0Gi \
               --min-replicas 1 \
               --max-replicas 1 \
+              --secrets "automation-secret=${WEBSITEBANJA_AUTOMATION_SECRET}" \
               --env-vars \
                 N8N_PORT="5678" \
                 N8N_PROTOCOL="https" \
                 GENERIC_TIMEZONE="UTC" \
                 N8N_AI_ENABLED="true" \
-                N8N_DIAGNOSTICS_ENABLED="false" || true
+                N8N_DIAGNOSTICS_ENABLED="false" \
+                N8N_BLOCK_ENV_ACCESS_IN_NODE="false" \
+                AUTOMATION_SECRET="secretref:automation-secret" \
+                WEBSITEBANJA_AUTOMATION_SECRET="secretref:automation-secret" || true
+          else
+            echo "Syncing secret and env vars on existing n8n-app..."
+            az containerapp secret set \
+              --name n8n-app \
+              --resource-group "$RESOURCE_GROUP" \
+              --secrets "automation-secret=${WEBSITEBANJA_AUTOMATION_SECRET}" || true
+
+            az containerapp update \
+              --name n8n-app \
+              --resource-group "$RESOURCE_GROUP" \
+              --set-env-vars \
+                N8N_BLOCK_ENV_ACCESS_IN_NODE="false" \
+                AUTOMATION_SECRET="secretref:automation-secret" \
+                WEBSITEBANJA_AUTOMATION_SECRET="secretref:automation-secret" || true
           fi
 
           N8N_FQDN=$(az containerapp show --name n8n-app --resource-group "$RESOURCE_GROUP" --query "properties.configuration.ingress.fqdn" -o tsv 2>/dev/null || echo "")
