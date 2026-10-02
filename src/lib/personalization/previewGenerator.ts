@@ -594,8 +594,25 @@ export async function generatePersonalizedPreview(
 
   // 3. Formulate WebsiteRequirement with semantic CTA and Brand Style
   let primaryCta = semanticAnalysis.primaryCta?.label || "Inquire Today";
+  const GENERIC_CTA_BLACKLIST = new Set([
+    "submit", "send", "click here", "click", "learn more", "read more", "search", "ok", "cancel", "reset", "close", "menu"
+  ]);
   if (groundedProfile?.ctaStrategy?.observedCtas && groundedProfile.ctaStrategy.observedCtas.length > 0) {
-    primaryCta = groundedProfile.ctaStrategy.observedCtas[0].text;
+    const validObservedCta = groundedProfile.ctaStrategy.observedCtas.find((cta) => {
+      const clean = cta.text.toLowerCase().trim();
+      return !GENERIC_CTA_BLACKLIST.has(clean) && clean.length >= 3 && clean.length <= 32;
+    });
+    if (validObservedCta) {
+      primaryCta = validObservedCta.text;
+    }
+  }
+
+  // Active strategy directives can also guide primary CTA
+  if (activeStrategy && activeStrategy.directives) {
+    const ctaDirective = activeStrategy.directives.find((d) => d.startsWith("primary_cta:"));
+    if (ctaDirective) {
+      primaryCta = ctaDirective.split(":")[1].trim();
+    }
   }
 
   // Brand style derived from visual direction & semantic analysis
@@ -806,13 +823,18 @@ export async function generatePersonalizedPreview(
   }
 
   const defaultEmailPrefix = (
-    semanticAnalysis.domain.includes("rental")
+    semanticAnalysis.domain.includes("rental") ||
+    semanticAnalysis.domain.includes("transportation") ||
+    semanticAnalysis.domain.includes("mobility")
       ? "rentals"
       : semanticAnalysis.domain.includes("restaurant") || semanticAnalysis.domain.includes("hotel")
       ? "reservations"
       : semanticAnalysis.domain.includes("fitness")
       ? "membership"
-      : semanticAnalysis.domain.includes("personal_care") || semanticAnalysis.domain.includes("clinical")
+      : semanticAnalysis.domain.includes("beauty") ||
+        semanticAnalysis.domain.includes("aesthetic") ||
+        semanticAnalysis.domain.includes("personal_care") ||
+        semanticAnalysis.domain.includes("clinical")
       ? "appointments"
       : "contact"
   );

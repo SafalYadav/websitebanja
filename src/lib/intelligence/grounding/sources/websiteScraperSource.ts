@@ -166,11 +166,17 @@ export class WebsiteScraperSource {
 
       // CTA buttons observed
       const observedCtas: Array<{ text: string; channel?: string; evidenceId: string }> = [];
+      const GENERIC_BUTTON_BLACKLIST = new Set([
+        "submit", "send", "click here", "click", "learn more", "read more", "search", "ok", "cancel", "reset", "close", "menu"
+      ]);
       const distinctButtonTexts = Array.from(
         new Set(
           doc.buttons
             .map((b) => b.text.trim())
-            .filter((t) => t.length > 1 && t.length < 40)
+            .filter((t) => {
+              const clean = t.toLowerCase();
+              return !GENERIC_BUTTON_BLACKLIST.has(clean) && t.length > 1 && t.length < 40;
+            })
         )
       );
 

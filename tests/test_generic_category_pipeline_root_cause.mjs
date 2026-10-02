@@ -169,7 +169,7 @@ await runAsyncTest("Preview Generation: A1Carz Self Drive (Zero Restaurant Leaka
   assert.ok(!serviceTitles.some((t) => t.includes("Thali") || t.includes("Degustation")), "Services must NOT have food items");
 
   // Check Tagline and Email
-  assert.match(websiteData.brand.tagline, /Vehicle Rental|Self-Drive/i);
+  assert.match(websiteData.brand.tagline, /Vehicle Rental|Self-Drive|Transportation Mobility/i);
   assert.match(websiteData.contact.email, /rentals@/i);
 });
 

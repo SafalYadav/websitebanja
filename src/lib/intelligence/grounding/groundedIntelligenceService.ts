@@ -330,7 +330,14 @@ export class GroundedIntelligenceService {
 
     // 10. CTA Strategy (Only observed CTAs or semantically grounded CTAs)
     const observedCtas = activeWebsiteRes?.observedCtas || [];
-    const primaryCta = observedCtas[0]?.text || (resolvedPhone ? "Call Now" : semanticAnalysis.primaryCta?.label || "Contact Business");
+    const GENERIC_CTA_BLACKLIST = new Set([
+      "submit", "send", "click here", "click", "learn more", "read more", "search", "ok", "cancel", "reset", "close", "menu"
+    ]);
+    const validObservedCta = observedCtas.find((cta) => {
+      const clean = cta.text.toLowerCase().trim();
+      return !GENERIC_CTA_BLACKLIST.has(clean) && clean.length >= 3 && clean.length <= 32;
+    });
+    const primaryCta = validObservedCta?.text || (resolvedPhone ? "Call Now" : semanticAnalysis.primaryCta?.label || "Contact Business");
 
     const ctaStrategy: GroundedCtaStrategy = {
       observedCtas,
