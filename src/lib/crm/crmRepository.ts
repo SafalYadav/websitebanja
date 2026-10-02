@@ -27,6 +27,13 @@ import type {
 } from "./types";
 import type { OutreachChannel, OutreachRecord } from "@/lib/outreach/types";
 import { emitAgentEvent } from "@/lib/telemetry/agentTelemetry";
+import {
+  saveLeadCRMStateToPostgres,
+  getLeadCRMStateFromPostgres,
+  listLeadCRMStatesFromPostgres,
+  saveCRMConversationToPostgres,
+  saveCRMMessageToPostgres,
+} from "@/lib/db/pipelineCrmPersistence";
 
 const CRM_DIR = path.resolve(process.cwd(), "scratch/crm");
 const CONVERSATIONS_FILE = path.join(CRM_DIR, "conversations.json");
@@ -143,6 +150,7 @@ export class CRMRepository {
 
     conversations.unshift(newConv);
     writeJSON(CONVERSATIONS_FILE, conversations);
+    saveCRMConversationToPostgres(newConv).catch(() => {});
 
     return newConv;
   }
@@ -187,6 +195,7 @@ export class CRMRepository {
 
     conversations[idx] = updated;
     writeJSON(CONVERSATIONS_FILE, conversations);
+    saveCRMConversationToPostgres(updated).catch(() => {});
     return updated;
   }
 
@@ -207,6 +216,7 @@ export class CRMRepository {
     const messages = this.getMessagesList();
     messages.push(newMessage);
     writeJSON(MESSAGES_FILE, messages);
+    saveCRMMessageToPostgres(newMessage).catch(() => {});
 
     // Update conversation metadata
     const conv = await this.getConversation(msg.conversationId);
@@ -339,7 +349,11 @@ export class CRMRepository {
       metadata: { leadId, previousStatus: prevStatus, newStatus, reason },
     });
 
-    return this.getLeadCRMState(leadId, userId);
+    const finalState = await this.getLeadCRMState(leadId, userId);
+    if (finalState) {
+      saveLeadCRMStateToPostgres(finalState).catch(() => {});
+    }
+    return finalState;
   }
 
   /**
@@ -493,7 +507,14 @@ export class CRMRepository {
     }
 
     const statesMap = this.getLeadStatesMap();
-    const leadState = statesMap[leadId];
+    let leadState = statesMap[leadId];
+
+    if (!leadState) {
+      try {
+        const pgState = await getLeadCRMStateFromPostgres(leadId);
+        if (pgState) return pgState;
+      } catch {}
+    }
 
     const status: CRMLeadStatus = leadState ? leadState.status : "DISCOVERED";
     const statusHistory: StatusTransitionRecord[] = leadState ? leadState.history || [] : [];
@@ -537,6 +558,14 @@ export class CRMRepository {
     ensureStorage();
     const statesMap = this.getLeadStatesMap();
     const leadIds = new Set<string>(Object.keys(statesMap));
+
+    // Also include any leads from Azure PostgreSQL
+    try {
+      const pgStates = await listLeadCRMStatesFromPostgres(filter?.userId);
+      for (const pgs of pgStates) {
+        leadIds.add(pgs.leadId);
+      }
+    } catch {}
 
     // Also include any leads from Phase 11 outreach
     if (fs.existsSync(OUTREACH_FILE)) {

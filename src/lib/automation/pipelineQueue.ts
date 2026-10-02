@@ -11,6 +11,11 @@ import type {
   LeadPipelineProgress,
 } from "./pipelineTypes";
 import { emitAgentEvent } from "@/lib/telemetry/agentTelemetry";
+import {
+  savePipelineRunToPostgres,
+  getPipelineRunFromPostgres,
+  listPipelineRunsFromPostgres,
+} from "@/lib/db/pipelineCrmPersistence";
 
 const PIPELINE_DIR = path.resolve(process.cwd(), "scratch/pipeline");
 const RUNS_FILE = path.join(PIPELINE_DIR, "runs.json");
@@ -61,7 +66,7 @@ function writeJSON<T>(filePath: string, data: T): void {
 
 export class PipelineQueue {
   /**
-   * Saves or updates a PipelineRun record
+   * Saves or updates a PipelineRun record (Azure PostgreSQL primary + durable dual-write)
    */
   static async savePipelineRun(run: PipelineRun): Promise<void> {
     ensurePipelineStorage();
@@ -73,23 +78,47 @@ export class PipelineQueue {
       runs.unshift(run);
     }
     writeJSON(RUNS_FILE, runs);
+
+    // Persist to Azure PostgreSQL Flexible Server
+    try {
+      await savePipelineRunToPostgres(run);
+    } catch (err) {
+      console.warn(`[PipelineQueue] Postgres write error for run ${run.id}:`, (err as Error)?.message);
+    }
   }
 
   /**
-   * Retrieves a PipelineRun by ID
+   * Retrieves a PipelineRun by ID (Azure PostgreSQL primary with local fallback)
    */
   static async getPipelineRun(runId: string): Promise<PipelineRun | null> {
+    try {
+      const pgRun = await getPipelineRunFromPostgres(runId);
+      if (pgRun) return pgRun;
+    } catch {}
+
     ensurePipelineStorage();
     const runs = readJSON<PipelineRun[]>(RUNS_FILE, []);
     return runs.find((r) => r.id === runId) || null;
   }
 
   /**
-   * Lists all PipelineRuns
+   * Lists all PipelineRuns (Azure PostgreSQL primary with local fallback)
    */
   static async listPipelineRuns(): Promise<PipelineRun[]> {
+    try {
+      const pgRuns = await listPipelineRunsFromPostgres();
+      if (pgRuns && pgRuns.length > 0) return pgRuns;
+    } catch {}
+
     ensurePipelineStorage();
-    return readJSON<PipelineRun[]>(RUNS_FILE, []);
+    const localRuns = readJSON<PipelineRun[]>(RUNS_FILE, []);
+    // Lazy sync local runs into Azure PostgreSQL if available
+    if (localRuns.length > 0) {
+      for (const run of localRuns.slice(0, 5)) {
+        savePipelineRunToPostgres(run).catch(() => {});
+      }
+    }
+    return localRuns;
   }
 
   /**
@@ -102,14 +131,26 @@ export class PipelineQueue {
     ensurePipelineStorage();
     const runs = readJSON<PipelineRun[]>(RUNS_FILE, []);
     const idx = runs.findIndex((r) => r.id === runId);
-    if (idx < 0) return null;
+    let current: PipelineRun | null = idx >= 0 ? runs[idx] : null;
 
-    const current = runs[idx];
+    if (!current) {
+      current = await this.getPipelineRun(runId);
+    }
+    if (!current) return null;
+
     const updated = updater(current);
     const finalRun = (updated !== undefined ? updated : current) as PipelineRun;
     finalRun.updatedAt = new Date().toISOString();
-    runs[idx] = finalRun;
-    writeJSON(RUNS_FILE, runs);
+
+    if (idx >= 0) {
+      runs[idx] = finalRun;
+      writeJSON(RUNS_FILE, runs);
+    }
+
+    try {
+      await savePipelineRunToPostgres(finalRun);
+    } catch {}
+
     return finalRun;
   }
 
