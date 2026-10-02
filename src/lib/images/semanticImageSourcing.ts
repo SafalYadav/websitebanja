@@ -620,6 +620,312 @@ export const REGISTRY: Record<string, CuratedImageEntry[]> = {
     },
   ],
 
+  // 5B. Car Rental, Mobility & Self-Drive Fleet
+  car_rental: [
+    {
+      url: "https://images.unsplash.com/photo-1449965408869-eaa3f722e40d",
+      author: "Dominik Scythe",
+      authorHandle: "dominikscythe",
+      intent: "Premium executive car driving open highway with panoramic mountain backdrop",
+      roles: ["hero", "heroBackground"],
+    },
+    {
+      url: "https://images.unsplash.com/photo-1549399542-7e3f8b79c341",
+      author: "Campbell",
+      authorHandle: "campbell",
+      intent: "Modern luxury self-drive fleet aligned in clean showroom staging",
+      roles: ["about", "hero"],
+    },
+    {
+      url: "https://images.unsplash.com/photo-1502877338535-766e1452684a",
+      author: "Olav Tvedt",
+      authorHandle: "olav_tvedt",
+      intent: "Modern self-drive SUV and sedan fleet ready for immediate pickup",
+      roles: ["services", "features"],
+    },
+    {
+      url: "https://images.unsplash.com/photo-1563720223185-11003d516935",
+      author: "Martin Katler",
+      authorHandle: "mkatler",
+      intent: "Airport express transfer and luxury self-drive key handover",
+      roles: ["services", "gallery"],
+    },
+    {
+      url: "https://images.unsplash.com/photo-1494976388531-d1058494cdd8",
+      author: "Julian Hochgesang",
+      authorHandle: "julianhochgesang",
+      intent: "Chauffeur and executive luxury mobility sedan with tinted privacy glass",
+      roles: ["services", "features"],
+    },
+    {
+      url: "https://images.unsplash.com/photo-1503376780353-7e6692767b70",
+      author: "Dhiva Krishna",
+      authorHandle: "dhivakrishna",
+      intent: "Pristine sanitized vehicle cockpit and dashboard GPS ready for road trip",
+      roles: ["features", "about"],
+    },
+    {
+      url: "https://images.unsplash.com/photo-1511919884226-fd3cad34687c",
+      author: "Joey Banks",
+      authorHandle: "joeyabanks",
+      intent: "24/7 on-demand self-drive car booking confirmation and digital keyless access",
+      roles: ["features", "services"],
+    },
+    {
+      url: "https://images.unsplash.com/photo-1552519507-da3b142c6e3d",
+      author: "Stephan Louis",
+      authorHandle: "stephanlouis",
+      intent: "Executive sports sedan parked on coastal mountain pass",
+      roles: ["services", "gallery"],
+    },
+    {
+      url: "https://images.unsplash.com/photo-1533473359331-0135ef1b58bf",
+      author: "Sven D",
+      authorHandle: "svend",
+      intent: "All-terrain rugged SUV ready for outstation highway journey",
+      roles: ["services", "features"],
+    },
+    {
+      url: "https://images.unsplash.com/photo-1542282088-72c9c27ed0cd",
+      author: "Samuele Errico",
+      authorHandle: "samueleerrico",
+      intent: "Modern vehicle interior cockpit with navigation and leather seating",
+      roles: ["features", "about"],
+    },
+    {
+      url: "https://images.unsplash.com/photo-1517524008697-84bbe3c3fd98",
+      author: "Lance Asper",
+      authorHandle: "lanceasper",
+      intent: "White executive sedan accelerating along open highway",
+      roles: ["features", "gallery"],
+    },
+    {
+      url: "https://images.unsplash.com/photo-1506015391300-4802dc74de2e",
+      author: "Jannis Lucas",
+      authorHandle: "jannislucas",
+      intent: "Premium vehicle parked overlooking sunset mountain overlook",
+      roles: ["services", "features"],
+    },
+    {
+      url: "https://images.unsplash.com/photo-1583121274602-3e2820c69888",
+      author: "Stefan Rodriguez",
+      authorHandle: "stefanrodriguez",
+      intent: "Aerodynamic sports vehicle design and precision detailing",
+      roles: ["features", "services"],
+    },
+    {
+      url: "https://images.unsplash.com/photo-1514316454349-750a7fd3da3a",
+      author: "Erik Mclean",
+      authorHandle: "erikmclean",
+      intent: "Long-range self drive road trip along scenic coastal route",
+      roles: ["gallery", "about"],
+    },
+  ],
+
+  // 5C. Gym, Fitness & Performance Training
+  gym: [
+    {
+      url: "https://images.unsplash.com/photo-1534438327276-14e5300c3a48",
+      author: "Danielle Cerullo",
+      authorHandle: "dmcerullo",
+      intent: "Modern gym equipment studio with clean performance floor",
+      roles: ["hero", "heroBackground"],
+    },
+    {
+      url: "https://images.unsplash.com/photo-1517838277536-f5f99be501cd",
+      author: "Sven Mieke",
+      authorHandle: "sxoxm",
+      intent: "Athlete strength conditioning and Olympic bar lifting",
+      roles: ["about", "hero"],
+    },
+    {
+      url: "https://images.unsplash.com/photo-1581009146145-b5ef050c2e1e",
+      author: "Alora Griffiths",
+      authorHandle: "aloragriffiths",
+      intent: "Heavy dumbbell rack and precision functional strength training",
+      roles: ["services", "features"],
+    },
+    {
+      url: "https://images.unsplash.com/photo-1571019614242-c5c5dee9f50b",
+      author: "Jonathan Borba",
+      authorHandle: "jonathanborba",
+      intent: "Dedicated personal fitness coach guiding client routine",
+      roles: ["services", "gallery"],
+    },
+    {
+      url: "https://images.unsplash.com/photo-1540497077202-7c8a3999166f",
+      author: "Humphrey Muleba",
+      authorHandle: "silverlineproduction",
+      intent: "High-end commercial cardio studio with ambient lighting",
+      roles: ["features", "services"],
+    },
+    {
+      url: "https://images.unsplash.com/photo-1583454110551-21f2fa2afe61",
+      author: "Alora Griffiths",
+      authorHandle: "aloragriffiths",
+      intent: "Athlete executing controlled deadlift on Olympic platform",
+      roles: ["services", "gallery"],
+    },
+    {
+      url: "https://images.unsplash.com/photo-1574680096145-d05b474e2155",
+      author: "Humphrey Muleba",
+      authorHandle: "silverlineproduction",
+      intent: "Modern fitness studio floor with kettlebells and battle ropes",
+      roles: ["services", "features"],
+    },
+    {
+      url: "https://images.unsplash.com/photo-1518611012118-696072aa579a",
+      author: "Geert Pieters",
+      authorHandle: "geertpieters",
+      intent: "Functional movement studio with natural daylight",
+      roles: ["features", "about"],
+    },
+    {
+      url: "https://images.unsplash.com/photo-1576678927484-cc907957088c",
+      author: "Victor Freitas",
+      authorHandle: "victorfreitas",
+      intent: "Heavy duty Olympic barbells and precision weight racks",
+      roles: ["features", "services"],
+    },
+    {
+      url: "https://images.unsplash.com/photo-1599058945522-28d584b6f0ff",
+      author: "Luis Vidal",
+      authorHandle: "luisvidal",
+      intent: "High-intensity cardio training and endurance sprint session",
+      roles: ["features", "gallery"],
+    },
+    {
+      url: "https://images.unsplash.com/photo-1526506118085-60ce8714f8c5",
+      author: "Edgar Chaparro",
+      authorHandle: "echaparro",
+      intent: "Targeted resistance training with calibrated dumbbells",
+      roles: ["services", "features"],
+    },
+    {
+      url: "https://images.unsplash.com/photo-1538805060514-97d9cc17730c",
+      author: "Fitsum Admasu",
+      authorHandle: "fitart",
+      intent: "Athlete sprint acceleration on synthetic track",
+      roles: ["gallery", "about"],
+    },
+    {
+      url: "https://images.unsplash.com/photo-1594737625785-a6cbdabd333c",
+      author: "Gabin Vallet",
+      authorHandle: "gabinvallet",
+      intent: "Group functional fitness conditioning and community coaching",
+      roles: ["features", "services"],
+    },
+    {
+      url: "https://images.unsplash.com/photo-1584735935682-2f2b69dff9d2",
+      author: "Sven Mieke",
+      authorHandle: "sxoxm",
+      intent: "Recovery foam rolling and post-workout mobility session",
+      roles: ["about", "gallery"],
+    },
+  ],
+
+  // 5D. Salon, Hair & Aesthetic Wellness
+  salon: [
+    {
+      url: "https://images.unsplash.com/photo-1560066984-138dadb4c035",
+      author: "Guilherme Petri",
+      authorHandle: "gpetri",
+      intent: "High-end boutique hair salon with ambient mirror lighting",
+      roles: ["hero", "heroBackground"],
+    },
+    {
+      url: "https://images.unsplash.com/photo-1522337360788-8b13dee7a37e",
+      author: "Adam Winger",
+      authorHandle: "awinger",
+      intent: "Master stylist precision cutting and hair sculpting",
+      roles: ["about", "hero"],
+    },
+    {
+      url: "https://images.unsplash.com/photo-1562322140-8baeececf3df",
+      author: "Element5 Digital",
+      authorHandle: "element5digital",
+      intent: "Bespoke styling suite and organic hair care treatments",
+      roles: ["services", "features"],
+    },
+    {
+      url: "https://images.unsplash.com/photo-1595476108010-b4d1f102b1b1",
+      author: "Krisztina Papp",
+      authorHandle: "krisztinapapp",
+      intent: "Facial aesthetics and restorative skincare treatment suite",
+      roles: ["services", "gallery"],
+    },
+    {
+      url: "https://images.unsplash.com/photo-1527799820374-dcf8d9d4a388",
+      author: "Paul Siewert",
+      authorHandle: "paulsiewert",
+      intent: "Artisan salon seating and relaxing guest hospitality",
+      roles: ["features", "about"],
+    },
+    {
+      url: "https://images.unsplash.com/photo-1503951914875-452162b0f3f1",
+      author: "Tim Mossholder",
+      authorHandle: "timmossholder",
+      intent: "Luxury salon hair washing and conditioning basin station",
+      roles: ["services", "gallery"],
+    },
+    {
+      url: "https://images.unsplash.com/photo-1582095133179-bfd08e2fc6b3",
+      author: "Apostolos Vamvouras",
+      authorHandle: "apvamvouras",
+      intent: "Artisanal makeup artistry brushes and luxury cosmetics",
+      roles: ["services", "features"],
+    },
+    {
+      url: "https://images.unsplash.com/photo-1516975080664-ed2fc6a32937",
+      author: "Christin Hume",
+      authorHandle: "christinhumephoto",
+      intent: "Botanical organic skincare serums and essential oils",
+      roles: ["services", "gallery"],
+    },
+    {
+      url: "https://images.unsplash.com/photo-1600948836101-f9ffda59d250",
+      author: "Valeriia Kogan",
+      authorHandle: "valeriiakogan",
+      intent: "Color formulation and custom balayage hair painting",
+      roles: ["features", "services"],
+    },
+    {
+      url: "https://images.unsplash.com/photo-1521590832167-7bcbfaa6381f",
+      author: "Engin Akyurt",
+      authorHandle: "enginakyurt",
+      intent: "Volume blowout styling with professional round brush and dryer",
+      roles: ["features", "about"],
+    },
+    {
+      url: "https://images.unsplash.com/photo-1487412720507-e7ab37603c6f",
+      author: "Raphael Lovaski",
+      authorHandle: "raphaelovaski",
+      intent: "Hydra facial treatment and restorative aesthetic glow therapy",
+      roles: ["services", "gallery"],
+    },
+    {
+      url: "https://images.unsplash.com/photo-1512290900672-1f023c70f56a",
+      author: "Engin Akyurt",
+      authorHandle: "enginakyurt",
+      intent: "Aromatherapy hot stone relaxation and luxury wellness lounge",
+      roles: ["features", "gallery"],
+    },
+    {
+      url: "https://images.unsplash.com/photo-1633681926022-84c23e8cb2d6",
+      author: "Khamkeo Vilaysing",
+      authorHandle: "khamkeovilaysing",
+      intent: "Modern boutique salon interior with ergonomic styling chairs",
+      roles: ["about", "gallery"],
+    },
+    {
+      url: "https://images.unsplash.com/photo-1570172619644-dfd03ed5d881",
+      author: "Content Pixie",
+      authorHandle: "contentpixie",
+      intent: "Dermatological cleansing ritual and botanical facial massage",
+      roles: ["features", "services"],
+    },
+  ],
+
   // 6. Trusted Local Service (Electrician / Specialized Trades)
   local_service: [
     {
@@ -838,6 +1144,49 @@ export function canonicalizeImageUrl(url: string): string {
 export function normalizeCategoryKey(rawCategory?: string, businessName?: string, archetype?: string): string {
   const combined = `${rawCategory || ""} ${businessName || ""} ${archetype || ""}`.toLowerCase();
 
+  // 0A. Car Rental & Self-Drive Mobility check (Highest priority: vehicle mobility must NEVER match restaurant/real_estate)
+  if (
+    combined.includes("car rental") ||
+    combined.includes("vehicle rental") ||
+    combined.includes("self drive") ||
+    combined.includes("car hire") ||
+    combined.includes("auto rental") ||
+    combined.includes("fleet") ||
+    combined.includes("chauffeur") ||
+    combined.includes("carz") ||
+    combined.includes("cab service") ||
+    (combined.includes("car") && (combined.includes("rent") || combined.includes("drive") || combined.includes("mobility")))
+  ) {
+    return "car_rental";
+  }
+
+  // 0B. Gym & Fitness check (Must NEVER match restaurant/clinic)
+  if (
+    combined.includes("gym") ||
+    combined.includes("fitness") ||
+    combined.includes("crossfit") ||
+    combined.includes("workout") ||
+    combined.includes("bodybuilding") ||
+    combined.includes("personal training") ||
+    combined.includes("powerlifting")
+  ) {
+    return "gym";
+  }
+
+  // 0C. Salon & Beauty Aesthetics check (Must NEVER match local_service/trades)
+  if (
+    combined.includes("salon") ||
+    combined.includes("hair styling") ||
+    combined.includes("hair cut") ||
+    combined.includes("barbershop") ||
+    combined.includes("barber") ||
+    combined.includes("beauty parlor") ||
+    combined.includes("nail studio") ||
+    combined.includes("cosmetology")
+  ) {
+    return "salon";
+  }
+
   // 1. SaaS / Technology check
   if (
     combined.includes("saas") ||
@@ -865,35 +1214,52 @@ export function normalizeCategoryKey(rawCategory?: string, businessName?: string
     combined.includes("spa resort") ||
     combined.includes("hospitality") ||
     combined.includes("suites") ||
-    combined.includes("luxury_bespoke")
+    (combined.includes("luxury_bespoke") && !combined.includes("car") && !combined.includes("rental"))
   ) {
     return "luxury_hotel";
   }
 
-  // 3. Restaurant / Dining check
+  // 3. Restaurant / Dining check (Explicit negative guards against non-food categories)
+  const isProtectedNonFood =
+    combined.includes("car") ||
+    combined.includes("rental") ||
+    combined.includes("gym") ||
+    combined.includes("fitness") ||
+    combined.includes("salon") ||
+    combined.includes("doctor") ||
+    combined.includes("dental");
+
   if (
-    combined.includes("restaurant") ||
-    combined.includes("dining") ||
-    combined.includes("epicure") ||
-    combined.includes("bistro") ||
-    combined.includes("chef") ||
-    combined.includes("degustation") ||
-    combined.includes("culinary") ||
-    combined.includes("gastronomy") ||
-    combined.includes("warm_artisanal")
+    !isProtectedNonFood &&
+    (combined.includes("restaurant") ||
+      combined.includes("dining") ||
+      combined.includes("epicure") ||
+      combined.includes("bistro") ||
+      combined.includes("chef") ||
+      combined.includes("degustation") ||
+      combined.includes("culinary") ||
+      combined.includes("gastronomy") ||
+      combined.includes("warm_artisanal"))
   ) {
     return "restaurant";
   }
 
-  // 4. Real Estate / Estates check
+  // 4. Real Estate / Estates check (Explicit negative guards against non-realty)
+  const isProtectedNonRealty =
+    combined.includes("car") ||
+    combined.includes("rental") ||
+    combined.includes("gym") ||
+    combined.includes("fitness");
+
   if (
-    combined.includes("real estate") ||
-    combined.includes("realty") ||
-    combined.includes("estates") ||
-    combined.includes("properties") ||
-    combined.includes("architectural") ||
-    combined.includes("brokerage") ||
-    combined.includes("minimal_editorial")
+    !isProtectedNonRealty &&
+    (combined.includes("real estate") ||
+      combined.includes("realty") ||
+      combined.includes("estates") ||
+      combined.includes("properties") ||
+      combined.includes("architectural") ||
+      combined.includes("brokerage") ||
+      (combined.includes("minimal_editorial") && !combined.includes("rental") && !combined.includes("car")))
   ) {
     return "real_estate";
   }
@@ -938,11 +1304,12 @@ export function normalizeCategoryKey(rawCategory?: string, businessName?: string
 
   // 8. Cafe check
   if (
-    combined.includes("coffee") ||
-    combined.includes("cafe") ||
-    combined.includes("roaster") ||
-    combined.includes("espresso") ||
-    combined.includes("bakery")
+    !isProtectedNonFood &&
+    (combined.includes("coffee") ||
+      combined.includes("cafe") ||
+      combined.includes("roaster") ||
+      combined.includes("espresso") ||
+      combined.includes("bakery"))
   ) {
     return "cafe";
   }

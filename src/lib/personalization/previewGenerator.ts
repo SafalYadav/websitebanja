@@ -14,7 +14,7 @@ import path from "path";
 import crypto from "crypto";
 import { leadRepository } from "@/lib/discovery/leadRepository";
 import { auditRepository } from "@/lib/audit/auditRepository";
-import { createSyntheticMissingWebsiteAudit } from "@/lib/audit/auditEngine";
+import { createSyntheticMissingWebsiteAudit, synthesizePhase10DesignInputs } from "@/lib/audit/auditEngine";
 import { normalizeIndustry, generateDesignRules } from "@/lib/ai/design/designRules";
 import {
   generateDesignStrategy,
@@ -84,7 +84,7 @@ function derivePersonalizedServices(
   industry: string,
   contentPriorities: string[]
 ): Array<{ title: string; description: string; price?: string }> {
-  const norm = industry.toLowerCase();
+  const norm = `${industry} ${lead.industry || ""} ${lead.category || ""} ${lead.businessName || ""}`.toLowerCase();
   const name = lead.businessName;
 
   if (norm.includes("hotel") || norm.includes("hospitality") || norm.includes("resort")) {
@@ -208,6 +208,81 @@ function derivePersonalizedServices(
         title: "Experiential Spatial Design",
         description: "Environmental graphics, physical retail concepts, and immersive brand pop-up installations.",
         price: "Custom commission",
+      },
+    ];
+  }
+
+  if (norm.includes("car") || norm.includes("rental") || norm.includes("vehicle") || norm.includes("drive") || norm.includes("auto")) {
+    return [
+      {
+        title: "Self-Drive Sedan & Hatchback Fleet",
+        description: `Immaculately maintained modern fleet at ${name} for seamless city transit, corporate appointments, and weekend leisure.`,
+        price: "From ₹1,800 / day",
+      },
+      {
+        title: "All-Terrain Luxury SUVs",
+        description: "High-clearance premium SUVs equipped with GPS navigation, cruise control, and safety features for outstation road trips.",
+        price: "From ₹3,500 / day",
+      },
+      {
+        title: "Express Airport & Doorstep Delivery",
+        description: "Zero-wait express handover directly at the arrivals terminal or delivered directly to your doorstep with digital verification.",
+        price: "Complimentary pickup",
+      },
+      {
+        title: "Unlimited Mileage Getaway Packages",
+        description: "Fixed-rate multi-day rentals with 24/7 roadside assistance, zero kilometer caps, and comprehensive insurance coverage.",
+        price: "Custom duration quotes",
+      },
+    ];
+  }
+
+  if (norm.includes("gym") || norm.includes("fitness") || norm.includes("crossfit") || norm.includes("workout")) {
+    return [
+      {
+        title: "Elite Strength & Conditioning Zone",
+        description: `Olympic lifting platforms, calibrated resistance machines, and dedicated free weight areas at ${name}.`,
+        price: "Monthly & Annual plans",
+      },
+      {
+        title: "High-Intensity Functional Training",
+        description: "Coach-led interval sessions, metabolic conditioning, and mobility programming tailored for all performance levels.",
+        price: "Class passes available",
+      },
+      {
+        title: "1-on-1 Performance Coaching",
+        description: "Biomechanical assessments, progressive overload tracking, and personalized movement correction with certified trainers.",
+        price: "Dedicated coach tier",
+      },
+      {
+        title: "Body Composition & Nutrition Architecture",
+        description: "DEXA analysis, precision macronutrient planning, and ongoing lifestyle audits to accelerate tangible health outcomes.",
+        price: "Included in membership",
+      },
+    ];
+  }
+
+  if (norm.includes("salon") || norm.includes("beauty") || norm.includes("hair") || norm.includes("spa")) {
+    return [
+      {
+        title: "Bespoke Hair Architecture & Styling",
+        description: `Precision haircutting, personalized color formulations, and restorative keratin therapies by master stylists at ${name}.`,
+        price: "From ₹1,200",
+      },
+      {
+        title: "Couture Bridal & Celebration Artistry",
+        description: "HD airbrush makeup, artisanal hair styling, and luxury pre-event radiance packages for milestone occasions.",
+        price: "Advance consultation",
+      },
+      {
+        title: "Botanical Skin & Scalp Therapies",
+        description: "Hydra-infusion facials, organic scalp detox rituals, and deep restorative nourishment with dermatologist-grade serums.",
+        price: "Curated treatment packages",
+      },
+      {
+        title: "Executive Grooming & Wellness",
+        description: "Precision beard design, therapeutic reflexology pedicures, and rejuvenating express spa therapies.",
+        price: "A la carte menu",
       },
     ];
   }
@@ -367,38 +442,11 @@ export async function generatePersonalizedPreview(
   if (!audit) {
     // Generate synthetic audit on the fly so preview generation proceeds reliably
     const synth = createSyntheticMissingWebsiteAudit(lead);
-    const leadInd = `${lead.industry || ""} ${lead.category || ""} ${lead.businessName || ""}`.toLowerCase();
-    let defaultVisualDirection = "warm artisanal storytelling";
-    let defaultLayoutStrategy = "fullscreen visual hero with staggered narrative sections";
-    let defaultCtaStrategy = "table reservation with WhatsApp concierge";
-    let defaultImageryDirection = "warm ambient lighting, artisan craft";
-    let defaultContentPriorities = ["signature offerings", "heritage story", "reservation booking"];
-
-    if (leadInd.includes("hotel") || leadInd.includes("resort") || leadInd.includes("hospitality")) {
-      defaultVisualDirection = "luxury bespoke elegance";
-      defaultLayoutStrategy = "editorial hero with full-width atmospheric suites showcase";
-      defaultCtaStrategy = "room reservation and concierge inquiry";
-      defaultImageryDirection = "architectural suites, dusk pool terraces, serene wellness spaces";
-      defaultContentPriorities = ["royal suites", "signature amenities", "concierge booking"];
-    } else if (leadInd.includes("saas") || leadInd.includes("software") || leadInd.includes("tech") || leadInd.includes("ai")) {
-      defaultVisualDirection = "dark technical precision";
-      defaultLayoutStrategy = "split hero with live telemetry and interactive workflow cards";
-      defaultCtaStrategy = "free trial activation and engineering demo";
-      defaultImageryDirection = "dark glass interfaces, telemetry graphs, cloud architectures";
-      defaultContentPriorities = ["core features", "enterprise security", "instant deployment"];
-    } else if (leadInd.includes("plumb") || leadInd.includes("hvac") || leadInd.includes("service") || leadInd.includes("repair")) {
-      defaultVisualDirection = "high trust service reliability";
-      defaultLayoutStrategy = "prominent contact hero with credential badges and rapid emergency dispatcher";
-      defaultCtaStrategy = "urgent service dispatch and certified quote";
-      defaultImageryDirection = "certified technicians, modern vans, precision tools";
-      defaultContentPriorities = ["emergency response", "verified licensing", "upfront pricing"];
-    } else if (leadInd.includes("agency") || leadInd.includes("creative") || leadInd.includes("studio") || leadInd.includes("architect")) {
-      defaultVisualDirection = "expressive creative editorial";
-      defaultLayoutStrategy = "monolithic typography with asymmetric portfolio gallery";
-      defaultCtaStrategy = "project commissioning and creative discovery";
-      defaultImageryDirection = "avant-garde brand design, spatial architecture, minimalist ateliers";
-      defaultContentPriorities = ["case studies", "brand philosophy", "studio inquiry"];
-    }
+    const normIndForAudit = lead.industry || lead.category || "general";
+    const phase10Inputs = synthesizePhase10DesignInputs(lead, normIndForAudit, [
+      ...(synth.ux?.issues || []),
+      ...(synth.conversion?.issues || []),
+    ]);
 
     audit = {
       auditId: `audit_auto_${Date.now()}`,
@@ -441,14 +489,7 @@ export async function generatePersonalizedPreview(
       performance: synth.performance,
       accessibility: synth.accessibility,
       recommendations: ["Deploy modern hosted WebsiteBanja website."],
-      phase10DesignInputs: {
-        visualDirection: defaultVisualDirection,
-        layoutStrategy: defaultLayoutStrategy,
-        requiredSections: ["hero", "services", "features", "reviews", "contact", "footer"],
-        ctaStrategy: defaultCtaStrategy,
-        imageryDirection: defaultImageryDirection,
-        contentPriorities: defaultContentPriorities,
-      },
+      phase10DesignInputs: phase10Inputs,
       handoffPhase: "phase10_automated_preview_generation",
     };
   }
@@ -467,26 +508,86 @@ export async function generatePersonalizedPreview(
   });
 
   const businessName = lead.businessName;
-  const industry = lead.industry || lead.category || "restaurant";
+  const industry = lead.industry || lead.category || "general";
   const location = lead.city ? `${lead.city}, ${lead.state || "India"}` : lead.address || "Vadodara, Gujarat";
   const designInputs = auditReport.phase10DesignInputs;
 
-  // 3. Formulate WebsiteRequirement
-  const primaryCta =
-    designInputs.ctaStrategy.includes("reservation")
-      ? "Reserve a Table"
-      : designInputs.ctaStrategy.includes("trial") || designInputs.ctaStrategy.includes("demo")
-      ? "Start Free Trial"
-      : designInputs.ctaStrategy.includes("dispatch") || designInputs.ctaStrategy.includes("quote")
-      ? "Request Rapid Quote"
-      : designInputs.ctaStrategy.includes("commission") || designInputs.ctaStrategy.includes("project")
-      ? "Commission Project"
-      : designInputs.ctaStrategy.includes("appointment")
-      ? "Book Consultation"
-      : "Inquire Today";
+  // 3. Formulate WebsiteRequirement with category-aware CTA and Brand Style
+  const indCombined = `${industry} ${lead.category || ""} ${lead.businessName || ""}`.toLowerCase();
+
+  let primaryCta = "Inquire Today";
+  if (
+    indCombined.includes("car") ||
+    indCombined.includes("rental") ||
+    indCombined.includes("self drive") ||
+    indCombined.includes("vehicle")
+  ) {
+    primaryCta = "Book a Vehicle";
+  } else if (
+    indCombined.includes("hotel") ||
+    indCombined.includes("resort") ||
+    indCombined.includes("hospitality") ||
+    indCombined.includes("suite")
+  ) {
+    primaryCta = "Reserve a Room";
+  } else if (
+    indCombined.includes("gym") ||
+    indCombined.includes("fitness") ||
+    indCombined.includes("crossfit") ||
+    indCombined.includes("workout")
+  ) {
+    primaryCta = "Claim Free Pass";
+  } else if (
+    indCombined.includes("salon") ||
+    indCombined.includes("spa") ||
+    indCombined.includes("beauty") ||
+    indCombined.includes("hair")
+  ) {
+    primaryCta = "Book Appointment";
+  } else if (
+    indCombined.includes("dental") ||
+    indCombined.includes("clinic") ||
+    indCombined.includes("doctor") ||
+    indCombined.includes("medical")
+  ) {
+    primaryCta = "Book Consultation";
+  } else if (
+    indCombined.includes("restaurant") ||
+    indCombined.includes("cafe") ||
+    indCombined.includes("dining") ||
+    indCombined.includes("bistro")
+  ) {
+    primaryCta = "Reserve a Table";
+  } else if (
+    indCombined.includes("saas") ||
+    indCombined.includes("software") ||
+    indCombined.includes("tech") ||
+    indCombined.includes("ai") ||
+    designInputs.ctaStrategy.includes("trial") ||
+    designInputs.ctaStrategy.includes("demo")
+  ) {
+    primaryCta = "Start Free Trial";
+  } else if (
+    indCombined.includes("plumb") ||
+    indCombined.includes("hvac") ||
+    indCombined.includes("electric") ||
+    designInputs.ctaStrategy.includes("dispatch") ||
+    designInputs.ctaStrategy.includes("quote")
+  ) {
+    primaryCta = "Request Rapid Quote";
+  } else if (
+    designInputs.ctaStrategy.includes("commission") ||
+    designInputs.ctaStrategy.includes("project") ||
+    indCombined.includes("agency")
+  ) {
+    primaryCta = "Commission Project";
+  } else if (designInputs.ctaStrategy.includes("appointment")) {
+    primaryCta = "Book Consultation";
+  } else if (designInputs.ctaStrategy.includes("reservation")) {
+    primaryCta = "Book Now";
+  }
 
   const visualDir = (designInputs.visualDirection || "").toLowerCase();
-  const indCombined = `${industry} ${lead.category || ""} ${lead.businessName || ""}`.toLowerCase();
 
   let brandStyle = "modern";
   if (visualDir.includes("luxury") || indCombined.includes("hotel") || indCombined.includes("resort")) {
@@ -499,7 +600,7 @@ export async function generatePersonalizedPreview(
     brandStyle = "clean_clinical";
   } else if (visualDir.includes("creative") || visualDir.includes("expressive") || indCombined.includes("agency") || indCombined.includes("studio")) {
     brandStyle = "expressive_creative";
-  } else if (visualDir.includes("brutalist") || indCombined.includes("auto")) {
+  } else if (visualDir.includes("brutalist") || indCombined.includes("auto") || indCombined.includes("car") || indCombined.includes("rental")) {
     brandStyle = "bold_brutalist";
   } else if (visualDir.includes("artisanal") || indCombined.includes("restaurant") || indCombined.includes("cafe") || indCombined.includes("bistro")) {
     brandStyle = "warm_artisanal";
@@ -517,7 +618,7 @@ export async function generatePersonalizedPreview(
     location,
     services: ((lead as any).services && Array.isArray((lead as any).services) && (lead as any).services.length > 0)
       ? (lead as any).services
-      : ["Core Offering", "Premium Service", "Private Consultation", "Dedicated Support"],
+      : derivePersonalizedServices(lead, industry, designInputs.contentPriorities).map((s) => s.title),
     brand: {
       style: brandStyle,
     },
@@ -687,12 +788,43 @@ export async function generatePersonalizedPreview(
   );
 
   // 8. Assemble Full WebsiteData
+  let taglineCategory = "Dedicated Professional Service";
+  if (indCombined.includes("car") || indCombined.includes("rental") || indCombined.includes("vehicle") || indCombined.includes("self drive")) {
+    taglineCategory = "Premium Self-Drive & Vehicle Rental";
+  } else if (indCombined.includes("hotel") || indCombined.includes("resort") || indCombined.includes("hospitality")) {
+    taglineCategory = "Luxury Hospitality & Suites";
+  } else if (indCombined.includes("gym") || indCombined.includes("fitness")) {
+    taglineCategory = "Elite Fitness & Performance Training";
+  } else if (indCombined.includes("salon") || indCombined.includes("spa") || indCombined.includes("beauty")) {
+    taglineCategory = "Signature Styling & Beauty Sanctuary";
+  } else if (indCombined.includes("dental") || indCombined.includes("clinic") || indCombined.includes("medical")) {
+    taglineCategory = "Advanced Clinical Care & Wellness";
+  } else if (indCombined.includes("restaurant") || indCombined.includes("cafe") || indCombined.includes("dining")) {
+    taglineCategory = "Artisanal Culinary Excellence";
+  } else if (indCombined.includes("saas") || indCombined.includes("tech") || indCombined.includes("software")) {
+    taglineCategory = "High-Reliability Digital Architecture";
+  }
+
+  const defaultEmailPrefix = (
+    indCombined.includes("car") || indCombined.includes("rental")
+      ? "rentals"
+      : indCombined.includes("restaurant") || indCombined.includes("hotel")
+      ? "reservations"
+      : indCombined.includes("gym")
+      ? "membership"
+      : indCombined.includes("salon") || indCombined.includes("clinic")
+      ? "appointments"
+      : indCombined.includes("saas")
+      ? "support"
+      : "contact"
+  );
+
   let websiteData: WebsiteData = {
     businessName,
     brand: {
       name: businessName,
       industry: normalizedInd,
-      tagline: `${businessName} — Artisanal Excellence in ${lead.city || "Vadodara"}`,
+      tagline: `${businessName} — ${taglineCategory} in ${lead.city || "Vadodara"}`,
       description: lead.description || `${businessName} offers distinct high-quality experiences.`,
     },
     navbar: {
@@ -724,7 +856,7 @@ export async function generatePersonalizedPreview(
     faq: faqItems,
     contact: {
       phone: lead.phone || "+91 98250 11223",
-      email: lead.email || "reservations@websitebanja.local",
+      email: lead.email || `${defaultEmailPrefix}@websitebanja.local`,
       address: lead.address || (lead.city ? `${lead.city}, Gujarat` : "Commercial Premises"),
       whatsapp: lead.phone,
     },

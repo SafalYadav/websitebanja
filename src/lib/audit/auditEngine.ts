@@ -546,26 +546,55 @@ export function synthesizePhase10DesignInputs(
 ): Phase10DesignInputs {
   const normInd = (industry || (lead && (lead.industry || lead.category)) || "").toLowerCase();
 
-  let visualDirection = "warm artisanal culinary storytelling";
-  let layoutStrategy = "fullscreen visual hero with staggered narrative sections";
-  let requiredSections = ["hero", "signature_dishes", "menu", "atmosphere_story", "reviews", "contact", "footer"];
-  let ctaStrategy = "table reservation with WhatsApp concierge";
-  let imageryDirection = "warm ambient lighting, artisan roast craft, macro food photography";
-  let contentPriorities = ["signature offerings", "heritage story", "reservation booking", "location & hours"];
+  let visualDirection = "clean modern professional excellence";
+  let layoutStrategy = "split hero with focused offerings and trusted credentials";
+  let requiredSections = ["hero", "services", "features", "reviews", "contact", "footer"];
+  let ctaStrategy = "direct consultation inquiry";
+  let imageryDirection = "clean professional lighting, focused service delivery, authentic modern craft";
+  let contentPriorities = ["core offerings", "verified credentials", "direct booking", "contact & location"];
 
-  if (normInd.includes("hotel") || normInd.includes("hospitality")) {
+  if (
+    normInd.includes("car rental") ||
+    normInd.includes("rental") ||
+    normInd.includes("self drive") ||
+    normInd.includes("fleet") ||
+    normInd.includes("chauffeur") ||
+    normInd.includes("cab") ||
+    normInd.includes("automotive")
+  ) {
+    visualDirection = "high velocity automotive mobility and transparent fleet modernism";
+    layoutStrategy = "hero booking banner with fleet showcase cards, pricing tiers and transparent terms";
+    requiredSections = ["hero", "fleet_showcase", "services", "features", "customer_reviews", "booking", "contact", "footer"];
+    ctaStrategy = "fleet booking and vehicle availability check";
+    imageryDirection = "sleek highway driving, pristine vehicle cockpits, luxury fleet showrooms";
+    contentPriorities = ["available fleet", "transparent daily pricing", "instant booking", "unlimited mileage terms"];
+  } else if (normInd.includes("gym") || normInd.includes("fitness") || normInd.includes("workout")) {
+    visualDirection = "high energy athletic performance with bold typography and high-contrast visuals";
+    layoutStrategy = "impact hero with membership passes, trainer credentials and facility highlights";
+    requiredSections = ["hero", "programs", "trainers", "facility", "member_results", "membership", "contact", "footer"];
+    ctaStrategy = "free training trial and gym membership enrollment";
+    imageryDirection = "heavy strength conditioning, functional crossfit turf, athletic motivation";
+    contentPriorities = ["training programs", "membership plans", "coach certifications", "free pass claim"];
+  } else if (normInd.includes("salon") || normInd.includes("hair") || normInd.includes("barber") || normInd.includes("beauty")) {
+    visualDirection = "refined beauty aesthetics with warm mirror lighting and editorial calm";
+    layoutStrategy = "sensory hero with styling menu, lookbook gallery and master stylist profiles";
+    requiredSections = ["hero", "services", "lookbook", "stylists", "client_reviews", "booking", "contact", "footer"];
+    ctaStrategy = "salon appointment and styling consultation booking";
+    imageryDirection = "precision haircutting, organic skincare rituals, boutique salon interiors";
+    contentPriorities = ["signature styling", "treatment pricing", "online appointment", "stylist portfolio"];
+  } else if (normInd.includes("hotel") || normInd.includes("hospitality") || normInd.includes("resort")) {
     visualDirection = "luxury bespoke hospitality editorial";
     layoutStrategy = "cinematic hero with suite showcases and guest experience gallery";
     requiredSections = ["hero", "suite_showcase", "amenities", "dining", "guest_reviews", "booking", "contact", "footer"];
     ctaStrategy = "suite reservation and VIP concierge inquiry";
     imageryDirection = "architectural suite photography, ambient dusk terrace lighting, curated linen textures";
     contentPriorities = ["suite amenities", "private dining", "reservation calendar", "concierge services"];
-  } else if (normInd.includes("dental") || normInd.includes("health")) {
+  } else if (normInd.includes("dental") || normInd.includes("clinic") || normInd.includes("medical") || normInd.includes("doctor")) {
     visualDirection = "clean clinical authority with approachable warmth";
     layoutStrategy = "high-trust clinic presentation with treatment cards and doctor credentials";
     requiredSections = ["hero", "treatments", "doctor_profile", "technology", "patient_reviews", "booking", "contact", "footer"];
     ctaStrategy = "instant appointment consultation booking";
-    imageryDirection = "bright clinical interior, smiling patients, modern dental equipment";
+    imageryDirection = "bright clinical interior, smiling patients, modern medical equipment";
     contentPriorities = ["treatments offered", "doctor qualifications", "patient before/after", "online booking"];
   } else if (normInd.includes("wellness") || normInd.includes("spa")) {
     visualDirection = "organic botanical serenity with calming earth tones";
@@ -574,6 +603,34 @@ export function synthesizePhase10DesignInputs(
     ctaStrategy = "spa appointment and holistic package reservation";
     imageryDirection = "botanical oils, warm candlelight, stone textures, calming wellness interior";
     contentPriorities = ["signature therapies", "ayurvedic rituals", "wellness retreat packages"];
+  } else if (normInd.includes("restaurant") || normInd.includes("cafe") || normInd.includes("dining") || normInd.includes("bistro") || normInd.includes("food")) {
+    visualDirection = "warm artisanal culinary storytelling";
+    layoutStrategy = "fullscreen visual hero with staggered narrative sections";
+    requiredSections = ["hero", "signature_dishes", "menu", "atmosphere_story", "reviews", "contact", "footer"];
+    ctaStrategy = "table reservation and culinary inquiry";
+    imageryDirection = "warm ambient lighting, artisan roast craft, macro food photography";
+    contentPriorities = ["signature offerings", "heritage story", "reservation booking", "location & hours"];
+  } else if (normInd.includes("saas") || normInd.includes("software") || normInd.includes("tech") || normInd.includes("ai")) {
+    visualDirection = "dark technical precision and interactive workflow modernism";
+    layoutStrategy = "split hero with live telemetry and interactive architecture cards";
+    requiredSections = ["hero", "features", "architecture", "security", "customer_results", "pricing", "contact", "footer"];
+    ctaStrategy = "start free trial and platform demo";
+    imageryDirection = "high-tech server telemetry, developer interfaces, dark mode cloud dashboards";
+    contentPriorities = ["core capabilities", "enterprise security", "instant onboarding", "pricing tiers"];
+  } else if (normInd.includes("real estate") || normInd.includes("realty") || normInd.includes("property")) {
+    visualDirection = "minimal editorial architectural prestige";
+    layoutStrategy = "wide property portfolio grid with specification sheets and agent consultation";
+    requiredSections = ["hero", "featured_properties", "market_insights", "advisors", "reviews", "contact", "footer"];
+    ctaStrategy = "schedule property viewing and private advisory";
+    imageryDirection = "contemporary estate architecture, sunlit interiors, panoramic residences";
+    contentPriorities = ["exclusive listings", "neighborhood specs", "private viewings", "broker credentials"];
+  } else if (normInd.includes("plumb") || normInd.includes("electric") || normInd.includes("repair") || normInd.includes("hvac") || normInd.includes("service")) {
+    visualDirection = "high trust service reliability and rapid dispatch authority";
+    layoutStrategy = "emergency hero banner with certified badges and transparent pricing";
+    requiredSections = ["hero", "services", "emergency_dispatch", "certifications", "customer_reviews", "contact", "footer"];
+    ctaStrategy = "request rapid service quote and certified dispatch";
+    imageryDirection = "certified technicians, diagnostic instruments, safety equipment";
+    contentPriorities = ["rapid dispatch", "licensed guarantees", "upfront estimates", "emergency contact"];
   }
 
   // Address conversion deficiencies discovered in audit

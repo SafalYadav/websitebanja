@@ -83,6 +83,41 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
+      - name: Ensure External n8n Ops Agent in Azure
+        id: n8n-deploy
+        continue-on-error: true
+        run: |
+          echo "Checking external n8n Ops Agent Container App in $RESOURCE_GROUP..."
+          if ! az containerapp show --name n8n-app --resource-group "$RESOURCE_GROUP" >/dev/null 2>&1; then
+            echo "Creating n8n-app Container App..."
+            az containerapp create \
+              --name n8n-app \
+              --resource-group "$RESOURCE_GROUP" \
+              --environment websitebanja-env \
+              --image n8nio/n8n:latest \
+              --target-port 5678 \
+              --ingress external \
+              --cpu 0.5 \
+              --memory 1.0Gi \
+              --min-replicas 1 \
+              --max-replicas 1 \
+              --env-vars \
+                N8N_PORT="5678" \
+                N8N_PROTOCOL="https" \
+                GENERIC_TIMEZONE="UTC" \
+                N8N_AI_ENABLED="true" \
+                N8N_DIAGNOSTICS_ENABLED="false" || true
+          fi
+
+          N8N_FQDN=$(az containerapp show --name n8n-app --resource-group "$RESOURCE_GROUP" --query "properties.configuration.ingress.fqdn" -o tsv 2>/dev/null || echo "")
+          if [ -n "$N8N_FQDN" ]; then
+            echo "n8n FQDN: https://${N8N_FQDN}"
+            echo "N8N_OPS_AGENT_WEBHOOK_URL=https://${N8N_FQDN}/webhook/wb-ops-agent" >> "$GITHUB_ENV"
+          else
+            echo "Setting standard managed environment webhook for n8n-app..."
+            echo "N8N_OPS_AGENT_WEBHOOK_URL=https://n8n-app.calmcoast-298a6aef.centralindia.azurecontainerapps.io/webhook/wb-ops-agent" >> "$GITHUB_ENV"
+          fi
+
       - name: Deploy Image & Configure Azure Environment
         id: deploy
         env:
@@ -104,6 +139,7 @@ jobs:
           GMAIL_REDIRECT_URI: "https://websitebanja.com/api/integrations/gmail/callback"
           WEBSITEBANJA_RUNTIME_MODE: "production"
           COMMUNICATION_DRY_RUN: "false"
+          N8N_OPS_AGENT_WEBHOOK_URL: ${{ env.N8N_OPS_AGENT_WEBHOOK_URL }}
           IMAGE_TAG: ${{ env.ACR_SERVER }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
         run: |
           node scripts/configure_azure_razorpay.mjs

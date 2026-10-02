@@ -319,6 +319,36 @@ export class RepairCoordinator {
         return "Added contact section with contact details";
       }
 
+      case "SEM_SERVICE_INDUSTRY_MISMATCH": {
+        const cat = String(data.category || data.brand?.industry || context.businessCategory || "").toLowerCase();
+        if (cat.includes("car") || cat.includes("rental") || cat.includes("vehicle") || String(data.businessName || "").toLowerCase().includes("car")) {
+          data.services = [
+            { title: "Self-Drive Fleet & Sedans", description: `Well-maintained sedans and compact cars at ${verifiedName} for city and highway transit.`, price: "From ₹1,800 / day" },
+            { title: "All-Terrain SUVs", description: "High-clearance SUVs with GPS and safety features for outstation trips.", price: "From ₹3,500 / day" },
+            { title: "Airport & Doorstep Delivery", description: "Express vehicle handover directly at your preferred terminal or address.", price: "Complimentary" },
+            { title: "Unlimited Mileage Packages", description: "Fixed-rate multi-day rentals with 24/7 roadside assistance.", price: "Flexible plans" },
+          ];
+          return "Replaced mismatched culinary services with automotive self-drive rental services";
+        } else if (cat.includes("gym") || cat.includes("fitness")) {
+          data.services = [
+            { title: "Strength & Conditioning", description: "Olympic lifting and resistance equipment zone.", price: "Membership tier" },
+            { title: "High-Intensity Functional Training", description: "Coach-led interval training sessions.", price: "Class passes" },
+            { title: "Personal Performance Coaching", description: "1-on-1 movement and strength development.", price: "Per session" },
+          ];
+          return "Replaced mismatched services with fitness offerings";
+        }
+        return null;
+      }
+
+      case "SEM_IMAGE_INDUSTRY_MISMATCH": {
+        const cat = String(data.category || data.brand?.industry || context.businessCategory || "").toLowerCase();
+        if (cat.includes("car") || cat.includes("rental") || cat.includes("vehicle") || String(data.businessName || "").toLowerCase().includes("car")) {
+          if (!data.hero) data.hero = {};
+          data.hero.image = "https://images.unsplash.com/photo-1449965408869-eaa3f722e40d";
+          return "Replaced mismatched restaurant hero image with vehicle rental highway imagery";
+        }
+        return null;
+      }
 
       // 2. CTA Repairs
       case "CTA_MISSING_PRIMARY":
@@ -331,6 +361,28 @@ export class RepairCoordinator {
           label: "Get Free Consultation",
         };
         return "Configured action-oriented primary hero CTA 'Get Free Consultation' targeting #contact";
+      }
+
+      case "CTA_INDUSTRY_MISMATCH": {
+        const cat = String(data.category || data.brand?.industry || context.businessCategory || "").toLowerCase();
+        let fixCta = "Book Consultation";
+        if (cat.includes("car") || cat.includes("rental") || cat.includes("vehicle") || String(data.businessName || "").toLowerCase().includes("car")) {
+          fixCta = "Book a Vehicle";
+        } else if (cat.includes("gym") || cat.includes("fitness")) {
+          fixCta = "Claim Free Pass";
+        } else if (cat.includes("salon")) {
+          fixCta = "Book Appointment";
+        } else if (cat.includes("hotel")) {
+          fixCta = "Reserve a Room";
+        } else if (cat.includes("restaurant") || cat.includes("cafe")) {
+          fixCta = "Reserve a Table";
+        }
+        if (!data.hero) data.hero = {};
+        data.hero.button = fixCta;
+        if (data.hero.buttonAction) {
+          data.hero.buttonAction.label = fixCta;
+        }
+        return `Realigned mismatched CTA to industry-appropriate copy "${fixCta}"`;
       }
 
       case "CTA_BROKEN_DESTINATION":

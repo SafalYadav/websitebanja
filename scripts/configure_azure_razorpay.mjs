@@ -18,6 +18,7 @@ const adminEmails = process.env.ADMIN_EMAILS || defaultAdminEmails;
 const defaultAdminUserIds = "a0d29ad3-4c93-4bcd-a4d0-b45804017cf2,cceafe47-a710-49e9-a894-16f592dc8e64,d1df43b9-cdec-4e9a-916a-4c1f8009d238,badf862a-79c0-463d-95ff-55a02e6aa88b";
 const adminUserIds = process.env.ADMIN_USER_IDS || defaultAdminUserIds;
 const nextPublicAppUrl = process.env.NEXT_PUBLIC_APP_URL || "https://websitebanja.com";
+const n8nWebhookUrl = process.env.N8N_OPS_AGENT_WEBHOOK_URL || "https://n8n-app.calmcoast-298a6aef.centralindia.azurecontainerapps.io/webhook/wb-ops-agent";
 const imageTag = process.env.IMAGE_TAG;
 const clientId = process.env.AZURE_CLIENT_ID;
 
@@ -28,6 +29,7 @@ console.log("Container App:", containerAppName);
 console.log("Resource Group:", resourceGroup);
 console.log("Image Tag:", imageTag || "not specified");
 console.log("Production App URL:", nextPublicAppUrl);
+console.log("n8n Ops Agent Webhook URL:", n8nWebhookUrl);
 console.log("Admin Emails configured:", adminEmails.split(",").length, "accounts");
 console.log("Admin User IDs configured:", adminUserIds.split(",").length, "identities");
 console.log("Razorpay Key ID configured:", Boolean(keyId));
@@ -178,6 +180,7 @@ async function main() {
   envVarsToSet.push(`AUTO_SEND_ENABLED=false`);
   envVarsToSet.push(`COMMUNICATION_DRY_RUN=false`);
   envVarsToSet.push(`WEBSITEBANJA_RUNTIME_MODE=production`);
+  envVarsToSet.push(`N8N_OPS_AGENT_WEBHOOK_URL=${n8nWebhookUrl}`);
 
   if (envVarsToSet.length > 0) {
     updateCmd += ` --set-env-vars ${envVarsToSet.map((v) => `"${v}"`).join(" ")}`;
@@ -248,6 +251,7 @@ async function main() {
           envMap.set("AUTO_SEND_ENABLED", { name: "AUTO_SEND_ENABLED", value: "false" });
           envMap.set("COMMUNICATION_DRY_RUN", { name: "COMMUNICATION_DRY_RUN", value: "false" });
           envMap.set("WEBSITEBANJA_RUNTIME_MODE", { name: "WEBSITEBANJA_RUNTIME_MODE", value: "production" });
+          envMap.set("N8N_OPS_AGENT_WEBHOOK_URL", { name: "N8N_OPS_AGENT_WEBHOOK_URL", value: n8nWebhookUrl });
 
           container.env = Array.from(envMap.values());
 

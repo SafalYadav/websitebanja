@@ -131,35 +131,125 @@ export function validateCTA(context: ValidationContext): StageValidationResult {
     }
   }
 
-  // 4. Grounded Business Alignment
-  if (context.groundedProfile) {
-    const archetype = (context.groundedProfile.archetype || "").toLowerCase();
-    const ctaLower = (heroButton || "").toLowerCase();
+  // 4. Grounded Business Alignment & Cross-Industry CTA Compatibility
+  const resolvedCategory = String(
+    (context.groundedProfile?.archetype) ||
+      (data.brand as Record<string, unknown>)?.industry ||
+      data.category ||
+      context.businessCategory ||
+      ""
+  ).toLowerCase();
+  const resolvedName = String(
+    (context.groundedProfile?.identity?.canonicalName) ||
+      context.businessName ||
+      data.businessName ||
+      ""
+  ).toLowerCase();
+  const ctaLower = (heroButton || "").toLowerCase();
 
+  const isAutomotiveOrRental =
+    resolvedCategory.includes("car") ||
+    resolvedCategory.includes("rental") ||
+    resolvedCategory.includes("vehicle") ||
+    resolvedName.includes("car") ||
+    resolvedName.includes("drive") ||
+    resolvedName.includes("rental");
 
-    // Check if industry has high-converting expected CTAs
-    if (archetype.includes("restaurant") || archetype.includes("cafe")) {
-      const foodCTAs = ["book", "table", "menu", "order", "call", "reserve", "visit"];
-      if (!foodCTAs.some((c) => ctaLower.includes(c))) {
-        warnings.push({
-          id: randomUUID(),
-          stage: "CTA",
-          severity: "MEDIUM",
-          warning: `CTA "${heroButton}" may not be optimal for a dining establishment (expected: Reserve Table, Order Online, View Menu)`,
-          affectedElement: "hero.button",
-        });
-      }
-    } else if (archetype.includes("car") || archetype.includes("rental")) {
-      const rentalCTAs = ["book", "rent", "quote", "fleet", "reserve", "drive"];
-      if (!rentalCTAs.some((c) => ctaLower.includes(c))) {
-        warnings.push({
-          id: randomUUID(),
-          stage: "CTA",
-          severity: "MEDIUM",
-          warning: `CTA "${heroButton}" may not be optimal for a car rental business (expected: Book Now, Get Instant Quote, View Fleet)`,
-          affectedElement: "hero.button",
-        });
-      }
+  const isGymOrFitness =
+    resolvedCategory.includes("gym") ||
+    resolvedCategory.includes("fitness") ||
+    resolvedCategory.includes("workout") ||
+    resolvedName.includes("gym") ||
+    resolvedName.includes("fitness");
+
+  const isSalonOrBeauty =
+    resolvedCategory.includes("salon") ||
+    resolvedCategory.includes("beauty") ||
+    resolvedCategory.includes("spa") ||
+    resolvedName.includes("salon") ||
+    resolvedName.includes("spa");
+
+  const isClinicOrHealthcare =
+    resolvedCategory.includes("dental") ||
+    resolvedCategory.includes("clinic") ||
+    resolvedCategory.includes("doctor") ||
+    resolvedName.includes("clinic") ||
+    resolvedName.includes("dental");
+
+  const isDining =
+    !isAutomotiveOrRental &&
+    !isGymOrFitness &&
+    !isSalonOrBeauty &&
+    !isClinicOrHealthcare &&
+    (resolvedCategory.includes("restaurant") ||
+      resolvedCategory.includes("cafe") ||
+      resolvedCategory.includes("dining") ||
+      resolvedName.includes("restaurant") ||
+      resolvedName.includes("cafe") ||
+      resolvedName.includes("dhaba"));
+
+  const hasDiningCTA =
+    ctaLower.includes("table") ||
+    ctaLower.includes("menu") ||
+    ctaLower.includes("thali") ||
+    ctaLower.includes("dining") ||
+    ctaLower.includes("degustation");
+
+  // CRITICAL MISMATCH: Dining CTA on non-dining business
+  if ((isAutomotiveOrRental || isGymOrFitness || isSalonOrBeauty || isClinicOrHealthcare) && hasDiningCTA) {
+    failures.push({
+      id: randomUUID(),
+      stage: "CTA",
+      severity: "CRITICAL",
+      failure: `Primary hero CTA "${heroButton}" is mismatched with business industry (dining CTA on non-dining business)`,
+      evidence: `CTA copy: "${heroButton}", Resolved business category/name: "${resolvedCategory || resolvedName}"`,
+      affectedElement: "hero.button",
+      suggestedFix: isAutomotiveOrRental
+        ? "Replace with 'Book a Vehicle' or 'Reserve a Car'"
+        : isGymOrFitness
+        ? "Replace with 'Claim Free Pass' or 'Start Training'"
+        : isSalonOrBeauty
+        ? "Replace with 'Book Appointment' or 'Schedule Styling'"
+        : "Replace with 'Book Consultation' or 'Inquire Today'",
+      blocking: true,
+      field: "hero.button",
+      ruleCode: "CTA_INDUSTRY_MISMATCH",
+    });
+  } else if (isDining && (ctaLower.includes("car") || ctaLower.includes("vehicle") || ctaLower.includes("drive"))) {
+    // CRITICAL MISMATCH: Automotive CTA on dining business
+    failures.push({
+      id: randomUUID(),
+      stage: "CTA",
+      severity: "CRITICAL",
+      failure: `Primary hero CTA "${heroButton}" is mismatched with dining business`,
+      evidence: `CTA copy: "${heroButton}", Category: "${resolvedCategory}"`,
+      affectedElement: "hero.button",
+      suggestedFix: "Replace with 'Reserve a Table' or 'View Menu'",
+      blocking: true,
+      field: "hero.button",
+      ruleCode: "CTA_INDUSTRY_MISMATCH",
+    });
+  } else if (isDining) {
+    const foodCTAs = ["book", "table", "menu", "order", "call", "reserve", "visit", "inquire"];
+    if (!foodCTAs.some((c) => ctaLower.includes(c))) {
+      warnings.push({
+        id: randomUUID(),
+        stage: "CTA",
+        severity: "MEDIUM",
+        warning: `CTA "${heroButton}" may not be optimal for a dining establishment (expected: Reserve a Table, Order Online, View Menu)`,
+        affectedElement: "hero.button",
+      });
+    }
+  } else if (isAutomotiveOrRental) {
+    const rentalCTAs = ["book", "rent", "quote", "fleet", "reserve", "drive", "car", "vehicle"];
+    if (!rentalCTAs.some((c) => ctaLower.includes(c))) {
+      warnings.push({
+        id: randomUUID(),
+        stage: "CTA",
+        severity: "MEDIUM",
+        warning: `CTA "${heroButton}" may not be optimal for a vehicle rental business (expected: Book a Vehicle, Reserve a Car, View Fleet)`,
+        affectedElement: "hero.button",
+      });
     }
   }
 

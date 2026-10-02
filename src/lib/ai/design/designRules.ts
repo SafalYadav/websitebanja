@@ -105,6 +105,10 @@ export function normalizeIndustry(req: WebsiteRequirement): SupportedIndustry {
 
   if (
     combined.includes("spa") ||
+    combined.includes("salon") ||
+    combined.includes("beauty") ||
+    combined.includes("hair") ||
+    combined.includes("parlor") ||
     combined.includes("wellness") ||
     combined.includes("yoga") ||
     combined.includes("pilates") ||
