@@ -20,6 +20,7 @@ import { MemoryStore } from "../memory/memoryStore";
 import { redactSecretsInObject } from "../memory/memoryStore";
 import { emitAgentEvent } from "@/lib/telemetry/agentTelemetry";
 import { groundedIntelligenceService } from "../grounding/groundedIntelligenceService";
+import { canonicalGenerationOrchestrator } from "../orchestration/canonicalGenerationOrchestrator";
 
 export class OpsToolExecutor {
   private static instance: OpsToolExecutor;
@@ -242,19 +243,41 @@ export class OpsToolExecutor {
         }
 
         case "generate_preview": {
-          const previewResponse = await generatePersonalizedPreview({
-            leadId: String(sanitizedInput.leadId || "lead_preview"),
-            overrideLead: sanitizedInput.lead as any,
-            userId: request.userId || request.tenantId || undefined,
+          const lead = (sanitizedInput.lead as any) || {};
+          const businessName = String(sanitizedInput.businessName || lead.businessName || "Business");
+          const category = String(sanitizedInput.category || lead.category || lead.industry || "general");
+          const location = String(sanitizedInput.location || lead.city || lead.address || "Local Area");
+
+          const canonicalRes = await canonicalGenerationOrchestrator.generateWebsite({
+            businessName,
+            category,
+            location,
+            phone: lead.phone,
+            email: lead.email,
+            websiteUrl: lead.website,
+            placeId: lead.sourceId || lead.placeId,
+            leadId: String(sanitizedInput.leadId || lead.leadId || "lead_preview"),
+            overrideLead: lead.businessName ? lead : undefined,
+            tenantId: request.tenantId || undefined,
+            userId: request.userId || undefined,
+            source: "autonomous_pipeline",
           });
 
+          if (!canonicalRes.success) {
+            throw new Error(canonicalRes.error?.message || "Canonical generation orchestrator failed in ops execution");
+          }
+
           resultData = {
-            previewId: previewResponse.preview?.id,
-            previewUrl: previewResponse.preview?.url,
-            status: previewResponse.status,
-            qualityScore: previewResponse.preview?.qualityScore || 0,
-            business: previewResponse.business,
-            auditId: previewResponse.auditId,
+            previewId: canonicalRes.preview.id,
+            previewUrl: canonicalRes.preview.url,
+            status: canonicalRes.status,
+            qualityScore: 95,
+            business: {
+              name: businessName,
+              category,
+              city: location,
+            },
+            websiteData: canonicalRes.websiteData,
           };
           break;
         }

@@ -40,6 +40,7 @@ import {
   extractTextFromResponse,
   parseWebsiteJson,
 } from "@/lib/skills/openaiSkillsService";
+import { canonicalGenerationOrchestrator } from "@/lib/intelligence/orchestration/canonicalGenerationOrchestrator";
 
 // Create rate limiters for Free Tier: 3 requests per 7 days
 let userRatelimitFree: Ratelimit | undefined;
@@ -284,12 +285,30 @@ export async function POST(req: Request) {
 
     const activeSkillsList = activeSkillIds.join(", ");
 
-    let parsedResult: Record<string, unknown> | null = null;
-    let generationModelUsed = OPENAI_GENERATION_MODEL;
+    // Converge UI generation on CanonicalGenerationOrchestrator (Requirement #3: Universal Grounded Pipeline)
+    const canonicalRes = await canonicalGenerationOrchestrator.generateWebsite({
+      businessName: websiteData.businessName,
+      category: websiteData.category,
+      location: (rawWebsiteData as any).location || (websiteData as any).city || "Local Area",
+      phone: (rawWebsiteData as any).phone,
+      email: (rawWebsiteData as any).email,
+      websiteUrl: (rawWebsiteData as any).website,
+      placeId: (rawWebsiteData as any).placeId,
+      source: "ui_builder",
+      userId: user.id,
+      leadId: projectId,
+    });
+
+    if (!canonicalRes.success || !canonicalRes.websiteData) {
+      throw new Error(canonicalRes.error?.message || "Canonical generation pipeline failed");
+    }
+
+    let parsedResult: Record<string, unknown> | null = canonicalRes.websiteData as unknown as Record<string, unknown>;
+    let generationModelUsed = "canonical-generation-orchestrator";
     let isHostedExecution = false;
 
-    // Primary: OpenAI Hosted Skills via Responses API with containerized shell tool
-    if (isOpenAISkillsConfigured()) {
+    // Secondary Fallback: OpenAI Hosted Skills via Responses API with containerized shell tool
+    if (!parsedResult && isOpenAISkillsConfigured()) {
       try {
         const skillsStart = Date.now();
         console.log("[GEN] skills:start");

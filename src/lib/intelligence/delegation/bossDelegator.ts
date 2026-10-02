@@ -11,6 +11,8 @@ import { taskEnvelopeValidator } from "./taskEnvelopeValidator";
 import { childTaskExecutor } from "./childTaskExecutor";
 import { conflictResolver } from "./conflictResolver";
 import { capabilityMatcher } from "./capabilityMatcher";
+import { businessSectionPlanner } from "../planning/businessSectionPlanner";
+import { businessSemanticReasoner } from "../semantic/businessSemanticReasoner";
 
 export class BossDelegator {
   private static instance: BossDelegator;
@@ -161,7 +163,14 @@ export class BossDelegator {
             "#38bdf8",
             "#f1f5f9",
           ],
-          sectionOrder: ["hero", "features", "social_proof", "pricing", "contact"],
+          sectionOrder: businessSectionPlanner.planSections({
+            semanticAnalysis: businessSemanticReasoner.analyzeBusiness({
+              businessName: String(envelope.input.businessName || "WebsiteBanja Client"),
+              category: String(envelope.input.category || "business"),
+            }),
+            hasReviews: true,
+            hasServices: true,
+          }).sectionOrder,
           typography: { headingFont: "Inter", bodyFont: "Inter" },
           componentFingerprints: skillsOutput?.selectedSkills
             ? skillsOutput.selectedSkills.map((s: any) => `comp_${s.skillId}`)

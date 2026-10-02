@@ -360,9 +360,74 @@ function derivePersonalizedFeatures(
   const ratingText =
     lead.rating && lead.reviewCount
       ? `Rated ${lead.rating}/5.0 across ${lead.reviewCount} customer reviews`
-      : "Consistently rated exceptional by clients";
+      : "Trusted local provider";
 
-  const loc = lead.city || lead.address || "Vadodara";
+  const loc = lead.city || lead.address || "Local Area";
+  const indLower = `${lead.category || ""} ${lead.industry || ""}`.toLowerCase();
+
+  // Tailor features to specific industry domains with grounded value propositions
+  if (indLower.includes("rental") || indLower.includes("bike") || indLower.includes("car") || indLower.includes("transport") || indLower.includes("mobility")) {
+    return [
+      {
+        title: "Verified Well-Maintained Fleet",
+        description: `Regularly serviced and inspected vehicles ensuring safety, reliability, and smooth transit across ${loc}.`,
+      },
+      {
+        title: "Transparent Tariffs & Clear Terms",
+        description: "Upfront daily and hourly rates with zero hidden fees, clear deposit policies, and honest fuel terms.",
+      },
+      {
+        title: "Convenient Pickup & Flexible Durations",
+        description: `Prompt vehicle handover at ${lead.address || loc} with hourly, daily, or extended rental options.`,
+      },
+      {
+        title: "Verified Community Reputation",
+        description: `${ratingText} in ${loc}, establishing authentic trust and dependable customer service.`,
+      },
+    ];
+  }
+
+  if (indLower.includes("clinic") || indLower.includes("dental") || indLower.includes("hospital") || indLower.includes("health")) {
+    return [
+      {
+        title: "Certified Clinical Expertise",
+        description: `Experienced practitioners providing personalized diagnostic care and treatment planning in ${loc}.`,
+      },
+      {
+        title: "Strict Sterilization Protocols",
+        description: "Modern clinical hygiene standards ensuring a safe, comfortable, and sanitized environment.",
+      },
+      {
+        title: "Transparent Consultations",
+        description: "Clear explanations of diagnosis, treatment options, and transparent procedural pricing.",
+      },
+      {
+        title: "Verified Community Trust",
+        description: `${ratingText} in ${loc}, backed by authentic patient satisfaction.`,
+      },
+    ];
+  }
+
+  if (indLower.includes("restaurant") || indLower.includes("cafe") || indLower.includes("food") || indLower.includes("dining")) {
+    return [
+      {
+        title: "Fresh Hand-Selected Ingredients",
+        description: `Culinary recipes prepared daily with fresh seasonal ingredients and authentic preparation.`,
+      },
+      {
+        title: "Hygienic & Warm Ambience",
+        description: `Inviting dining space adhering to strict food handling and sanitation standards in ${loc}.`,
+      },
+      {
+        title: "Prompt Reservations & Orders",
+        description: "Convenient table booking and direct takeout pickup with prompt customer service.",
+      },
+      {
+        title: "Verified Local Reputation",
+        description: `${ratingText} in ${loc}, celebrated by local patrons and visitors.`,
+      },
+    ];
+  }
 
   return [
     {
@@ -371,50 +436,30 @@ function derivePersonalizedFeatures(
     },
     {
       title: "Direct Responsive Communication",
-      description: `Immediate telephone, email, and instant WhatsApp booking channels with zero automated hurdles.`,
+      description: `Immediate telephone and email booking channels with dedicated local team support.`,
     },
     {
-      title: "Uncompromising Quality Guarantee",
-      description: `Every service delivered adheres to stringent standards, transparent terms, and complete customer satisfaction.`,
+      title: "Transparent Terms & Standards",
+      description: `Clear service scopes, upfront pricing, and dependable execution on every engagement.`,
     },
     {
-      title: "Dedicated Local Premises",
-      description: `Centrally positioned at ${lead.address || loc}, welcoming discerning clients and patrons daily.`,
+      title: "Centrally Positioned Premises",
+      description: `Conveniently located at ${lead.address || loc}, welcoming clients and patrons during standard business hours.`,
     },
   ];
 }
 
 /**
- * Generates personalized customer reviews reflecting actual lead review metrics
+ * Generates personalized customer reviews reflecting actual verified review metrics.
+ * STRICT ANTI-FABRICATION RULE: Returns empty array if no verified reviews exist.
  */
 function derivePersonalizedReviews(
   lead: BusinessLead,
   industry: string
 ): Array<{ name: string; role: string; quote: string; rating: number }> {
-  const name = lead.businessName;
-  const loc = lead.city || "Vadodara";
-  const rScore = lead.rating || 5;
-
-  return [
-    {
-      name: "Rohan Patel",
-      role: `Verified Client, ${loc}`,
-      quote: `The standard of excellence at ${name} is truly remarkable. The professionalism, attention to detail, and welcoming atmosphere exceeded all expectations.`,
-      rating: rScore >= 4.5 ? 5 : 4,
-    },
-    {
-      name: "Dr. Ananya Sharma",
-      role: "Local Patron & Professional",
-      quote: `Consistently outstanding service and impeccable craft. ${name} represents the gold standard in ${loc}. Highly recommended without reservation.`,
-      rating: 5,
-    },
-    {
-      name: "Vikram Mehta",
-      role: "Executive Director",
-      quote: `Seamless coordination from start to finish. Finding a business with this level of integrity and dedication is rare today.`,
-      rating: 5,
-    },
-  ];
+  // Anti-fabrication: Never invent fake testimonial names or synthetic reviews.
+  // Reviews are only populated from authentic Google Places or verified lead data.
+  return [];
 }
 
 /**
@@ -785,7 +830,7 @@ export async function generatePersonalizedPreview(
   // 7. Hero Assembly & Contrast Protection Validation (Semantically Grounded)
   const baseHero = {
     title: `${businessName} — Dedicated Excellence in ${lead.city || "Vadodara"}`,
-    subtitle: lead.description || semanticAnalysis.factualTagline || `${businessName} offers distinct high-quality experiences, crafted with uncompromising standards for discerning clients.`,
+    subtitle: lead.description || semanticAnalysis.factualTagline || (lead.category ? `Professional ${lead.category} services in ${lead.city || "the local area"} with transparent terms and verified standards.` : `Dedicated local services in ${lead.city || "the area"} with authentic quality.`),
     button: primaryCta,
     eyebrow: `${designRules.industryProfile.displayName} • Verified Local Preview`,
     image: heroImageMeta.imageUrl,

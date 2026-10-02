@@ -31,6 +31,7 @@ import { GroundedAssetSelector } from "../grounding/groundedAssetSelector";
 import { applyGroundedAssetsToWebsite } from "../grounding/groundedWebsiteGenerator";
 import type { GroundedBusinessProfile } from "../grounding/types";
 import type { WebsiteData } from "@/types/website";
+import { canonicalGenerationOrchestrator } from "../orchestration/canonicalGenerationOrchestrator";
 
 // Phase 21 Validation & Repair Imports
 import { ValidationOrchestrator } from "../validation/validationOrchestrator";
@@ -382,60 +383,23 @@ export class AutonomousProductionOrchestrator {
             throw new Error("Missing grounded profile or asset selection for website generation");
           }
 
-          // Generate or seed baseline WebsiteData
-          const baseWebsite: WebsiteData = job.websiteData || {
+          // Generate fully grounded, section-planned, 7-stage validated website via Canonical Orchestrator
+          const canonicalRes = await canonicalGenerationOrchestrator.generateWebsite({
             businessName: job.businessName,
-            brand: {
-              name: job.businessName,
-              tagline: `Premium ${job.niche} services in ${job.location}`,
-              industry: job.niche,
-              location: job.location,
-            },
-            hero: {
-              title: `Excellence in ${job.niche}`,
-              subtitle: `Serving ${job.location} with verified, authentic craftsmanship and five-star quality.`,
-              button: "Schedule Consultation",
-              image: "https://images.unsplash.com/photo-baseline?auto=format&fit=crop&w=1200&q=80",
-            },
-            about: {
-              title: `About ${job.businessName}`,
-              content: `Dedicated to bringing high-quality ${job.niche} solutions to our clients in ${job.location}.`,
-            },
-            services: [
-              {
-                title: `Custom ${job.niche} Solutions`,
-                description: `Bespoke, verified service tailored to clients in ${job.location}.`,
-              },
-            ],
-            features: [
-              {
-                title: "Verified Authenticity",
-                description: "Recognized locally for high reliability and customer satisfaction.",
-                icon: "shield-check",
-              },
-            ],
-            faq: [
-              {
-                question: "How do I book a consultation?",
-                answer: "You can contact us directly via our form or telephone number listed below.",
-              },
-            ],
-            contact: {
-              email: job.contactEmail || `hello@${job.businessId}.example.com`,
-              phone: job.contactPhone || "+91 98765 43210",
-              address: job.location,
-            },
-            footer: {
-              copyright: `© ${new Date().getFullYear()} ${job.businessName}. All rights reserved.`,
-            },
-          };
+            category: job.niche,
+            location: job.location,
+            phone: job.contactPhone,
+            email: job.contactEmail,
+            groundedProfile: job.groundedProfile,
+            tenantId: job.tenantId || undefined,
+            source: "production_job",
+          });
 
-          // Apply Phase 20A grounded assets and facts directly to WebsiteData
-          const groundedWebsite = applyGroundedAssetsToWebsite(
-            baseWebsite,
-            job.assetSelection,
-            job.groundedProfile
-          );
+          if (!canonicalRes.success || !canonicalRes.websiteData) {
+            throw new Error(canonicalRes.error?.message || "Canonical website generation failed in production pipeline");
+          }
+
+          const groundedWebsite = canonicalRes.websiteData;
 
           this.jobStore.updateJob(
             jobId,

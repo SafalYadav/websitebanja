@@ -1,6 +1,7 @@
 import type { WebsiteData, ProductItem, ButtonActionConfig, ButtonActionType, WebsitePage, PageSeoConfig } from "../types/website";
 import { sanitizeActionUrl } from "./buttonActions";
 import { setDeepValue as safeSetDeepValue } from "./deepSet";
+import { businessSectionPlanner } from "@/lib/intelligence/planning/businessSectionPlanner";
 
 export interface StudioAiAction {
   action:
@@ -472,6 +473,29 @@ export function executeStudioActions(
       }
     } catch {
       // Skip failing action safely
+    }
+  }
+
+  // Enforce Universal Section Deduplication & Invariant Protection
+  const defaultPurposeMap = {
+    hero: "HERO" as const,
+    about: "STORY" as const,
+    services: "OFFERINGS" as const,
+    features: "VALUE_PROP" as const,
+    reviews: "PROOF" as const,
+    faq: "FAQ" as const,
+    contact: "CONTACT" as const,
+    footer: "NAVIGATION" as const,
+  };
+
+  if (current.sectionOrder && current.sectionOrder.length > 0) {
+    current.sectionOrder = businessSectionPlanner.deduplicatePurposes(current.sectionOrder, defaultPurposeMap);
+  }
+  if (current.pages && current.pages.length > 0) {
+    for (const page of current.pages) {
+      if (page.sectionOrder && page.sectionOrder.length > 0) {
+        page.sectionOrder = businessSectionPlanner.deduplicatePurposes(page.sectionOrder, defaultPurposeMap);
+      }
     }
   }
 

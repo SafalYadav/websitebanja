@@ -3,6 +3,8 @@ import { generateDesignTokens, type DesignTokens } from "./design/designTokens";
 import { generateDesignRules, type DesignRules, type SupportedIndustry } from "./design/designRules";
 import { resolveComponent, type ComponentMetadata } from "../components/registry";
 import { generateUiUxDesignSystem, type UiUxDesignSystem } from "./uiux-pro-max";
+import { businessSectionPlanner } from "@/lib/intelligence/planning/businessSectionPlanner";
+import { businessSemanticReasoner } from "@/lib/intelligence/semantic/businessSemanticReasoner";
 
 /** Complete website plan derived from requirement */
 export interface PlannedPage {
@@ -60,16 +62,23 @@ export function createWebsitePlan(req: WebsiteRequirement, contextBundle?: AICon
       sections: p.sections,
     }));
   } else {
-    // Generate intelligent default home page with sections based on industry design rules and global knowledge
-    const baseSections = contextBundle?.globalKnowledge?.websiteType?.data.recommendedSections?.length
-      ? contextBundle.globalKnowledge.websiteType.data.recommendedSections
-      : designRules.layout.recommendedSections;
-    const sections = [...baseSections];
+    // Generate bespoke customer-journey section sequence via canonical BusinessSectionPlanner
+    const domain = req.business.industry || req.business.type || "general";
+    const semanticAnalysis = businessSemanticReasoner.analyzeBusiness({
+      businessName: req.business.name,
+      category: domain,
+    });
+    const sectionPlan = businessSectionPlanner.planSections({
+      semanticAnalysis,
+      hasReviews: true,
+      hasServices: true,
+    });
+    const sections = [...sectionPlan.sectionOrder];
 
-    // If booking or ecommerce requested, ensure productsSection/catalog is included
-    if ((req.functionality?.booking || req.functionality?.ecommerce) && !sections.includes("productsSection")) {
+    // If booking or ecommerce requested, ensure productsSection/catalog is included if not present
+    if ((req.functionality?.booking || req.functionality?.ecommerce) && !sections.includes("services") && !sections.includes("productsSection")) {
       const heroIdx = sections.indexOf("hero");
-      sections.splice(heroIdx + 1, 0, "productsSection");
+      sections.splice(heroIdx + 1, 0, "services");
     }
 
     pages = [

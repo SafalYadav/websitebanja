@@ -110,6 +110,12 @@ export * from "./production/productionTypes";
 export { ProductionJobStore, productionJobStore } from "./production/productionJobStore";
 export { AutonomousProductionOrchestrator, autonomousProductionOrchestrator } from "./production/productionOrchestrator";
 
+// Universal Generation Quality Architecture
+export * from "./orchestration/types";
+export { CanonicalGenerationOrchestrator, canonicalGenerationOrchestrator } from "./orchestration/canonicalGenerationOrchestrator";
+export * from "./planning/types";
+export { BusinessSectionPlanner, businessSectionPlanner } from "./planning/businessSectionPlanner";
+
 
 /**
  * Primary transport-agnostic service entry point for executive intelligence.
