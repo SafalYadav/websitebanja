@@ -29,6 +29,9 @@ import { emitAgentEvent } from "@/lib/telemetry/agentTelemetry";
 import { groundedProfileStore } from "@/lib/intelligence/grounding/groundedProfileStore";
 import { groundedAssetSelector } from "@/lib/intelligence/grounding/groundedAssetSelector";
 import { applyGroundedAssetsToWebsite } from "@/lib/intelligence/grounding/groundedWebsiteGenerator";
+import { GroundedIntelligenceService } from "@/lib/intelligence/grounding/groundedIntelligenceService";
+import { businessSemanticReasoner } from "@/lib/intelligence/semantic/businessSemanticReasoner";
+import { StrategyManager } from "@/lib/intelligence/learning/strategyManager";
 import type { GroundedBusinessProfile } from "@/lib/intelligence/grounding/types";
 import type { WebsiteRequirement } from "@/lib/ai/requirementModel";
 import type { WebsiteData, FAQ, Service, Feature } from "@/types/website";
@@ -208,6 +211,41 @@ function derivePersonalizedServices(
         title: "Experiential Spatial Design",
         description: "Environmental graphics, physical retail concepts, and immersive brand pop-up installations.",
         price: "Custom commission",
+      },
+    ];
+  }
+
+  // Two-Wheeler Mobility (Bikes, Scooters, Motorcycles) - Disambiguated from Four-Wheeler Rentals
+  if (
+    norm.includes("bike") ||
+    norm.includes("motorcycle") ||
+    norm.includes("scooter") ||
+    norm.includes("two wheeler") ||
+    norm.includes("two-wheeler") ||
+    norm.includes("activa") ||
+    norm.includes("bullet") ||
+    norm.includes("cruiser")
+  ) {
+    return [
+      {
+        title: "Self-Drive Motorcycle & Bike Fleet",
+        description: `Thoroughly inspected cruisers, commuter bikes, and touring motorcycles at ${name} for city commute and outstation exploration.`,
+        price: "From ₹500 / day",
+      },
+      {
+        title: "Automatic Scooters & City Runabouts",
+        description: "Fuel-efficient gearless scooters ideal for effortless navigation through local streets, markets, and tourist spots.",
+        price: "From ₹350 / day",
+      },
+      {
+        title: "Complimentary DOT Helmets & Riding Gear",
+        description: "Sanitized safety helmets for rider and pillion, secure smartphone mount, and emergency roadside tool kit included with every rental.",
+        price: "Included with rental",
+      },
+      {
+        title: "Flexible Daily & Weekly Tour Packages",
+        description: "Affordable self-drive packages with unlimited freedom, digital paperwork, and instant security deposit settlement.",
+        price: "Flexible rates",
       },
     ];
   }
@@ -512,100 +550,74 @@ export async function generatePersonalizedPreview(
   const location = lead.city ? `${lead.city}, ${lead.state || "India"}` : lead.address || "Vadodara, Gujarat";
   const designInputs = auditReport.phase10DesignInputs;
 
-  // 3. Formulate WebsiteRequirement with category-aware CTA and Brand Style
-  const indCombined = `${industry} ${lead.category || ""} ${lead.businessName || ""}`.toLowerCase();
-
-  let primaryCta = "Inquire Today";
-  if (
-    indCombined.includes("car") ||
-    indCombined.includes("rental") ||
-    indCombined.includes("self drive") ||
-    indCombined.includes("vehicle")
-  ) {
-    primaryCta = "Book a Vehicle";
-  } else if (
-    indCombined.includes("hotel") ||
-    indCombined.includes("resort") ||
-    indCombined.includes("hospitality") ||
-    indCombined.includes("suite")
-  ) {
-    primaryCta = "Reserve a Room";
-  } else if (
-    indCombined.includes("gym") ||
-    indCombined.includes("fitness") ||
-    indCombined.includes("crossfit") ||
-    indCombined.includes("workout")
-  ) {
-    primaryCta = "Claim Free Pass";
-  } else if (
-    indCombined.includes("salon") ||
-    indCombined.includes("spa") ||
-    indCombined.includes("beauty") ||
-    indCombined.includes("hair")
-  ) {
-    primaryCta = "Book Appointment";
-  } else if (
-    indCombined.includes("dental") ||
-    indCombined.includes("clinic") ||
-    indCombined.includes("doctor") ||
-    indCombined.includes("medical")
-  ) {
-    primaryCta = "Book Consultation";
-  } else if (
-    indCombined.includes("restaurant") ||
-    indCombined.includes("cafe") ||
-    indCombined.includes("dining") ||
-    indCombined.includes("bistro")
-  ) {
-    primaryCta = "Reserve a Table";
-  } else if (
-    indCombined.includes("saas") ||
-    indCombined.includes("software") ||
-    indCombined.includes("tech") ||
-    indCombined.includes("ai") ||
-    designInputs.ctaStrategy.includes("trial") ||
-    designInputs.ctaStrategy.includes("demo")
-  ) {
-    primaryCta = "Start Free Trial";
-  } else if (
-    indCombined.includes("plumb") ||
-    indCombined.includes("hvac") ||
-    indCombined.includes("electric") ||
-    designInputs.ctaStrategy.includes("dispatch") ||
-    designInputs.ctaStrategy.includes("quote")
-  ) {
-    primaryCta = "Request Rapid Quote";
-  } else if (
-    designInputs.ctaStrategy.includes("commission") ||
-    designInputs.ctaStrategy.includes("project") ||
-    indCombined.includes("agency")
-  ) {
-    primaryCta = "Commission Project";
-  } else if (designInputs.ctaStrategy.includes("appointment")) {
-    primaryCta = "Book Consultation";
-  } else if (designInputs.ctaStrategy.includes("reservation")) {
-    primaryCta = "Book Now";
+  // 2.1 Grounded Profile Early Resolution (Ensures Google Places photos and reviews flow to generation)
+  let groundedProfile: GroundedBusinessProfile | undefined = request.groundedProfile;
+  if (!groundedProfile) {
+    groundedProfile = await groundedProfileStore.getProfileByLeadId(lead.leadId, request.userId);
+  }
+  if (!groundedProfile && lead.businessName) {
+    const candidateId = `biz_${crypto.createHash("sha256").update(`${lead.businessName.trim().toLowerCase()}_${(lead.city || "").trim().toLowerCase()}`).digest("hex").slice(0, 12)}`;
+    groundedProfile = await groundedProfileStore.getProfile(candidateId, request.userId);
+  }
+  // If still missing but Google Places is available or lead has discovery info, perform research
+  const resolvedPlaceId = (lead as any).placeId || (lead.source === "google_places" ? lead.sourceId : undefined);
+  if (!groundedProfile && (resolvedPlaceId || lead.businessName)) {
+    try {
+      const researchRes = await GroundedIntelligenceService.getInstance().researchBusiness({
+        businessName: lead.businessName,
+        location: lead.address || lead.city,
+        category: lead.category || lead.industry,
+        website: lead.website,
+        placeId: resolvedPlaceId,
+        userId: request.userId,
+      });
+      if (researchRes.success && researchRes.profile) {
+        groundedProfile = researchRes.profile;
+      }
+    } catch {
+      // Safe fallback if network/auth fails
+    }
   }
 
-  const visualDir = (designInputs.visualDirection || "").toLowerCase();
+  // 2.2 Semantic Business Reasoning (Root-Cause Fix: Universal semantic understanding of business domain)
+  const semanticAnalysis = businessSemanticReasoner.analyzeBusiness({
+    businessName: businessName,
+    category: lead.category || industry,
+    location: location,
+    rating: lead.rating,
+    reviewCount: lead.reviewCount,
+    phone: lead.phone,
+  });
 
+  // 2.3 Query Active Strategy from Learning Loop (Phase 27)
+  const activeStrategy = await StrategyManager.getInstance().getActiveStrategy("generation").catch(() => null);
+
+  // 3. Formulate WebsiteRequirement with semantic CTA and Brand Style
+  let primaryCta = semanticAnalysis.primaryCta?.label || "Inquire Today";
+  if (groundedProfile?.ctaStrategy?.observedCtas && groundedProfile.ctaStrategy.observedCtas.length > 0) {
+    primaryCta = groundedProfile.ctaStrategy.observedCtas[0].text;
+  }
+
+  // Brand style derived from visual direction & semantic analysis
   let brandStyle = "modern";
-  if (visualDir.includes("luxury") || indCombined.includes("hotel") || indCombined.includes("resort")) {
-    brandStyle = "editorial_luxury";
-  } else if (visualDir.includes("dark") || visualDir.includes("technical") || indCombined.includes("saas") || indCombined.includes("software") || indCombined.includes("tech") || indCombined.includes("ai")) {
-    brandStyle = "dark_technical";
-  } else if (visualDir.includes("trust") || indCombined.includes("service") || indCombined.includes("plumb") || indCombined.includes("hvac")) {
-    brandStyle = "high_trust_service";
-  } else if (visualDir.includes("clinical") || indCombined.includes("dental") || indCombined.includes("clinic") || indCombined.includes("medical")) {
-    brandStyle = "clean_clinical";
-  } else if (visualDir.includes("creative") || visualDir.includes("expressive") || indCombined.includes("agency") || indCombined.includes("studio")) {
-    brandStyle = "expressive_creative";
-  } else if (visualDir.includes("brutalist") || indCombined.includes("auto") || indCombined.includes("car") || indCombined.includes("rental")) {
+  if (semanticAnalysis.domain.includes("transportation") || semanticAnalysis.domain.includes("mobility")) {
     brandStyle = "bold_brutalist";
-  } else if (visualDir.includes("artisanal") || indCombined.includes("restaurant") || indCombined.includes("cafe") || indCombined.includes("bistro")) {
+  } else if (semanticAnalysis.domain.includes("hospitality")) {
+    brandStyle = "editorial_luxury";
+  } else if (semanticAnalysis.domain.includes("personal_care")) {
     brandStyle = "warm_artisanal";
-  } else {
-    brandStyle = "minimal_editorial";
+  } else if (semanticAnalysis.domain.includes("healthcare") || semanticAnalysis.domain.includes("clinical")) {
+    brandStyle = "clean_clinical";
+  } else if (semanticAnalysis.domain.includes("fitness")) {
+    brandStyle = "high_trust_service";
+  }
+
+  if (activeStrategy && activeStrategy.directives) {
+    // Active strategy directives can influence brand style if specified
+    const styleDirective = activeStrategy.directives.find((d) => d.startsWith("brand_style:"));
+    if (styleDirective) {
+      brandStyle = styleDirective.split(":")[1].trim();
+    }
   }
 
   const requirement: WebsiteRequirement = {
@@ -753,10 +765,10 @@ export async function generatePersonalizedPreview(
     metadata: { imagesCount: imageManifest.length },
   });
 
-  // 7. Hero Assembly & Contrast Protection Validation
+  // 7. Hero Assembly & Contrast Protection Validation (Semantically Grounded)
   const baseHero = {
     title: `${businessName} — Dedicated Excellence in ${lead.city || "Vadodara"}`,
-    subtitle: lead.description || `${businessName} offers distinct high-quality experiences, crafted with uncompromising standards for discerning clients.`,
+    subtitle: lead.description || semanticAnalysis.factualTagline || `${businessName} offers distinct high-quality experiences, crafted with uncompromising standards for discerning clients.`,
     button: primaryCta,
     eyebrow: `${designRules.industryProfile.displayName} • Verified Local Preview`,
     image: heroImageMeta.imageUrl,
@@ -776,7 +788,7 @@ export async function generatePersonalizedPreview(
     trustBadges: [
       "Verified Local Craft",
       "Direct Priority Scheduling",
-      "100% Satisfaction Guarantee",
+      `${lead.rating ? `Google Verified: ${lead.rating}★ Rating` : "Verified Business"}`,
     ],
   };
 
@@ -788,34 +800,20 @@ export async function generatePersonalizedPreview(
   );
 
   // 8. Assemble Full WebsiteData
-  let taglineCategory = "Dedicated Professional Service";
-  if (indCombined.includes("car") || indCombined.includes("rental") || indCombined.includes("vehicle") || indCombined.includes("self drive")) {
-    taglineCategory = "Premium Self-Drive & Vehicle Rental";
-  } else if (indCombined.includes("hotel") || indCombined.includes("resort") || indCombined.includes("hospitality")) {
-    taglineCategory = "Luxury Hospitality & Suites";
-  } else if (indCombined.includes("gym") || indCombined.includes("fitness")) {
-    taglineCategory = "Elite Fitness & Performance Training";
-  } else if (indCombined.includes("salon") || indCombined.includes("spa") || indCombined.includes("beauty")) {
-    taglineCategory = "Signature Styling & Beauty Sanctuary";
-  } else if (indCombined.includes("dental") || indCombined.includes("clinic") || indCombined.includes("medical")) {
-    taglineCategory = "Advanced Clinical Care & Wellness";
-  } else if (indCombined.includes("restaurant") || indCombined.includes("cafe") || indCombined.includes("dining")) {
-    taglineCategory = "Artisanal Culinary Excellence";
-  } else if (indCombined.includes("saas") || indCombined.includes("tech") || indCombined.includes("software")) {
-    taglineCategory = "High-Reliability Digital Architecture";
+  let taglineCategory = semanticAnalysis.domain.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+  if (taglineCategory === "Generic Service") {
+    taglineCategory = "Dedicated Professional Service";
   }
 
   const defaultEmailPrefix = (
-    indCombined.includes("car") || indCombined.includes("rental")
+    semanticAnalysis.domain.includes("rental")
       ? "rentals"
-      : indCombined.includes("restaurant") || indCombined.includes("hotel")
+      : semanticAnalysis.domain.includes("restaurant") || semanticAnalysis.domain.includes("hotel")
       ? "reservations"
-      : indCombined.includes("gym")
+      : semanticAnalysis.domain.includes("fitness")
       ? "membership"
-      : indCombined.includes("salon") || indCombined.includes("clinic")
+      : semanticAnalysis.domain.includes("personal_care") || semanticAnalysis.domain.includes("clinical")
       ? "appointments"
-      : indCombined.includes("saas")
-      ? "support"
       : "contact"
   );
 
@@ -834,7 +832,7 @@ export async function generatePersonalizedPreview(
       },
       links: [
         { id: "nav_services", label: "Offerings", action: { type: "scroll", target: "services" } },
-        { id: "nav_features", label: "Guarantees", action: { type: "scroll", target: "features" } },
+        { id: "nav_features", label: "Highlights", action: { type: "scroll", target: "features" } },
         { id: "nav_about", label: "Story", action: { type: "scroll", target: "about" } },
         { id: "nav_contact", label: "Contact", action: { type: "scroll", target: "contact" } },
       ],
@@ -847,12 +845,9 @@ export async function generatePersonalizedPreview(
     },
     services: servicesData,
     features: featuresData,
-    reviews: reviewsData.map((r) => ({
-      name: r.name,
-      role: r.role,
-      quote: r.quote,
-      rating: r.rating,
-    })),
+    reviews: (groundedProfile?.placesReviews && groundedProfile.placesReviews.length > 0)
+      ? [] // Will be populated in applyGroundedAssetsToWebsite
+      : [], // Anti-fabrication rule: NEVER inject synthetic fake testimonials if 0 real reviews exist
     faq: faqItems,
     contact: {
       phone: lead.phone || "+91 98250 11223",
@@ -901,15 +896,6 @@ export async function generatePersonalizedPreview(
   };
 
   // 8.1 Grounded Business Intelligence & Asset Integration (Phase 20A)
-  let groundedProfile: GroundedBusinessProfile | undefined = request.groundedProfile;
-  if (!groundedProfile) {
-    groundedProfile = await groundedProfileStore.getProfileByLeadId(lead.leadId, request.userId);
-  }
-  if (!groundedProfile && lead.businessName) {
-    const candidateId = `biz_${crypto.createHash("sha256").update(`${lead.businessName.trim().toLowerCase()}_${(lead.city || "").trim().toLowerCase()}`).digest("hex").slice(0, 12)}`;
-    groundedProfile = await groundedProfileStore.getProfile(candidateId, request.userId);
-  }
-
   if (groundedProfile) {
     const assetSelection = groundedAssetSelector.selectAssets(groundedProfile, {
       category: normalizedInd,

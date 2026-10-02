@@ -553,14 +553,35 @@ export function synthesizePhase10DesignInputs(
   let imageryDirection = "clean professional lighting, focused service delivery, authentic modern craft";
   let contentPriorities = ["core offerings", "verified credentials", "direct booking", "contact & location"];
 
-  if (
-    normInd.includes("car rental") ||
-    normInd.includes("rental") ||
-    normInd.includes("self drive") ||
-    normInd.includes("fleet") ||
-    normInd.includes("chauffeur") ||
-    normInd.includes("cab") ||
-    normInd.includes("automotive")
+  const combinedCheck = `${lead.businessName || ""} ${normInd}`.toLowerCase();
+  const isTwoWheeler =
+    combinedCheck.includes("bike rental") ||
+    combinedCheck.includes("bike on rent") ||
+    combinedCheck.includes("motorcycle") ||
+    combinedCheck.includes("scooter rental") ||
+    combinedCheck.includes("scooty") ||
+    combinedCheck.includes("two wheeler") ||
+    combinedCheck.includes("two-wheeler") ||
+    combinedCheck.includes("bullet rental") ||
+    combinedCheck.includes("royal enfield") ||
+    (combinedCheck.includes("bike") && (combinedCheck.includes("rent") || combinedCheck.includes("hire")));
+
+  if (isTwoWheeler) {
+    visualDirection = "nimble two-wheeler touring and authentic motorcycle mobility";
+    layoutStrategy = "hero ride reservation with motorcycle lineup cards, daily rates and riding terms";
+    requiredSections = ["hero", "bike_fleet", "services", "features", "customer_reviews", "booking", "contact", "footer"];
+    ctaStrategy = "two-wheeler reservation and bike availability check";
+    imageryDirection = "touring motorcycles, scenic highway rides, city commuter scooters, rider gear";
+    contentPriorities = ["available bikes & scooters", "daily rental rates", "helmet & gear included", "easy pickup & drop"];
+  } else if (
+    !isTwoWheeler &&
+    (normInd.includes("car rental") ||
+      normInd.includes("rental") ||
+      normInd.includes("self drive") ||
+      normInd.includes("fleet") ||
+      normInd.includes("chauffeur") ||
+      normInd.includes("cab") ||
+      normInd.includes("automotive"))
   ) {
     visualDirection = "high velocity automotive mobility and transparent fleet modernism";
     layoutStrategy = "hero booking banner with fleet showcase cards, pricing tiers and transparent terms";

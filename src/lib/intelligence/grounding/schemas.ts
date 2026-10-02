@@ -209,6 +209,8 @@ export const GroundedBusinessProfileSchema = z.object({
     freshnessStatus: z.enum(["FRESH", "STALE", "EXPIRED"]),
     sourcesFetched: z.array(z.string()),
   }),
+  placesPhotos: z.array(z.any()).optional(),
+  placesReviews: z.array(z.any()).optional(),
   compositeConfidence: z.number().min(0).max(1),
   compositeConfidenceLevel: ConfidenceLevelSchema,
 });

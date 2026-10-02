@@ -3,6 +3,8 @@
 // Defines verifiable evidence models, business identity, fact vs inference separation,
 // forbidden claims, confidence tiers, and source conflict representations.
 
+import type { RawPlacesPhoto, RawPlacesReview } from "./assetTypes";
+
 export type EvidenceSourceType =
   | "business_website"
   | "google_places"
@@ -204,6 +206,8 @@ export interface GroundedBusinessProfile {
     freshnessStatus: "FRESH" | "STALE" | "EXPIRED";
     sourcesFetched: string[];
   };
+  placesPhotos?: RawPlacesPhoto[];
+  placesReviews?: RawPlacesReview[];
   compositeConfidence: number; // 0.0 to 1.0
   compositeConfidenceLevel: ConfidenceLevel;
 }

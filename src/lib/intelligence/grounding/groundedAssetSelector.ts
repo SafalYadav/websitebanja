@@ -46,8 +46,8 @@ export class GroundedAssetSelector {
     const category = options.category || profile.archetype || "commercial";
     const freshness = profile.freshness.freshnessStatus;
 
-    const rawPhotos = options.photos || [];
-    const rawReviews = options.reviews || [];
+    const rawPhotos = options.photos && options.photos.length > 0 ? options.photos : profile.placesPhotos || [];
+    const rawReviews = options.reviews && options.reviews.length > 0 ? options.reviews : profile.placesReviews || [];
 
     const selectedAssets: GroundedBusinessAsset[] = [];
     const usedPhotoNames = new Set<string>();

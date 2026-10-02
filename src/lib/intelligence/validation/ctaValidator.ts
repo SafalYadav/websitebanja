@@ -147,13 +147,24 @@ export function validateCTA(context: ValidationContext): StageValidationResult {
   ).toLowerCase();
   const ctaLower = (heroButton || "").toLowerCase();
 
+  const isTwoWheeler =
+    resolvedCategory.includes("bike") ||
+    resolvedCategory.includes("motorcycle") ||
+    resolvedCategory.includes("scooter") ||
+    resolvedCategory.includes("two wheeler") ||
+    resolvedCategory.includes("two-wheeler") ||
+    resolvedName.includes("bike") ||
+    resolvedName.includes("motorcycle") ||
+    resolvedName.includes("scooter");
+
   const isAutomotiveOrRental =
-    resolvedCategory.includes("car") ||
-    resolvedCategory.includes("rental") ||
-    resolvedCategory.includes("vehicle") ||
-    resolvedName.includes("car") ||
-    resolvedName.includes("drive") ||
-    resolvedName.includes("rental");
+    !isTwoWheeler &&
+    (resolvedCategory.includes("car") ||
+      resolvedCategory.includes("rental") ||
+      resolvedCategory.includes("vehicle") ||
+      resolvedName.includes("car") ||
+      resolvedName.includes("drive") ||
+      resolvedName.includes("rental"));
 
   const isGymOrFitness =
     resolvedCategory.includes("gym") ||
@@ -177,6 +188,7 @@ export function validateCTA(context: ValidationContext): StageValidationResult {
     resolvedName.includes("dental");
 
   const isDining =
+    !isTwoWheeler &&
     !isAutomotiveOrRental &&
     !isGymOrFitness &&
     !isSalonOrBeauty &&
@@ -196,7 +208,7 @@ export function validateCTA(context: ValidationContext): StageValidationResult {
     ctaLower.includes("degustation");
 
   // CRITICAL MISMATCH: Dining CTA on non-dining business
-  if ((isAutomotiveOrRental || isGymOrFitness || isSalonOrBeauty || isClinicOrHealthcare) && hasDiningCTA) {
+  if ((isTwoWheeler || isAutomotiveOrRental || isGymOrFitness || isSalonOrBeauty || isClinicOrHealthcare) && hasDiningCTA) {
     failures.push({
       id: randomUUID(),
       stage: "CTA",
@@ -204,7 +216,9 @@ export function validateCTA(context: ValidationContext): StageValidationResult {
       failure: `Primary hero CTA "${heroButton}" is mismatched with business industry (dining CTA on non-dining business)`,
       evidence: `CTA copy: "${heroButton}", Resolved business category/name: "${resolvedCategory || resolvedName}"`,
       affectedElement: "hero.button",
-      suggestedFix: isAutomotiveOrRental
+      suggestedFix: isTwoWheeler
+        ? "Replace with 'Rent a Bike' or 'Reserve a Scooter'"
+        : isAutomotiveOrRental
         ? "Replace with 'Book a Vehicle' or 'Reserve a Car'"
         : isGymOrFitness
         ? "Replace with 'Claim Free Pass' or 'Start Training'"
@@ -215,8 +229,22 @@ export function validateCTA(context: ValidationContext): StageValidationResult {
       field: "hero.button",
       ruleCode: "CTA_INDUSTRY_MISMATCH",
     });
-  } else if (isDining && (ctaLower.includes("car") || ctaLower.includes("vehicle") || ctaLower.includes("drive"))) {
-    // CRITICAL MISMATCH: Automotive CTA on dining business
+  } else if (isTwoWheeler && (ctaLower.includes("car") || ctaLower.includes("sedan") || ctaLower.includes("suv"))) {
+    // CRITICAL MISMATCH: Four-wheeler car CTA on two-wheeler business
+    failures.push({
+      id: randomUUID(),
+      stage: "CTA",
+      severity: "CRITICAL",
+      failure: `Primary hero CTA "${heroButton}" is mismatched with two-wheeler business (car/sedan CTA on motorcycle/bike rental)`,
+      evidence: `CTA copy: "${heroButton}", Category: "${resolvedCategory || resolvedName}"`,
+      affectedElement: "hero.button",
+      suggestedFix: "Replace with 'Rent a Bike' or 'Reserve a Two-Wheeler'",
+      blocking: true,
+      field: "hero.button",
+      ruleCode: "CTA_CROSS_VEHICLE_MISMATCH",
+    });
+  } else if (isDining && (ctaLower.includes("car") || ctaLower.includes("vehicle") || ctaLower.includes("drive") || ctaLower.includes("bike"))) {
+    // CRITICAL MISMATCH: Vehicle CTA on dining business
     failures.push({
       id: randomUUID(),
       stage: "CTA",
@@ -237,6 +265,17 @@ export function validateCTA(context: ValidationContext): StageValidationResult {
         stage: "CTA",
         severity: "MEDIUM",
         warning: `CTA "${heroButton}" may not be optimal for a dining establishment (expected: Reserve a Table, Order Online, View Menu)`,
+        affectedElement: "hero.button",
+      });
+    }
+  } else if (isTwoWheeler) {
+    const bikeCTAs = ["bike", "scooter", "rent", "ride", "book", "reserve", "fleet", "explore", "tour", "call", "inquire"];
+    if (!bikeCTAs.some((c) => ctaLower.includes(c))) {
+      warnings.push({
+        id: randomUUID(),
+        stage: "CTA",
+        severity: "MEDIUM",
+        warning: `CTA "${heroButton}" may not be optimal for a two-wheeler rental business (expected: Rent a Bike, Reserve a Scooter, Explore Fleet)`,
         affectedElement: "hero.button",
       });
     }

@@ -620,6 +620,108 @@ export const REGISTRY: Record<string, CuratedImageEntry[]> = {
     },
   ],
 
+  // 5A. Two-Wheeler, Motorcycle & Scooter Mobility
+  two_wheeler: [
+    {
+      url: "https://images.unsplash.com/photo-1558981403-c5f9899a28bc",
+      author: "David Travis",
+      authorHandle: "davidtravis",
+      intent: "Cruiser motorcycle on scenic open road with wide panoramic horizon",
+      roles: ["hero", "heroBackground"],
+    },
+    {
+      url: "https://images.unsplash.com/photo-1568772585407-9361f9bf3a87",
+      author: "Gijs Coolen",
+      authorHandle: "gijscoolen",
+      intent: "Classic touring motorcycle parked in historic urban streetscape",
+      roles: ["about", "hero"],
+    },
+    {
+      url: "https://images.unsplash.com/photo-1558981806-ec527fa84c39",
+      author: "David Travis",
+      authorHandle: "davidtravis",
+      intent: "Touring motorbike on desert highway adventure route",
+      roles: ["services", "heroBackground"],
+    },
+    {
+      url: "https://images.unsplash.com/photo-1558980664-769d59546b3d",
+      author: "David Travis",
+      authorHandle: "davidtravis",
+      intent: "Modern street motorcycle lineup ready for immediate rental hire",
+      roles: ["services", "features"],
+    },
+    {
+      url: "https://images.unsplash.com/photo-1558981420-87aa9dad1c89",
+      author: "David Travis",
+      authorHandle: "davidtravis",
+      intent: "Adventure touring motorbike ready for mountain road exploration",
+      roles: ["services", "features"],
+    },
+    {
+      url: "https://images.unsplash.com/photo-1558981852-426c6c22a06a",
+      author: "David Travis",
+      authorHandle: "davidtravis",
+      intent: "Motorcycle rider with safety helmet ready for open road journey",
+      roles: ["features", "about"],
+    },
+    {
+      url: "https://images.unsplash.com/photo-1558981359-219d6364c9c8",
+      author: "David Travis",
+      authorHandle: "davidtravis",
+      intent: "Classic cruiser motorbike detailed engine and chrome craft",
+      roles: ["gallery", "services"],
+    },
+    {
+      url: "https://images.unsplash.com/photo-1558980664-2506fca6bfc2",
+      author: "David Travis",
+      authorHandle: "davidtravis",
+      intent: "Two-wheeler rental fleet aligned for customer self-drive pickup",
+      roles: ["services", "gallery"],
+    },
+    {
+      url: "https://images.unsplash.com/photo-1558980663-3685c1d673c4",
+      author: "David Travis",
+      authorHandle: "davidtravis",
+      intent: "Motorcycle handlebar and speedometer perspective on highway",
+      roles: ["features", "gallery"],
+    },
+    {
+      url: "https://images.unsplash.com/photo-1558981408-db0ecd8a1ee4",
+      author: "David Travis",
+      authorHandle: "davidtravis",
+      intent: "Classic retro motorbike parked in heritage historical architecture lane",
+      roles: ["gallery", "about"],
+    },
+    {
+      url: "https://images.unsplash.com/photo-1525160354320-d8e92641c563",
+      author: "Harley-Davidson",
+      authorHandle: "harleydavidson",
+      intent: "Nimble city commuter two-wheeler for agile street transit",
+      roles: ["services", "features"],
+    },
+    {
+      url: "https://images.unsplash.com/photo-1508974239320-0a029497e820",
+      author: "Patrick Hendry",
+      authorHandle: "patrickhendry",
+      intent: "Motorcycle rider touring through scenic curving mountain highway",
+      roles: ["hero", "heroBackground"],
+    },
+    {
+      url: "https://images.unsplash.com/photo-1599819811279-d5ad9cccf838",
+      author: "Sourav Mishra",
+      authorHandle: "souravmishra",
+      intent: "Rider safety helmet and gear on motorcycle tank",
+      roles: ["features", "services"],
+    },
+    {
+      url: "https://images.unsplash.com/photo-1609630875171-b1321377ee65",
+      author: "Hardik Sharma",
+      authorHandle: "hardiksharma",
+      intent: "Classic Royal Enfield motorcycle in Rajasthan heritage road setting",
+      roles: ["about", "gallery"],
+    },
+  ],
+
   // 5B. Car Rental, Mobility & Self-Drive Fleet
   car_rental: [
     {
@@ -1144,18 +1246,46 @@ export function canonicalizeImageUrl(url: string): string {
 export function normalizeCategoryKey(rawCategory?: string, businessName?: string, archetype?: string): string {
   const combined = `${rawCategory || ""} ${businessName || ""} ${archetype || ""}`.toLowerCase();
 
-  // 0A. Car Rental & Self-Drive Mobility check (Highest priority: vehicle mobility must NEVER match restaurant/real_estate)
+  // 00. Two-Wheeler, Motorcycle & Scooter Mobility check (Highest priority: two-wheeler must NEVER match car_rental or dining)
   if (
-    combined.includes("car rental") ||
-    combined.includes("vehicle rental") ||
-    combined.includes("self drive") ||
-    combined.includes("car hire") ||
-    combined.includes("auto rental") ||
-    combined.includes("fleet") ||
-    combined.includes("chauffeur") ||
-    combined.includes("carz") ||
-    combined.includes("cab service") ||
-    (combined.includes("car") && (combined.includes("rent") || combined.includes("drive") || combined.includes("mobility")))
+    combined.includes("two_wheeler") ||
+    combined.includes("two wheeler") ||
+    combined.includes("two-wheeler") ||
+    combined.includes("bike rental") ||
+    combined.includes("bike on rent") ||
+    combined.includes("motorcycle rental") ||
+    combined.includes("motorcycle hire") ||
+    combined.includes("scooter rental") ||
+    combined.includes("scooty") ||
+    combined.includes("bullet rental") ||
+    combined.includes("royal enfield") ||
+    (combined.includes("bike") && (combined.includes("rent") || combined.includes("hire") || combined.includes("tour")))
+  ) {
+    return "two_wheeler";
+  }
+
+  // 0A. Car Rental & Self-Drive Mobility check (Guarded against two-wheeler mobility)
+  const isProtectedTwoWheeler =
+    combined.includes("bike") ||
+    combined.includes("motorcycle") ||
+    combined.includes("scooter") ||
+    combined.includes("two wheeler") ||
+    combined.includes("two-wheeler") ||
+    combined.includes("scooty") ||
+    combined.includes("bullet");
+
+  if (
+    !isProtectedTwoWheeler &&
+    (combined.includes("car rental") ||
+      combined.includes("vehicle rental") ||
+      combined.includes("self drive") ||
+      combined.includes("car hire") ||
+      combined.includes("auto rental") ||
+      combined.includes("fleet") ||
+      combined.includes("chauffeur") ||
+      combined.includes("carz") ||
+      combined.includes("cab service") ||
+      (combined.includes("car") && (combined.includes("rent") || combined.includes("drive") || combined.includes("mobility"))))
   ) {
     return "car_rental";
   }

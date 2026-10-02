@@ -18,6 +18,7 @@ import { compileForbiddenClaims } from "./forbiddenClaimsEngine";
 import { groundedProfileStore } from "./groundedProfileStore";
 import { GroundedBusinessProfileSchema } from "./schemas";
 import { MemoryStore, redactSecretsInString } from "../memory/memoryStore";
+import { businessSemanticReasoner } from "../semantic/businessSemanticReasoner";
 import type {
   BusinessResearchRequest,
   BusinessResearchResult,
@@ -223,7 +224,16 @@ export class GroundedIntelligenceService {
       if (addrConflict) conflicts.push(addrConflict);
     }
 
-    // 4. Determine Archetype & Industry Family (No Hallucination Rule)
+    // 4. Determine Archetype & Industry Family (Enhanced by Semantic Reasoner)
+    const semanticAnalysis = businessSemanticReasoner.analyzeBusiness({
+      businessName: request.businessName,
+      category: request.category || placesType,
+      location: resolvedAddress || request.location,
+      rating: placesRes?.rating,
+      reviewCount: placesRes?.userRatingCount,
+      phone: resolvedPhone,
+    });
+
     const combinedContext = [
       request.category || "",
       placesType || "",
@@ -236,11 +246,20 @@ export class GroundedIntelligenceService {
       .join(" ")
       .toLowerCase();
 
-    const { archetype, archetypeConfidence, industryFamily, industryConfidence } =
+    let { archetype, archetypeConfidence, industryFamily, industryConfidence } =
       this.inferArchetypeAndIndustry(combinedContext, sourcesFetched.length > 1);
 
-    // 5. Extract Grounded Services
-    const services = this.extractServices(activeWebsiteRes, placesType, request.category, allEvidence, request.businessName);
+    // If semantic reasoner discovered a specific domain and archetype was unknown, elevate it
+    if (archetype === "unknown" && semanticAnalysis.domain !== "generic_service") {
+      archetype = semanticAnalysis.domain;
+      archetypeConfidence = "HIGH";
+      industryFamily = semanticAnalysis.domain;
+      industryConfidence = "HIGH";
+    }
+
+    // 5. Extract Grounded Services (supplemented with semantic services if sparse)
+    const semanticOfferings = semanticAnalysis.recommendedServices.map((s) => s.title);
+    const services = this.extractServices(activeWebsiteRes, placesType, request.category, allEvidence, request.businessName, semanticOfferings);
 
     // 6. Target Audience (Explicit vs Inferred)
     const audience = this.inferAudience(archetype, services, activeWebsiteRes);
@@ -273,7 +292,7 @@ export class GroundedIntelligenceService {
     // 8. Brand Signals
     const brandSignals: GroundedBrandSignals = {
       businessName: activeWebsiteRes?.title?.split(/[-|:]/)[0]?.trim() || placesRes?.name || request.businessName,
-      tagline: activeWebsiteRes?.metaDescription || undefined,
+      tagline: activeWebsiteRes?.metaDescription || semanticAnalysis.factualTagline || undefined,
       tone: this.inferTone(combinedContext),
       colors: [],
       typography: undefined,
@@ -309,9 +328,9 @@ export class GroundedIntelligenceService {
           reason: "No website content or verified business photos available to evaluate visual style.",
         };
 
-    // 10. CTA Strategy (Only observed CTAs)
+    // 10. CTA Strategy (Only observed CTAs or semantically grounded CTAs)
     const observedCtas = activeWebsiteRes?.observedCtas || [];
-    const primaryCta = observedCtas[0]?.text || (resolvedPhone ? "Call Now" : "Contact Business");
+    const primaryCta = observedCtas[0]?.text || (resolvedPhone ? "Call Now" : semanticAnalysis.primaryCta?.label || "Contact Business");
 
     const ctaStrategy: GroundedCtaStrategy = {
       observedCtas,
@@ -323,9 +342,9 @@ export class GroundedIntelligenceService {
       recommendedNextAction: `Engage via primary verified channel: ${primaryCta}`,
       rationale: observedCtas.length > 0
         ? `Derived directly from ${observedCtas.length} observed call-to-action buttons on website.`
-        : "Defaulted to phone/contact inquiry based on available contact points.",
-      confidence: observedCtas.length > 0 ? 0.90 : 0.50,
-      confidenceLevel: observedCtas.length > 0 ? "HIGH" : "LOW",
+        : "Derived from semantic customer intent and verified contact points.",
+      confidence: observedCtas.length > 0 ? 0.90 : 0.70,
+      confidenceLevel: observedCtas.length > 0 ? "HIGH" : "MEDIUM",
     };
 
     // 11. Compile Forbidden Claims
@@ -438,7 +457,7 @@ export class GroundedIntelligenceService {
     const compositeConfidence = Math.round(avgConfidence * 100) / 100;
     const compositeConfidenceLevel = scoreToConfidenceLevel(compositeConfidence);
 
-    // 15. Assemble Final Profile
+    // 15. Assemble Final Profile with Places Photos and Reviews
     const profile: GroundedBusinessProfile = {
       businessId,
       tenantId,
@@ -453,6 +472,8 @@ export class GroundedIntelligenceService {
       brandSignals,
       visualStyle,
       ctaStrategy,
+      placesPhotos: placesRes?.photos || [],
+      placesReviews: placesRes?.reviews || [],
       evidence: allEvidence,
       factsAndInferences,
       forbiddenClaims,
@@ -593,7 +614,8 @@ export class GroundedIntelligenceService {
     placesType?: string,
     userCategory?: string,
     evidenceList: EvidenceItem[] = [],
-    businessName?: string
+    businessName?: string,
+    semanticOfferings?: string[]
   ): GroundedServiceItem[] {
     const services: GroundedServiceItem[] = [];
     const seen = new Set<string>();
@@ -642,9 +664,16 @@ export class GroundedIntelligenceService {
     if (businessName && (businessName.includes("&") || businessName.includes("and") || businessName.includes("-"))) {
       const parts = businessName.split(/[&|-]|\band\b/i).map((s) => s.trim());
       for (const part of parts) {
-        if (/coating|detailing|plumbing|repair|cleaning|dentistry|law|catering|consulting|bakery|salon|spa|orthodontics|treatment/i.test(part)) {
+        if (/coating|detailing|plumbing|repair|cleaning|dentistry|law|catering|consulting|bakery|salon|spa|orthodontics|treatment|bike|rental|scooter|tour|safari/i.test(part)) {
           addService(part, true, 0.85, "name_explicit");
         }
+      }
+    }
+
+    // If website had no services and few were found, supplement from semantic offerings
+    if (services.length <= 1 && semanticOfferings && semanticOfferings.length > 0) {
+      for (const offering of semanticOfferings) {
+        addService(offering, false, 0.75, "semantic_inference");
       }
     }
 
