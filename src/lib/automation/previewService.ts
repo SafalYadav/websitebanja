@@ -41,6 +41,8 @@ export async function generateAutomationPreview(
     location,
     phone: input.contact?.phone,
     email: input.contact?.email,
+    placeId: sanitizeInput(input.placeId) || undefined,
+    websiteUrl: sanitizeInput(input.website) || undefined,
     source: "automation_n8n",
   });
 

@@ -12,6 +12,7 @@ export interface AutomationContactInput {
 
 export interface AutomationPreviewRequest {
   businessName: string;
+  placeId?: string;
   industry?: string;
   category?: string;
   description?: string;

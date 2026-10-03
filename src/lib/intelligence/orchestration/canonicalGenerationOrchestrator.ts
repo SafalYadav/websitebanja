@@ -32,9 +32,11 @@ import { StrategyManager } from "../learning/strategyManager";
 import { businessSectionPlanner } from "../planning/businessSectionPlanner";
 import { ValidationOrchestrator } from "../validation/validationOrchestrator";
 import { RepairCoordinator } from "../validation/repairCoordinator";
+import { applyGroundedAssetsToWebsite } from "../grounding/groundedWebsiteGenerator";
 import { generatePersonalizedPreview } from "@/lib/personalization/previewGenerator";
 import { auditQualifiedLead } from "@/lib/audit/auditService";
 import { emitAgentEvent } from "@/lib/telemetry/agentTelemetry";
+import { leadRepository } from "@/lib/discovery/leadRepository";
 
 const PREVIEW_DIR = path.join(process.cwd(), "scratch", "previews");
 
@@ -141,6 +143,23 @@ export class CanonicalGenerationOrchestrator {
     });
 
     try {
+      // Resolve the stored lead before grounding so automation retains its exact
+      // Google identity even when the caller supplies only leadId.
+      const lead = request.overrideLead || (request.leadId
+        ? await leadRepository.findLeadById(request.leadId, request.userId)
+        : null);
+      request = {
+        ...request,
+        overrideLead: lead || undefined,
+        businessName: lead?.businessName || request.businessName,
+        category: request.category || lead?.industry || lead?.category,
+        location: request.location || lead?.address || lead?.city,
+        phone: request.phone || lead?.phone,
+        email: request.email || lead?.email,
+        websiteUrl: request.websiteUrl || lead?.website,
+        placeId: request.placeId || (lead?.source === "google_places" ? lead.sourceId : undefined),
+        tenantId: request.tenantId || request.userId,
+      };
       // 1. Business Semantic Reasoning & Intent Analysis
       const semanticAnalysis = this.semanticReasoner.analyzeBusiness({
         businessName: request.businessName,
@@ -167,7 +186,15 @@ export class CanonicalGenerationOrchestrator {
         });
         if (biResult.success && biResult.profile) {
           profile = biResult.profile;
+        } else {
+          throw new Error(biResult.errors?.join("; ") || "Business research failed before generation.");
         }
+      }
+      if (request.placeId && profile.identity.placeId !== request.placeId) {
+        throw new Error("Grounded profile does not match the requested Google Place ID.");
+      }
+      if (profile.tenantId !== (request.tenantId ?? null)) {
+        throw new Error("Grounded profile belongs to a different workspace.");
       }
 
       // 3B. Automatic Existing Website Crawl & Audit (Rule 2)
@@ -267,6 +294,16 @@ export class CanonicalGenerationOrchestrator {
         websiteData.pages[0].sectionOrder = sectionPlan.sectionOrder;
       }
 
+      // Re-apply Grounded Business Intelligence and 5-tier safe assets if profile exists
+      if (profile) {
+        const assetSelection = this.assetSelector.selectAssets(profile, {
+          category: request.category || semanticAnalysis.domain,
+          photos: request.placesPhotos,
+          reviews: request.placesReviews,
+        });
+        websiteData = applyGroundedAssetsToWebsite(websiteData, assetSelection, profile);
+      }
+
       // 6. 7-Stage Deterministic Validation (Quality Gate)
       const validationContext = {
         runId: correlationId,
@@ -276,6 +313,9 @@ export class CanonicalGenerationOrchestrator {
         retryCount: 0,
         maxRetries: 3,
         tenantId: request.tenantId || "default_tenant",
+        businessName: request.businessName,
+        businessCategory: request.category || semanticAnalysis.domain,
+        businessLocation: request.location,
       };
 
       let valReport = await this.validator.validateWebsite(validationContext);
@@ -319,6 +359,9 @@ export class CanonicalGenerationOrchestrator {
       }
 
       // 8. Re-persist the final validated website data
+      if (valReport.decision !== "READY") {
+        throw new Error("Website quality validation failed after bounded repairs; preview is not ready.");
+      }
       fs.writeFileSync(previewFilePath, JSON.stringify(websiteData, null, 2), "utf-8");
       if (basePreview.preview.slug) {
         const slugFilePath = path.join(PREVIEW_DIR, `${basePreview.preview.slug}.json`);
@@ -341,6 +384,7 @@ export class CanonicalGenerationOrchestrator {
         success: true,
         status: currentStatus,
         websiteData,
+        previewDetails: basePreview.preview,
         preview: {
           id: basePreview.preview.id,
           url: basePreview.preview.url,
@@ -353,6 +397,8 @@ export class CanonicalGenerationOrchestrator {
           phone: profile?.identity?.phone || request.phone,
           existingWebsiteStatus: auditReport ? "audited" : targetWebsite ? "present" : "none",
           existingWebsiteUrl: targetWebsite || null,
+          placeId: request.placeId || profile?.identity?.placeId,
+          tenantId: request.tenantId || null,
           auditReport: auditReport || null,
           executiveDirectives,
         },

@@ -21,6 +21,10 @@ export function applyGroundedAssetsToWebsite(
   _options: GroundedGenerationOptions = {}
 ): WebsiteData {
   const result: WebsiteData = JSON.parse(JSON.stringify(websiteData));
+  result.photoCredits = assetSelection.assets
+    .filter((asset) => asset.source === "google_places" && asset.contentUrl && asset.attribution?.displayName)
+    .map((asset) => ({ name: asset.attribution!.displayName!, uri: asset.attribution!.uri }))
+    .filter((credit, index, credits) => credits.findIndex((item) => item.name === credit.name && item.uri === credit.uri) === index);
 
   const canonicalName = profile.identity.canonicalName || result.businessName || "Business";
   result.businessName = canonicalName;
@@ -35,7 +39,7 @@ export function applyGroundedAssetsToWebsite(
   // 1. Hero Section Grounding
   // ----------------------------------------------------
   if (result.hero) {
-    if (assetSelection.heroAsset?.contentUrl) {
+    if (assetSelection.heroAsset) {
       result.hero.image = assetSelection.heroAsset.contentUrl;
     }
 
@@ -51,29 +55,45 @@ export function applyGroundedAssetsToWebsite(
       const ratingMatch = ratingFact.statement.match(/(\d+\.\d+)★/);
       const countMatch = ratingFact.statement.match(/(\d+)\s+(?:[\w]+\s+)?reviews/i);
       if (ratingMatch && countMatch) {
-        groundedTrustBadges.push(`Google Verified: ${ratingMatch[1]}★ (${countMatch[1]} Reviews)`);
+        groundedTrustBadges.push(`Google: ${ratingMatch[1]}★ (${countMatch[1]} Reviews)`);
       } else if (ratingMatch) {
-        groundedTrustBadges.push(`Google Verified: ${ratingMatch[1]}★ Rating`);
+        groundedTrustBadges.push(`Google: ${ratingMatch[1]}★ Rating`);
       }
     }
 
     // Verified Location Badge
     if (profile.location.isVerified && profile.location.city) {
-      groundedTrustBadges.push(`Verified in ${profile.location.city}`);
-    } else {
-      groundedTrustBadges.push("Verified Business Premises");
+      groundedTrustBadges.push(`Located in ${profile.location.city}`);
     }
-
-    groundedTrustBadges.push("Direct Priority Scheduling");
 
     result.hero.trustBadges = groundedTrustBadges;
 
     // Badges array
     result.hero.badges = [
-      ratingFact ? "Google Verified Rating" : "Verified Business",
+      ...(ratingFact ? ["Google Rating"] : []),
       "Direct Communication",
       profile.location.city ? `Serving ${profile.location.city}` : "Local Business",
     ];
+
+    // Clean any lingering generic template slogans from hero title
+    if (!result.hero.title || /dedicated excellence|high velocity|autonomous architecture|verified local preview/i.test(result.hero.title)) {
+      result.hero.title = profile.archetype && profile.archetype !== "unknown"
+        ? `${canonicalName} — Premier ${profile.archetype.replace(/_/g, " ")}${profile.location.city ? ` in ${profile.location.city}` : ""}`
+        : `${canonicalName}${profile.location.city ? ` — ${profile.location.city}` : ""}`;
+    }
+
+    // Ground hero eyebrow in verified business category and location
+    if (!result.hero.eyebrow || /verified local preview|home & professional/i.test(result.hero.eyebrow)) {
+      const categoryLabel = profile.archetype && profile.archetype !== "unknown"
+        ? profile.archetype.replace(/_/g, " ")
+        : (result.brand?.industry || "Commercial");
+      result.hero.eyebrow = `${categoryLabel} • ${profile.location.city || "Verified Establishment"}`;
+    }
+
+    // Ground hero CTA button from observed business strategy
+    if (profile.ctaStrategy?.observedCtas && profile.ctaStrategy.observedCtas.length > 0) {
+      result.hero.button = profile.ctaStrategy.observedCtas[0].text;
+    }
 
     // Ensure hero subtitle doesn't contain forbidden claims
     if (result.hero.subtitle) {
@@ -85,7 +105,7 @@ export function applyGroundedAssetsToWebsite(
   // 2. About Section Grounding
   // ----------------------------------------------------
   if (result.about) {
-    if (assetSelection.aboutAsset?.contentUrl) {
+    if (assetSelection.aboutAsset) {
       result.about.image = assetSelection.aboutAsset.contentUrl;
     }
 
@@ -123,9 +143,9 @@ export function applyGroundedAssetsToWebsite(
       const assignedAsset = assetSelection.serviceAssets[idx];
       return {
         title: obs.name,
-        description: obs.description || `${obs.name} delivered with verified craft and standards at ${canonicalName}.`,
+        description: obs.description || `Contact ${canonicalName} for details, availability, and pricing for ${obs.name}.`,
         image: assignedAsset?.contentUrl,
-        badge: obs.isObserved ? "Verified Offering" : undefined,
+        badge: obs.isObserved ? "Listed Offering" : undefined,
       };
     });
   } else if (Array.isArray(result.services)) {
@@ -134,7 +154,7 @@ export function applyGroundedAssetsToWebsite(
       const assignedAsset = assetSelection.serviceAssets[idx];
       return {
         ...s,
-        image: assignedAsset?.contentUrl || s.image,
+        image: assignedAsset ? assignedAsset.contentUrl : s.image,
         description: sanitizeForbiddenText(s.description || "", profile),
       };
     });
@@ -191,7 +211,8 @@ export function applyGroundedAssetsToWebsite(
       role: "Verified Google Review",
       quote: rev.reviewText,
       text: rev.reviewText,
-      rating: rev.rating || 5,
+      rating: rev.rating,
+      authorUri: rev.attribution?.uri,
     }));
   } else {
     // ZERO VERIFIED REVIEWS AVAILABLE:
@@ -223,10 +244,18 @@ export function applyGroundedAssetsToWebsite(
       result.contact.address = profile.location.formattedAddress;
     } else if (profile.location.city) {
       result.contact.address = `${canonicalName}, ${profile.location.city}`;
+    } else if (result.contact.address && result.contact.address.includes("Gujarat")) {
+      result.contact.address = "Commercial Premises";
     }
 
     if (profile.identity.phone) {
       result.contact.phone = profile.identity.phone;
+    } else if (result.contact.phone && result.contact.phone.includes("98250")) {
+      result.contact.phone = undefined;
+    }
+
+    if (result.contact.email && result.contact.email.includes("@websitebanja.local")) {
+      result.contact.email = undefined;
     }
   }
 

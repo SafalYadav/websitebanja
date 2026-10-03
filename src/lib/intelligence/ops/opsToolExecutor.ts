@@ -255,7 +255,7 @@ export class OpsToolExecutor {
             phone: lead.phone,
             email: lead.email,
             websiteUrl: lead.website,
-            placeId: lead.sourceId || lead.placeId,
+            placeId: lead.placeId || (lead.source === "google_places" ? lead.sourceId : undefined),
             leadId: String(sanitizedInput.leadId || lead.leadId || "lead_preview"),
             overrideLead: lead.businessName ? lead : undefined,
             tenantId: request.tenantId || undefined,

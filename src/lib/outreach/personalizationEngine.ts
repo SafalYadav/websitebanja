@@ -29,7 +29,7 @@ import type {
 import { leadRepository } from "@/lib/discovery/leadRepository";
 import { auditRepository } from "@/lib/audit/auditRepository";
 import { createSyntheticMissingWebsiteAudit } from "@/lib/audit/auditEngine";
-import { generatePersonalizedPreview } from "@/lib/personalization/previewGenerator";
+import { canonicalGenerationOrchestrator } from "@/lib/intelligence/orchestration/canonicalGenerationOrchestrator";
 import type { StoredPreviewRecord } from "@/lib/personalization/types";
 import type { BusinessLead } from "@/lib/discovery/types";
 import type { LeadAuditReport } from "@/lib/audit/types";
@@ -344,14 +344,16 @@ export async function generateOutreachDraft(
 
   // If still no preview, auto-generate one to guarantee a real local preview
   if (!preview) {
-    const genRes = await generatePersonalizedPreview({
+    const genRes = await canonicalGenerationOrchestrator.generateWebsite({
+      businessName: lead.businessName,
+      source: "autonomous_pipeline",
       leadId: lead.leadId,
       overrideLead: lead,
       overrideAudit: finalAudit,
       userId: request.userId,
     });
 
-    if (genRes.success && genRes.preview) {
+    if (genRes.success && genRes.previewDetails) {
       preview = {
         previewId: genRes.preview.id,
         slug: genRes.preview.slug,
@@ -361,30 +363,14 @@ export async function generateOutreachDraft(
         industry: lead.industry || lead.category,
         generatedAt: new Date().toISOString(),
         previewUrl: genRes.preview.url,
-        qualityScore: genRes.preview.qualityScore,
-        designArchetype: genRes.preview.designArchetype,
-        imageManifest: genRes.preview.imageManifest,
+        qualityScore: genRes.previewDetails.qualityScore,
+        designArchetype: genRes.previewDetails.designArchetype,
+        imageManifest: genRes.previewDetails.imageManifest,
         generationStatus: "generated",
         userId: request.userId,
       };
     } else {
-      // Fallback preview record with local URL
-      const fallbackUrl = `http://localhost:3000/preview/prev_${lead.leadId}`;
-      preview = {
-        previewId: `prev_${lead.leadId}`,
-        slug: `preview-${lead.leadId}`,
-        leadId: lead.leadId,
-        auditId: finalAudit.auditId,
-        businessName: lead.businessName,
-        industry: lead.industry || lead.category,
-        generatedAt: new Date().toISOString(),
-        previewUrl: fallbackUrl,
-        qualityScore: 90,
-        designArchetype: "warm_artisanal",
-        imageManifest: [],
-        generationStatus: "generated",
-        userId: request.userId,
-      };
+      throw new Error(genRes.error?.message || "Website generation failed; outreach cannot reference a missing preview.");
     }
   }
 

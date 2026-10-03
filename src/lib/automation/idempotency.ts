@@ -21,6 +21,7 @@ export function computeIdempotencyKey(key?: string, payload?: Record<string, unk
   }
   const serialized = JSON.stringify({
     name: payload?.businessName,
+    placeId: payload?.placeId,
     ind: payload?.industry,
     desc: payload?.description,
     serv: payload?.services,

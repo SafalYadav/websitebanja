@@ -18,6 +18,7 @@ export interface ReviewItem {
   description?: string;
   role?: string;
   rating?: number;
+  authorUri?: string;
 }
 
 interface ReviewsSectionProps {
@@ -83,64 +84,6 @@ function getCategoryReviewsCopy(category?: string) {
   };
 }
 
-function getCategoryFallbackReviews(category?: string): Array<{ name: string; text: string; role: string }> {
-  const cat = (category || "").toLowerCase();
-  if (cat.includes("dental") || cat.includes("clinic") || cat.includes("doctor")) {
-    return [
-      { name: "Amanda R.", text: "I never thought dental visits could feel this calm. The sedation and care truly erased my anxiety.", role: "Verified Patient" },
-      { name: "Michael D.", text: "The team’s professionalism and the soothing environment made all the difference. Seamless and pain-free.", role: "Verified Patient" },
-      { name: "Sarah L.", text: "Truly innovative and reassuring! The 3D smile design helped me see my new smile before the procedure.", role: "Verified Patient" },
-    ];
-  }
-  if (cat.includes("restaurant") || cat.includes("cafe") || cat.includes("dining") || cat.includes("bistro")) {
-    return [
-      { name: "Marcus T.", text: "The single-origin pour-over and wild-fermented sourdough are unmatched. Our favorite weekend ritual.", role: "Regular Diner" },
-      { name: "Elena V.", text: "Sitting in the sunlit glasshouse with hearth-baked brunch felt like a calm retreat from the city.", role: "Food & Wine Critic" },
-      { name: "David K.", text: "Incredible attention to origin and flavor. You can taste the wood-fired craft in every single dish.", role: "Verified Guest" },
-    ];
-  }
-  if (cat.includes("electric") || cat.includes("service") || cat.includes("trade")) {
-    return [
-      { name: "Robert M.", text: "VoltCraft arrived within 25 minutes on a rainy Friday night. Solved our blown main breaker safely and cleanly.", role: "Homeowner, Mission District" },
-      { name: "Sandra P.", text: "Upgraded our 1950s panel for a new EV fast charger. Clear estimate, on-time arrival, and zero surprise fees.", role: "Property Owner" },
-      { name: "David L.", text: "Diagnosed a persistent circuit flicker other electricians couldn't solve. Honest, licensed, master-level work.", role: "Commercial Facility Mgr" },
-    ];
-  }
-  if (cat.includes("architect") || cat.includes("design") || cat.includes("spatial")) {
-    return [
-      { name: "Henrik S.", text: "Komorebi transformed our hillside parcel into a serene sanctuary of mass timber and natural daylight.", role: "Private Estate Client" },
-      { name: "Maya B.", text: "Spatial harmony at its finest. Their bioclimatic architectural discipline was inspiring throughout the build.", role: "Design Foundation Director" },
-      { name: "Julian W.", text: "Uncompromising spatial rigor and quiet poetry. A landmark achievement in sustainable architecture.", role: "Cultural Commissioner" },
-    ];
-  }
-  if (cat.includes("fashion") || cat.includes("luxury") || cat.includes("atelier")) {
-    return [
-      { name: "Vivienne C.", text: "The bespoke double-faced cashmere coat is pure tactile poetry. Handcrafted luxury at its absolute pinnacle.", role: "Haute Couture Collector" },
-      { name: "Arthur M.", text: "Bespoke tailoring that fits like a second skin. Generational European artistry evident in every stitch.", role: "Private Client" },
-      { name: "Claire D.", text: "Unparalleled silhouette control and sustainable silk heritage. An heirloom piece I will cherish for decades.", role: "Fashion Editor" },
-    ];
-  }
-  if (cat.includes("saas") || cat.includes("tech") || cat.includes("ai") || cat.includes("software")) {
-    return [
-      { name: "Dr. Aris V.", text: "VectorPulse lowered our sub-millisecond retrieval latency by 82%. Essential infrastructure for our agent fleet.", role: "VP of AI Infrastructure" },
-      { name: "Priya N.", text: "The real-time semantic caching engine solved our LLM token cost bottleneck on day one.", role: "Principal Systems Architect" },
-      { name: "Kevin T.", text: "Rock-solid distributed vector retrieval with unmatched observability and zero downtime.", role: "Lead Machine Learning Eng" },
-    ];
-  }
-  if (cat.includes("e-commerce") || cat.includes("ecommerce") || cat.includes("ceramic") || cat.includes("retail")) {
-    return [
-      { name: "Naomi H.", text: "The wheel-thrown stoneware has a grounding tactile presence. Truly functional art for daily dining rituals.", role: "Interior Stylist" },
-      { name: "Mateo G.", text: "Exquisite wabi-sabi glaze and organic form. Each vessel tells an authentic artisanal story.", role: "Collector" },
-      { name: "Chloe R.", text: "Shipped securely with museum-grade care. A timeless centerpiece for our culinary gatherings.", role: "Verified Buyer" },
-    ];
-  }
-  return [
-    { name: "Alex M.", text: "Exceptional quality and attentive service from start to finish. Delivered beyond our highest expectations.", role: "Verified Partner" },
-    { name: "Jordan T.", text: "Meticulous craft, clear communication, and an uncompromising dedication to excellence.", role: "Satisfied Client" },
-    { name: "Taylor S.", text: "Professional, responsive, and truly world-class delivery. We couldn't be happier with the results.", role: "Verified Client" },
-  ];
-}
-
 export default function ReviewsSection({
   sectionKey = "reviews",
   reviews,
@@ -163,20 +106,18 @@ export default function ReviewsSection({
     ? reviews.filter((r): r is ReviewItem => Boolean(r && typeof r === "object"))
     : [];
 
-  const safeReviews = rawReviews.length > 0
-    ? rawReviews.map((r, idx) => {
+  const safeReviews = rawReviews
+    .filter((r) => Boolean((r.text || r.quote || r.review || r.description)?.trim()))
+    .map((r, idx) => {
         const name = (r.name || r.author || r.client || r.title || `Client Review ${idx + 1}`).trim();
-        const text = (r.text || r.quote || r.review || r.description || "Exceptional quality and attentive service from start to finish.").trim();
-        const role = (r.role || "Verified Customer").trim();
-        return { name, text, role };
-      })
-    : reviews !== undefined && Array.isArray(reviews)
-    ? [
-        { name: "Verified Service Standards", text: "Every client engagement is delivered according to verified standards and transparent pricing.", role: "Operating Principle" },
-        { name: "Direct Communication", text: "Direct, transparent communication with verified business personnel.", role: "Quality Standard" },
-        { name: "Uncompromising Craft", text: "Dedicated to measurable customer distinction and lasting excellence.", role: "Core Value" },
-      ]
-    : getCategoryFallbackReviews(category);
+        const text = (r.text || r.quote || r.review || r.description || "").trim();
+        const role = (r.role || "").trim();
+        const rating = typeof r.rating === "number" && r.rating >= 1 && r.rating <= 5 ? r.rating : undefined;
+        const authorUri = r.authorUri?.startsWith("https://") ? r.authorUri : undefined;
+        return { name, text, role, rating, authorUri };
+      });
+
+  if (safeReviews.length === 0) return null;
 
   return (
     <section
@@ -215,7 +156,7 @@ export default function ReviewsSection({
         </div>
 
         {/* Testimonials Presentation */}
-        {cardFamily === "testimonial-stack" ? (
+        {cardFamily === "testimonial-stack" && safeReviews.every((r) => r.rating !== undefined) ? (
           <div className="max-w-2xl mx-auto">
             <CardRenderer
               cardFamily="testimonial-stack"
@@ -224,7 +165,7 @@ export default function ReviewsSection({
                 author: r.name,
                 role: r.role,
                 text: r.text,
-                rating: 5,
+                rating: r.rating!,
               }))}
             />
           </div>
@@ -250,8 +191,8 @@ export default function ReviewsSection({
                     title={item.name}
                     subtitle={item.role}
                     description={item.text}
-                    tag="Verified"
-                    badge="5.0 ★"
+                    tag={item.role}
+                    badge={item.rating !== undefined ? `${item.rating.toFixed(1)} ★` : undefined}
                     treatment={typeof cardTreatment === "object" ? cardTreatment : undefined}
                     visualArchetype={visualArchetype}
                     index={index}
@@ -261,6 +202,13 @@ export default function ReviewsSection({
             })}
           </div>
         )}
+        <div className="mt-6 flex flex-wrap justify-center gap-4 text-sm">
+          {safeReviews.filter((item) => item.authorUri).map((item, index) => (
+            <a key={index} href={item.authorUri} target="_blank" rel="noopener noreferrer">
+              {item.name} · Google review
+            </a>
+          ))}
+        </div>
       </div>
     </section>
   );

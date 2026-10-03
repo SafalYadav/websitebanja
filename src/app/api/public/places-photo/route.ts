@@ -10,7 +10,8 @@ export async function GET(request: NextRequest) {
   const maxWidthPx = searchParams.get("maxWidthPx") || "1200";
   const maxHeightPx = searchParams.get("maxHeightPx") || "800";
 
-  if (!name || !name.startsWith("places/")) {
+  if (!name || !/^places\/[A-Za-z0-9_-]+\/photos\/[A-Za-z0-9_-]+$/.test(name) ||
+      ![maxWidthPx, maxHeightPx].every(value => Number.isInteger(Number(value)) && Number(value) >= 1 && Number(value) <= 4800)) {
     return NextResponse.json(
       { error: "Invalid photo reference name. Expected 'places/{placeId}/photos/{photoId}'." },
       { status: 400 }
@@ -21,31 +22,20 @@ export async function GET(request: NextRequest) {
 
   // If no API key is available or in development/test environment without credentials
   if (!apiKey || apiKey === "placeholder" || apiKey.includes("<") || apiKey.includes("your-api-key")) {
-    // Return a sleek SVG fallback placeholder with clean cache headers
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${maxWidthPx}" height="${maxHeightPx}" viewBox="0 0 800 600" fill="#18181b">
-      <rect width="800" height="600" fill="#18181b"/>
-      <path d="M400 240c-33.137 0-60 26.863-60 60s26.863 60 60 60 60-26.863 60-60-26.863-60-60-60zm0 100c-22.091 0-40-17.909-40-40s17.909-40 40-40 40 17.909 40 40-17.909 40-40 40z" fill="#71717a"/>
-      <text x="400" y="380" font-family="system-ui, sans-serif" font-size="16" fill="#a1a1aa" text-anchor="middle">Verified Business Photography</text>
-    </svg>`;
-
-    return new NextResponse(svg, {
-      status: 200,
-      headers: {
-        "Content-Type": "image/svg+xml",
-        "Cache-Control": "public, max-age=86400, stale-while-revalidate=604800",
-      },
-    });
+    return NextResponse.json({ error: "Google Places photography is not configured." }, { status: 503 });
   }
 
   try {
-    const googlePhotoUrl = `https://places.googleapis.com/v1/${name}/media?maxWidthPx=${maxWidthPx}&maxHeightPx=${maxHeightPx}&key=${apiKey}&skipHttpRedirect=true`;
+    const googlePhotoUrl = `https://places.googleapis.com/v1/${name}/media?maxWidthPx=${maxWidthPx}&maxHeightPx=${maxHeightPx}&skipHttpRedirect=true`;
 
     const res = await fetch(googlePhotoUrl, {
       method: "GET",
       headers: {
         "Accept": "application/json",
+        "X-Goog-Api-Key": apiKey,
       },
-      next: { revalidate: 86400 },
+      cache: "no-store",
+      signal: AbortSignal.timeout(10000),
     });
 
     if (!res.ok) {
@@ -58,7 +48,7 @@ export async function GET(request: NextRequest) {
     const data = await res.json();
     const photoUri = data.photoUri;
 
-    if (!photoUri) {
+    if (typeof photoUri !== "string" || new URL(photoUri).protocol !== "https:") {
       return NextResponse.json({ error: "No photoUri in Google Places response" }, { status: 502 });
     }
 
@@ -66,12 +56,12 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(photoUri, {
       status: 307,
       headers: {
-        "Cache-Control": "public, max-age=86400, stale-while-revalidate=604800",
+        "Cache-Control": "no-store",
       },
     });
-  } catch (err: any) {
+  } catch {
     return NextResponse.json(
-      { error: err?.message || "Failed to resolve Google Places photo" },
+      { error: "Google Places photo resolution failed or timed out" },
       { status: 500 }
     );
   }

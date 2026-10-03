@@ -10,6 +10,7 @@ import type { GroundedAssetSelectionResult, RawPlacesPhoto, RawPlacesReview } fr
 import type { ValidationReport } from "../validation/types";
 import type { LeadAuditReport } from "@/lib/audit/types";
 import type { BusinessLead } from "@/lib/discovery/types";
+import type { PersonalizedPreviewResponse } from "@/lib/personalization/types";
 
 export interface CanonicalGenerationRequest {
   businessName: string;
@@ -47,6 +48,7 @@ export interface CanonicalGenerationResponse {
     url: string;
     slug: string;
   };
+  previewDetails?: PersonalizedPreviewResponse["preview"];
   businessContext: {
     businessName: string;
     domain: string;
@@ -56,6 +58,8 @@ export interface CanonicalGenerationResponse {
     phone?: string;
     existingWebsiteStatus?: "none" | "present" | "audited";
     existingWebsiteUrl?: string | null;
+    placeId?: string;
+    tenantId?: string | null;
     auditReport?: unknown;
     executiveDirectives?: unknown;
   };

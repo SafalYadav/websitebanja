@@ -63,9 +63,23 @@ export class GroundedIntelligenceService {
 
   /**
    * Generates a stable deterministic business ID from canonical attributes.
+   * If placeId is available, anchors the business identity on the verified placeId.
    */
-  public generateBusinessId(name: string, location?: string): string {
-    const raw = `${name.trim().toLowerCase()}_${(location || "").trim().toLowerCase()}`;
+  public generateBusinessId(
+    paramsOrName: string | { placeId?: string; name: string; location?: string; tenantId?: string | null },
+    location?: string
+  ): string {
+    if (typeof paramsOrName === "object") {
+      const { placeId, name, location: loc, tenantId } = paramsOrName;
+      const tenantPrefix = tenantId ? `${tenantId}_` : "";
+      if (placeId && placeId.trim()) {
+        return `biz_${tenantPrefix}${placeId.trim()}`;
+      }
+      const raw = `${name.trim().toLowerCase()}_${(loc || "").trim().toLowerCase()}`;
+      const hash = crypto.createHash("sha256").update(raw).digest("hex").slice(0, 12);
+      return `biz_${tenantPrefix}${hash}`;
+    }
+    const raw = `${paramsOrName.trim().toLowerCase()}_${(location || "").trim().toLowerCase()}`;
     const hash = crypto.createHash("sha256").update(raw).digest("hex").slice(0, 12);
     return `biz_${hash}`;
   }
@@ -77,14 +91,22 @@ export class GroundedIntelligenceService {
     request: BusinessResearchRequest
   ): Promise<BusinessResearchResult> {
     const startTime = performance.now();
-    const businessId = this.generateBusinessId(request.businessName, request.location);
+    const businessId = this.generateBusinessId({
+      placeId: request.placeId,
+      name: request.businessName,
+      location: request.location,
+      tenantId: request.tenantId,
+    });
     const tenantId = request.tenantId ?? null;
     const errors: string[] = [];
 
     // 1. Check existing stored profile if refresh not forced
     if (!request.forceRefresh) {
       const cached = await groundedProfileStore.getProfile(businessId, tenantId);
-      if (cached && cached.freshness.freshnessStatus === "FRESH") {
+      const verifiedIdentity = !request.placeId || cached?.evidence.some(item =>
+        item.source === "google_places" && item.reference === `placeId:${request.placeId}` &&
+        item.supports === "identity.canonicalName");
+      if (cached && verifiedIdentity && cached.freshness.freshnessStatus === "FRESH") {
         return {
           success: true,
           profile: cached,
@@ -138,6 +160,13 @@ export class GroundedIntelligenceService {
           return null;
         }),
     ]);
+
+    if (request.placeId && (!placesRes?.isAvailable || placesRes.placeId !== request.placeId.trim())) {
+      throw new Error(placesRes?.error || "Google Places could not verify the requested business identity.");
+    }
+    if (placesRes?.ambiguity.isAmbiguous) {
+      throw new Error("Multiple Google Maps businesses matched. Select an exact Place ID before generation.");
+    }
 
     // Integrate Places results
     let resolvedPlaceId: string | undefined = request.placeId;
@@ -269,7 +298,7 @@ export class GroundedIntelligenceService {
       .split(",")
       .map((s) => s.trim())
       .filter(Boolean);
-    const city = locParts.length > 2 ? locParts[1] : locParts[0];
+    const city = placesRes?.city || request.location?.split(",")[0]?.trim();
     const locality = locParts.length > 2 ? locParts[0] : undefined;
     const country =
       locParts.find((p) => /india|usa|united states|uk|canada/i.test(p)) ||
@@ -279,7 +308,7 @@ export class GroundedIntelligenceService {
       formattedAddress: resolvedAddress || request.location,
       city,
       locality,
-      country,
+      country: placesRes?.country || country,
       latitude: placesRes?.location?.latitude,
       longitude: placesRes?.location?.longitude,
       isVerified: Boolean(resolvedAddress || placesRes?.location),
@@ -291,7 +320,7 @@ export class GroundedIntelligenceService {
 
     // 8. Brand Signals
     const brandSignals: GroundedBrandSignals = {
-      businessName: activeWebsiteRes?.title?.split(/[-|:]/)[0]?.trim() || placesRes?.name || request.businessName,
+      businessName: placesRes?.name || request.businessName || activeWebsiteRes?.title?.split(/[-|:]/)[0]?.trim() || "",
       tagline: activeWebsiteRes?.metaDescription || semanticAnalysis.factualTagline || undefined,
       tone: this.inferTone(combinedContext),
       colors: [],
@@ -481,6 +510,8 @@ export class GroundedIntelligenceService {
       ctaStrategy,
       placesPhotos: placesRes?.photos || [],
       placesReviews: placesRes?.reviews || [],
+      websitePhotos: activeWebsiteRes?.images || [],
+      clientAssets: [],
       evidence: allEvidence,
       factsAndInferences,
       forbiddenClaims,
@@ -650,6 +681,10 @@ export class GroundedIntelligenceService {
       for (const h of headings) {
         // Filter out generic headings like "About Us", "Contact Us", "Home"
         if (/about|contact|home|privacy|terms|menu|faq|blog/i.test(h)) continue;
+        // A scraped heading is not automatically evidence of an offering.
+        if (/guarantee|satisfaction|welcome|popular|accessories:|^by\b|^services?$/i.test(h)) continue;
+        if (businessName?.toLowerCase().includes(h.trim().toLowerCase())) continue;
+        if (!/rental|repair|cleaning|consultation|treatment|coating|delivery|catering|installation|maintenance|tour|booking|training|design/i.test(h)) continue;
         if (h.length >= 3 && h.length <= 40) {
           addService(h, true, 0.92, "website_observed");
         }

@@ -21,6 +21,7 @@ import FooterSection from "./FooterSection";
 import ProcessSection from "./ProcessSection";
 import ReviewsSection from "./ReviewsSection";
 import SpatialSectionWrapper from "./SpatialSectionWrapper";
+import { isContactSection, placeContactAtEnd, resolveSectionTarget, sectionAnchorHref } from "@/lib/intelligence/planning/sectionOrder";
 
 import { MessageCircle, Globe } from "lucide-react";
 
@@ -259,7 +260,11 @@ export default function WebsiteRenderer({
     activePage = pages.find((p) => p.id === activePageId) || pages[0];
   }
 
-  const activeSectionOrder = activePage?.sectionOrder || website.sectionOrder || [];
+  const activeSectionOrder = placeContactAtEnd(activePage?.sectionOrder || website.sectionOrder || []);
+
+  const resolveScrollTarget = (requestedTarget: string): string => {
+    return resolveSectionTarget(requestedTarget, activeSectionOrder);
+  };
 
   const designatedAboutKey = activeSectionOrder.includes("about")
     ? "about"
@@ -578,11 +583,59 @@ export default function WebsiteRenderer({
             action: { type: "page" as const, target: p.slug }
           }))).map((link: any) => {
             const isPageActive = link.action.type === "page" && (link.action.target === activePage.slug || (!link.action.target && activePage.isHome));
-            
+
+            if (link.action.type === "scroll") {
+              const target = resolveScrollTarget(link.action.target);
+              const href = sectionAnchorHref(link.action.target, activeSectionOrder);
+              return (
+                <a
+                  key={link.id}
+                  href={href}
+                  onClick={(event) => {
+                    const section = document.getElementById(`wb-section-${target}`);
+                    if (section) {
+                      event.preventDefault();
+                      section.scrollIntoView({ behavior: "smooth", block: "start" });
+                      window.history.replaceState(null, "", href);
+                    }
+                  }}
+                  className="px-3 py-1 rounded-lg text-xs font-bold transition cursor-pointer opacity-70 hover:opacity-100"
+                  style={{ color: theme.fg }}
+                >
+                  {link.label}
+                </a>
+              );
+            }
+
+            if (link.action.type === "url") {
+              return (
+                <a key={link.id} href={link.action.target} target="_blank" rel="noopener noreferrer"
+                  className="px-3 py-1 rounded-lg text-xs font-bold transition opacity-70 hover:opacity-100"
+                  style={{ color: theme.fg }}>
+                  {link.label}
+                </a>
+              );
+            }
+
+            if (["call", "email", "whatsapp"].includes(link.action.type)) {
+              const href = link.action.type === "call"
+                ? `tel:${link.action.target}`
+                : link.action.type === "email"
+                  ? `mailto:${link.action.target}`
+                  : `https://wa.me/${String(link.action.target).replace(/[^0-9]/g, "")}`;
+              return (
+                <a key={link.id} href={href}
+                  target={link.action.type === "whatsapp" ? "_blank" : undefined}
+                  rel={link.action.type === "whatsapp" ? "noopener noreferrer" : undefined}
+                  className="px-3 py-1 rounded-lg text-xs font-bold transition opacity-70 hover:opacity-100"
+                  style={{ color: theme.fg }}>
+                  {link.label}
+                </a>
+              );
+            }
+
             if (isPublic && publicSlug) {
-              const href = link.action.type === "page" 
-                ? (link.action.target ? `/p/${publicSlug}/${link.action.target}` : `/p/${publicSlug}`)
-                : "#";
+              const href = link.action.target ? `/p/${publicSlug}/${link.action.target}` : `/p/${publicSlug}`;
                 
               return (
                 <Link
@@ -629,7 +682,9 @@ export default function WebsiteRenderer({
       </nav>
 
       {/* Render Active Page Sections */}
-      {activeSectionOrder.map((key) => {
+      {(() => {
+        let hasRenderedContactSection = false;
+        return activeSectionOrder.map((key) => {
         const rawSectionData = (rawWebsite as Record<string, unknown> | null | undefined)?.[key] ?? (website as Record<string, unknown>)[key];
         const baseType = key.split("_")[0];
         const isSelected = isInteractiveStudio && selectedSection === key;
@@ -901,7 +956,11 @@ export default function WebsiteRenderer({
               faqData = website.faq;
             }
             content = <FAQSection sectionKey={key} faq={faqData} />;
-          } else if (key === "contact" || key === "reservation" || key === "booking" || baseType === "contact" || baseType === "reservation" || baseType === "booking") {
+          } else if (isContactSection(key) || baseType === "contact" || baseType === "reservation" || baseType === "booking") {
+            if (hasRenderedContactSection) {
+              return null;
+            }
+            hasRenderedContactSection = true;
             const contactData = (rawSectionData && typeof rawSectionData === "object" ? rawSectionData : website.contact) as Contact;
             content = <ContactSection sectionKey={key} contact={contactData} />;
           } else if (key === "footer" || baseType === "footer") {
@@ -973,9 +1032,21 @@ export default function WebsiteRenderer({
               {renderedContent}
             </div>
           );
-        })}
+        });
+      })()}
 
       {/* Floating WhatsApp Quick Action Button */}
+      {data?.photoCredits && data.photoCredits.length > 0 && (
+        <aside aria-label="Photo credits" className="px-6 py-4 text-sm">
+          Photos via Google · {data.photoCredits.map((credit, index) => (
+            <span key={index} className="mr-3">
+              {credit.uri?.startsWith("https://")
+                ? <a href={credit.uri} target="_blank" rel="noopener noreferrer">{credit.name}</a>
+                : credit.name}
+            </span>
+          ))}
+        </aside>
+      )}
       {resolvedWhatsappEnabled && (resolvedWhatsappNumber || resolvedPhone) && (
         <a
           href={`https://wa.me/${(resolvedWhatsappNumber || resolvedPhone).replace(/[^0-9]/g, "")}?text=${encodeURIComponent(

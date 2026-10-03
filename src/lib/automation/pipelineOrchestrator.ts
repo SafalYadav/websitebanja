@@ -15,7 +15,7 @@ import { PipelineQueue } from "./pipelineQueue";
 import { FollowUpQueue } from "./followUpQueue";
 import { executeDiscoveryRun } from "@/lib/discovery/discoveryService";
 import { auditQualifiedLead } from "@/lib/audit/auditService";
-import { generatePersonalizedPreview } from "@/lib/personalization/previewGenerator";
+import { canonicalGenerationOrchestrator } from "@/lib/intelligence/orchestration/canonicalGenerationOrchestrator";
 import { generateOutreachDraft } from "@/lib/outreach/personalizationEngine";
 import { outreachRepository } from "@/lib/outreach/outreachRepository";
 import { localSimulationProvider } from "@/lib/outreach/simulationProvider";
@@ -276,12 +276,16 @@ export class PipelineOrchestrator {
         lead.leadId,
         "PREVIEW_GENERATION",
         async () => {
-          return await generatePersonalizedPreview({
+          const result = await canonicalGenerationOrchestrator.generateWebsite({
+            businessName: lead.businessName,
+            source: "autonomous_pipeline",
             leadId: lead.leadId,
             overrideLead: lead,
             overrideAudit: auditResult.data,
             userId,
           });
+          if (!result.success) throw new Error(result.error?.message || "Preview generation failed");
+          return result;
         }
       );
 

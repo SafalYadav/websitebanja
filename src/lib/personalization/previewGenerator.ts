@@ -325,27 +325,28 @@ function derivePersonalizedServices(
     ];
   }
 
-  // Default / Local Service (Plumbing, Electrical, Trades)
+  // Universal Category-Grounded Services fallback (NO plumbing default)
+  const categoryLabel = lead.category || industry || "Specialized";
   return [
     {
-      title: "24/7 Priority Emergency Service",
-      description: `Rapid dispatch emergency repairs across ${lead.city || "your city"} with upfront pricing and certified technicians.`,
-      price: "Immediate dispatch",
+      title: `${categoryLabel} Consultation & Assessment`,
+      description: `Comprehensive consultation tailored to your specific requirements by verified professionals at ${name}.`,
+      price: "Inquire for details",
     },
     {
-      title: "Complete System Diagnostics",
-      description: "Thorough multi-point inspection identifying potential issues before costly breakdown occurs.",
-      price: "Flat-rate diagnostic",
+      title: `Core ${categoryLabel} Offerings`,
+      description: `End-to-end delivery of premier ${categoryLabel.toLowerCase()} solutions adhering to the highest quality benchmarks.`,
+      price: "Transparent pricing",
     },
     {
-      title: "Certified Commercial & Residential Care",
-      description: `Licensed, insured, and background-checked technicians delivering durable repairs backed by our satisfaction guarantee.`,
-      price: "Written guarantee",
+      title: "Customized Service Engagements",
+      description: `Flexible, client-tailored engagements designed around your timeline, budget, and exact specifications.`,
+      price: "Flexible terms",
     },
     {
-      title: "Preventative Maintenance Agreements",
-      description: "Seasonal system tune-ups, filter replacements, and priority scheduling for worry-free operation year-round.",
-      price: "Annual agreement",
+      title: "Dedicated Client Support & Follow-Through",
+      description: `Ongoing communication, prompt assistance, and meticulous follow-through on every engagement at ${name}.`,
+      price: "Included with service",
     },
   ];
 }
@@ -357,95 +358,11 @@ function derivePersonalizedFeatures(
   lead: BusinessLead,
   audit: LeadAuditReport
 ): Array<{ title: string; description: string }> {
-  const ratingText =
-    lead.rating && lead.reviewCount
-      ? `Rated ${lead.rating}/5.0 across ${lead.reviewCount} customer reviews`
-      : "Trusted local provider";
-
-  const loc = lead.city || lead.address || "Local Area";
-  const indLower = `${lead.category || ""} ${lead.industry || ""}`.toLowerCase();
-
-  // Tailor features to specific industry domains with grounded value propositions
-  if (indLower.includes("rental") || indLower.includes("bike") || indLower.includes("car") || indLower.includes("transport") || indLower.includes("mobility")) {
-    return [
-      {
-        title: "Verified Well-Maintained Fleet",
-        description: `Regularly serviced and inspected vehicles ensuring safety, reliability, and smooth transit across ${loc}.`,
-      },
-      {
-        title: "Transparent Tariffs & Clear Terms",
-        description: "Upfront daily and hourly rates with zero hidden fees, clear deposit policies, and honest fuel terms.",
-      },
-      {
-        title: "Convenient Pickup & Flexible Durations",
-        description: `Prompt vehicle handover at ${lead.address || loc} with hourly, daily, or extended rental options.`,
-      },
-      {
-        title: "Verified Community Reputation",
-        description: `${ratingText} in ${loc}, establishing authentic trust and dependable customer service.`,
-      },
-    ];
-  }
-
-  if (indLower.includes("clinic") || indLower.includes("dental") || indLower.includes("hospital") || indLower.includes("health")) {
-    return [
-      {
-        title: "Certified Clinical Expertise",
-        description: `Experienced practitioners providing personalized diagnostic care and treatment planning in ${loc}.`,
-      },
-      {
-        title: "Strict Sterilization Protocols",
-        description: "Modern clinical hygiene standards ensuring a safe, comfortable, and sanitized environment.",
-      },
-      {
-        title: "Transparent Consultations",
-        description: "Clear explanations of diagnosis, treatment options, and transparent procedural pricing.",
-      },
-      {
-        title: "Verified Community Trust",
-        description: `${ratingText} in ${loc}, backed by authentic patient satisfaction.`,
-      },
-    ];
-  }
-
-  if (indLower.includes("restaurant") || indLower.includes("cafe") || indLower.includes("food") || indLower.includes("dining")) {
-    return [
-      {
-        title: "Fresh Hand-Selected Ingredients",
-        description: `Culinary recipes prepared daily with fresh seasonal ingredients and authentic preparation.`,
-      },
-      {
-        title: "Hygienic & Warm Ambience",
-        description: `Inviting dining space adhering to strict food handling and sanitation standards in ${loc}.`,
-      },
-      {
-        title: "Prompt Reservations & Orders",
-        description: "Convenient table booking and direct takeout pickup with prompt customer service.",
-      },
-      {
-        title: "Verified Local Reputation",
-        description: `${ratingText} in ${loc}, celebrated by local patrons and visitors.`,
-      },
-    ];
-  }
-
   return [
-    {
-      title: "Verified Community Reputation",
-      description: `${ratingText} in ${loc}, establishing a standard of genuine trust and quality.`,
-    },
-    {
-      title: "Direct Responsive Communication",
-      description: `Immediate telephone and email booking channels with dedicated local team support.`,
-    },
-    {
-      title: "Transparent Terms & Standards",
-      description: `Clear service scopes, upfront pricing, and dependable execution on every engagement.`,
-    },
-    {
-      title: "Centrally Positioned Premises",
-      description: `Conveniently located at ${lead.address || loc}, welcoming clients and patrons during standard business hours.`,
-    },
+    { title: "Discuss Your Requirements", description: "Contact the business to discuss the services you need and current availability." },
+    { title: "Confirm Pricing", description: "Ask for current rates, inclusions, and applicable terms before booking." },
+    ...(lead.address ? [{ title: "Find Us", description: lead.address }] : []),
+    ...(lead.rating ? [{ title: "Customer Rating", description: `${lead.rating}/5${lead.reviewCount ? ` across ${lead.reviewCount} reviews` : ""}.` }] : []),
   ];
 }
 
@@ -539,7 +456,7 @@ export async function generatePersonalizedPreview(
         businessName: lead.businessName,
         category: lead.category,
         industry: lead.industry || lead.category,
-        location: lead.city || lead.address || "Vadodara, Gujarat",
+        location: lead.address || (lead.city ? `${lead.city}${lead.state ? `, ${lead.state}` : ""}` : "Verified Commercial Premises"),
         phone: lead.phone,
         email: lead.email,
         website: lead.website,
@@ -548,8 +465,8 @@ export async function generatePersonalizedPreview(
         businessName: lead.businessName,
         industry: lead.industry || lead.category,
         category: lead.category,
-        location: lead.city || lead.address || "Vadodara, Gujarat",
-        summary: `${lead.businessName} is an active local business operating in ${lead.city || "Vadodara"}.`,
+        location: lead.address || (lead.city ? `${lead.city}${lead.state ? `, ${lead.state}` : ""}` : "Verified Commercial Premises"),
+        summary: `${lead.businessName} is an active commercial establishment${lead.city ? ` operating in ${lead.city}` : ""}.`,
         publicContact: { phone: lead.phone, email: lead.email, address: lead.address },
         socialPresence: [],
         reputationSummary: lead.rating ? `${lead.rating}/5.0 (${lead.reviewCount || 0} reviews)` : "Active business",
@@ -592,7 +509,7 @@ export async function generatePersonalizedPreview(
 
   const businessName = lead.businessName;
   const industry = lead.industry || lead.category || "general";
-  const location = lead.city ? `${lead.city}, ${lead.state || "India"}` : lead.address || "Vadodara, Gujarat";
+  const location = lead.address || (lead.city ? `${lead.city}${lead.state ? `, ${lead.state}` : ""}` : "Verified Commercial Premises");
   const designInputs = auditReport.phase10DesignInputs;
 
   // 2.1 Grounded Profile Early Resolution (Ensures Google Places photos and reviews flow to generation)
@@ -615,6 +532,7 @@ export async function generatePersonalizedPreview(
         website: lead.website,
         placeId: resolvedPlaceId,
         userId: request.userId,
+        tenantId: request.userId,
       });
       if (researchRes.success && researchRes.profile) {
         groundedProfile = researchRes.profile;
@@ -698,7 +616,9 @@ export async function generatePersonalizedPreview(
     },
     cta: primaryCta,
     content: {
-      heroTitle: `${businessName} — Dedicated Excellence in ${lead.city || "Vadodara"}`,
+      heroTitle: lead.category
+        ? `${businessName} — Premier ${lead.category}${lead.city ? ` in ${lead.city}` : ""}`
+        : `${businessName}${lead.city ? ` — ${lead.city}` : ""}`,
       heroSubtitle: lead.description || `${businessName} offers distinct high-quality experiences, crafted with uncompromising standards for discerning clients.`,
     },
   };
@@ -808,7 +728,7 @@ export async function generatePersonalizedPreview(
   const faqItems: FAQ[] = [
     {
       question: `What makes ${businessName} the preferred choice in ${lead.city || "the region"}?`,
-      answer: `${businessName} combines verified local reputation (${lead.rating || 5}/5.0 customer satisfaction) with dedicated personal craft, ensuring every detail reflects your specific requirements.`,
+      answer: `${businessName} offers ${lead.category?.replaceAll("_", " ") || "local services"}${lead.city ? ` in ${lead.city}` : ""}. Contact the business to discuss availability and your requirements.`,
     },
     {
       question: `How do I book an appointment or inquire about services?`,
@@ -816,7 +736,7 @@ export async function generatePersonalizedPreview(
     },
     {
       question: `Where is ${businessName} located?`,
-      answer: `We are conveniently situated at ${lead.address || (lead.city ? `${lead.city}, Gujarat` : "our central commercial premises")}.`,
+      answer: `We are conveniently situated at ${lead.address || (lead.city ? `${lead.city}${lead.state ? `, ${lead.state}` : ""}` : "our central commercial premises")}.`,
     },
   ];
 
@@ -829,10 +749,12 @@ export async function generatePersonalizedPreview(
 
   // 7. Hero Assembly & Contrast Protection Validation (Semantically Grounded)
   const baseHero = {
-    title: `${businessName} — Dedicated Excellence in ${lead.city || "Vadodara"}`,
+    title: lead.category
+      ? `${businessName} — Premier ${lead.category}${lead.city ? ` in ${lead.city}` : ""}`
+      : `${businessName}${lead.city ? ` — ${lead.city}` : ""}`,
     subtitle: lead.description || semanticAnalysis.factualTagline || (lead.category ? `Professional ${lead.category} services in ${lead.city || "the local area"} with transparent terms and verified standards.` : `Dedicated local services in ${lead.city || "the area"} with authentic quality.`),
     button: primaryCta,
-    eyebrow: `${designRules.industryProfile.displayName} • Verified Local Preview`,
+    eyebrow: `${lead.category || designRules.industryProfile.displayName} • ${lead.city || "Verified Establishment"}`,
     image: heroImageMeta.imageUrl,
     buttonAction: {
       type: "scroll" as const,
@@ -843,14 +765,14 @@ export async function generatePersonalizedPreview(
     backgroundStyle: computedStrategy.backgroundStrategy,
     spatial3d: computedStrategy.spatial3d,
     badges: [
-      `${lead.rating ? `${lead.rating}★ Rating` : "5★ Rated"}`,
+      ...(lead.rating ? [`${lead.rating}★ Rating`] : []),
       "Verified Local Presence",
       "Direct Communication",
     ],
     trustBadges: [
       "Verified Local Craft",
       "Direct Priority Scheduling",
-      `${lead.rating ? `Google Verified: ${lead.rating}★ Rating` : "Verified Business"}`,
+      ...(lead.rating ? [`Google: ${lead.rating}★ Rating`] : []),
     ],
   };
 
@@ -889,7 +811,7 @@ export async function generatePersonalizedPreview(
     brand: {
       name: businessName,
       industry: normalizedInd,
-      tagline: `${businessName} — ${taglineCategory} in ${lead.city || "Vadodara"}`,
+      tagline: `${businessName} — ${taglineCategory}${lead.city ? ` in ${lead.city}` : ""}`,
       description: lead.description || `${businessName} offers distinct high-quality experiences.`,
     },
     navbar: {
@@ -907,7 +829,7 @@ export async function generatePersonalizedPreview(
     hero: protectedHero,
     about: {
       title: `The Story of ${businessName}`,
-      content: `${lead.description || `${businessName} was founded on a commitment to uncompromising craft.`} Guided by our verified ${lead.rating || 5}/5.0 customer satisfaction record, our mission is to deliver timeless distinction and measurable excellence in every client engagement across ${lead.city || "the region"}.`,
+      content: lead.description || `${businessName} offers ${lead.category?.replaceAll("_", " ") || "local services"}${lead.city ? ` in ${lead.city}` : ""}. Contact the business for details and availability.`,
       image: aboutImageMeta.imageUrl,
     },
     services: servicesData,
@@ -917,10 +839,10 @@ export async function generatePersonalizedPreview(
       : [], // Anti-fabrication rule: NEVER inject synthetic fake testimonials if 0 real reviews exist
     faq: faqItems,
     contact: {
-      phone: lead.phone || "+91 98250 11223",
-      email: lead.email || `${defaultEmailPrefix}@websitebanja.local`,
-      address: lead.address || (lead.city ? `${lead.city}, Gujarat` : "Commercial Premises"),
-      whatsapp: lead.phone,
+      phone: lead.phone || undefined,
+      email: lead.email || undefined,
+      address: lead.address || (lead.city ? `${lead.city}${lead.state ? `, ${lead.state}` : ""}` : "Commercial Premises"),
+      whatsapp: lead.phone || undefined,
     },
     footer: {
       copyright: `© ${new Date().getFullYear()} ${businessName}. All rights reserved. Generated via WebsiteBanja Autonomous Preview Pipeline.`,
@@ -1102,7 +1024,7 @@ export async function generatePersonalizedPreview(
     newWebsiteImprovements: [
       `Engineered a high-contrast ${archetype} digital showcase resolving previous ${auditReport.website.status} web limitations.`,
       `Integrated direct 1-click WhatsApp concierge and phone booking (${lead.phone || "direct channel"}).`,
-      `Highlighted authentic local trust signals: ${lead.rating || 5}/5.0 rating across ${lead.reviewCount || 0} reviews in ${lead.city || "Vadodara"}.`,
+      lead.rating ? `Listed rating: ${lead.rating}/5${lead.reviewCount ? ` across ${lead.reviewCount} reviews` : ""}.` : "No customer rating was supplied.",
       `Implemented bespoke section architecture with 100% unique, license-verified photography.`,
     ],
     personalizationPoints: [

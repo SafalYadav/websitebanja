@@ -352,8 +352,8 @@ export interface FAQ {
 }
 
 export interface Contact {
-  phone: string;
-  email: string;
+  phone?: string;
+  email?: string;
   address: string;
   whatsapp?: string;
 }
@@ -450,6 +450,7 @@ export interface ElementSelection {
 }
 
 export interface WebsiteData {
+  photoCredits?: Array<{ name: string; uri?: string }>;
   businessName?: string;
   brand?: BrandIdentity;
   hero: Hero;

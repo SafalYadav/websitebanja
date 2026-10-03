@@ -11,6 +11,7 @@
 import type { SectionPurpose, BusinessSectionPlan, SectionDescriptor } from "./types";
 import type { SemanticBusinessAnalysis } from "../semantic/businessSemanticReasoner";
 import type { GroundedBusinessProfile } from "../grounding/types";
+import { placeContactAtEnd } from "./sectionOrder";
 
 export class BusinessSectionPlanner {
   private static instance: BusinessSectionPlanner;
@@ -38,11 +39,26 @@ export class BusinessSectionPlanner {
     const purposeMap: Record<string, SectionPurpose> = {
       hero: "HERO",
       about: "STORY",
+      story: "STORY",
       services: "OFFERINGS",
+      offerings: "OFFERINGS",
+      products: "OFFERINGS",
+      catalog: "OFFERINGS",
+      curated_collection: "OFFERINGS",
       features: "VALUE_PROP",
+      highlights: "VALUE_PROP",
       reviews: "PROOF",
+      testimonials: "PROOF",
+      social_proof: "PROOF",
       faq: "FAQ",
+      faqs: "FAQ",
       contact: "CONTACT",
+      booking: "CONTACT",
+      reservation: "CONTACT",
+      inquiry: "CONTACT",
+      appointment: "CONTACT",
+      lead_capture: "CONTACT",
+      get_in_touch: "CONTACT",
       footer: "NAVIGATION",
     };
 
@@ -137,7 +153,8 @@ export class BusinessSectionPlanner {
     const uniqueSections: string[] = [];
 
     for (const sec of sections) {
-      const purpose = purposeMap[sec] || ("VALUE_PROP" as SectionPurpose);
+      const normalized = sec.toLowerCase().trim();
+      const purpose = purposeMap[normalized] || ("VALUE_PROP" as SectionPurpose);
 
       // Navigation / Footer is exempt from single-purpose deduplication
       if (purpose === "NAVIGATION") {
@@ -159,7 +176,7 @@ export class BusinessSectionPlanner {
       uniqueSections.push("footer");
     }
 
-    return uniqueSections;
+    return placeContactAtEnd(uniqueSections);
   }
 }
 

@@ -7,7 +7,10 @@ import type { EvidenceSourceType } from "./types";
 
 export type AssetType =
   | "BUSINESS_PHOTO"
+  | "WEBSITE_CRAWL_IMAGE"
+  | "CLIENT_ASSET"
   | "STOCK_FALLBACK_IMAGE"
+  | "TYPOGRAPHIC_LAYOUT"
   | "GENERATED_VISUAL"
   | "BUSINESS_REVIEW"
   | "GROUNDED_FACT";

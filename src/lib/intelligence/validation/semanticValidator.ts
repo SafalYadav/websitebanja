@@ -310,6 +310,135 @@ export function validateSemantics(context: ValidationContext): StageValidationRe
     });
   }
 
+  const fullText = JSON.stringify(data).toLowerCase();
+
+  // 5. Forbidden Template Slogans & Leaks
+  if (fullText.includes("dedicated excellence in") || fullText.includes("verified local preview")) {
+    failures.push({
+      id: randomUUID(),
+      stage: "SEMANTIC",
+      severity: "CRITICAL",
+      failure: "Website contains forbidden generic template copy ('Dedicated Excellence in...' or 'Verified Local Preview')",
+      evidence: "Found generic boilerplate strings in generated content",
+      affectedElement: "hero.title",
+      suggestedFix: "Regenerate hero title and eyebrow grounded in specific business offerings and authentic location",
+      blocking: true,
+      field: "hero.title",
+      ruleCode: "SEM_FORBIDDEN_BOILERPLATE_TEXT",
+    });
+  }
+
+  if (fullText.includes("autonomous architecture engine") || fullText.includes("sub-second rendering")) {
+    failures.push({
+      id: randomUUID(),
+      stage: "SEMANTIC",
+      severity: "CRITICAL",
+      failure: "Website contains leaked internal developer/architecture slogans in customer-facing content",
+      evidence: "Found 'Autonomous Architecture Engine' or 'Sub-Second Rendering' in website data",
+      affectedElement: "features",
+      suggestedFix: "Replace with business-relevant value propositions",
+      blocking: true,
+      field: "features",
+      ruleCode: "SEM_LEAKED_INTERNAL_SLOGANS",
+    });
+  }
+
+  if (fullText.includes("98250 11223") || fullText.includes("websitebanja.local")) {
+    failures.push({
+      id: randomUUID(),
+      stage: "SEMANTIC",
+      severity: "CRITICAL",
+      failure: "Website contains fabricated dummy phone number or placeholder email",
+      evidence: "Found '+91 98250 11223' or '@websitebanja.local' in contact fields",
+      affectedElement: "contact.phone",
+      suggestedFix: "Use only verified business phone or omit contact number until customer provides",
+      blocking: true,
+      field: "contact.phone",
+      ruleCode: "SEM_FABRICATED_CONTACT_DATA",
+    });
+  }
+
+  // Location Contradiction: Vadodara leak on non-Vadodara business
+  const businessCity = (grounded?.location?.city || context.businessLocation || "").toLowerCase();
+  if (businessCity && !businessCity.includes("vadodara") && fullText.includes("vadodara")) {
+    failures.push({
+      id: randomUUID(),
+      stage: "SEMANTIC",
+      severity: "CRITICAL",
+      failure: `Website content contains 'Vadodara' but business is verified in '${grounded?.location?.city || context.businessLocation}'`,
+      evidence: `Target city: ${grounded?.location?.city || context.businessLocation}; found 'Vadodara' in generated text`,
+      affectedElement: "location",
+      suggestedFix: "Cleanse all references to default city Vadodara",
+      blocking: true,
+      field: "location",
+      ruleCode: "SEM_CITY_LEAK_CONTRADICTION",
+    });
+  }
+
+  // 6. Duplicate Contact Purpose Check
+  const contactSectionsCount = sectionOrder.filter((s) =>
+    ["contact", "booking", "reservation", "inquiry", "appointment", "lead_capture", "get_in_touch"].includes(s.toLowerCase().trim())
+  ).length;
+  if (contactSectionsCount > 1) {
+    failures.push({
+      id: randomUUID(),
+      stage: "SEMANTIC",
+      severity: "CRITICAL",
+      failure: `Website renders ${contactSectionsCount} duplicate contact/booking sections — only 1 allowed per page`,
+      evidence: `Found duplicate contact sections in sectionOrder: ${sectionOrder.join(", ")}`,
+      affectedElement: "sectionOrder",
+      suggestedFix: "Deduplicate contact and booking sections into a single primary contact action",
+      blocking: true,
+      field: "sectionOrder",
+      ruleCode: "SEM_DUPLICATE_CONTACT_SECTIONS",
+    });
+  }
+
+  const contactIndex = sectionOrder.findIndex((section) =>
+    ["contact", "booking", "reservation", "inquiry", "appointment", "lead_capture", "get_in_touch"].includes(section.toLowerCase().trim())
+  );
+  const footerIndex = sectionOrder.findIndex((section) => section.toLowerCase().trim() === "footer");
+  if (contactIndex >= 0 && contactIndex !== (footerIndex >= 0 ? footerIndex - 1 : sectionOrder.length - 1)) {
+    failures.push({
+      id: randomUUID(),
+      stage: "SEMANTIC",
+      severity: "HIGH",
+      failure: "The contact/conversion section must be the final content section before the footer",
+      evidence: `Section order: ${sectionOrder.join(" -> ")}`,
+      affectedElement: "sectionOrder",
+      suggestedFix: "Move the single contact/conversion section immediately before the footer",
+      blocking: true,
+      field: "sectionOrder",
+      ruleCode: "SEM_CONTACT_NOT_LAST",
+    });
+  }
+
+  // 7. Developer Imagery on Non-Tech Business
+  const isTechIndustry = effectiveIndustry.includes("saas") || effectiveIndustry.includes("software") || effectiveIndustry.includes("tech");
+  if (!isTechIndustry) {
+    const allImagesStr = JSON.stringify([
+      (data.hero as any)?.image,
+      (data.about as any)?.image,
+      ...((data.services as any[]) || []).map((s) => s.image),
+      ...((data.features as any[]) || []).map((f) => f.image),
+    ]).toLowerCase();
+
+    if (allImagesStr.includes("photo-1531482615713") || allImagesStr.includes("photo-1517694712")) {
+      failures.push({
+        id: randomUUID(),
+        stage: "SEMANTIC",
+        severity: "CRITICAL",
+        failure: `Irrelevant software developer/laptop imagery displayed on non-tech business (${effectiveIndustry || effectiveName})`,
+        evidence: "Found coding team or developer laptop photo in non-tech website assets",
+        affectedElement: "images",
+        suggestedFix: "Replace with category-grounded imagery or typographic layout",
+        blocking: true,
+        field: "images",
+        ruleCode: "SEM_IRRELEVANT_DEVELOPER_IMAGE",
+      });
+    }
+  }
+
   const hasBlocking = failures.some((f) => f.blocking);
 
 

@@ -12,14 +12,46 @@ import type {
   GroundedAssetSelectionResult,
   RawPlacesPhoto,
   RawPlacesReview,
+  AssetType,
+  AssetAttribution,
 } from "./assetTypes";
-import type { GroundedBusinessProfile } from "./types";
+import type { GroundedBusinessProfile, EvidenceSourceType } from "./types";
 
 export interface AssetSelectorOptions {
   photos?: RawPlacesPhoto[];
   reviews?: RawPlacesReview[];
   category?: string;
   fallbackImageGenerator?: (role: string, itemIndex?: number, itemTitle?: string) => string;
+}
+
+export function scoreGooglePlacesPhoto(photo: RawPlacesPhoto): { score: number; isHeroSuitable: boolean; aspectRatio: number } {
+  let score = 50;
+  const width = photo.widthPx || 0;
+  const height = photo.heightPx || 0;
+  const aspectRatio = width > 0 && height > 0 ? width / height : 1.33;
+
+  if (width >= 1200 && height >= 800) {
+    score += 25;
+  } else if (width < 600 || height < 400) {
+    score -= 30;
+  }
+
+  if (aspectRatio >= 1.3 && aspectRatio <= 2.0) {
+    score += 20;
+  } else if (aspectRatio < 1.0) {
+    score -= 20;
+  }
+
+  if (photo.authorAttributions && photo.authorAttributions.length > 0) {
+    score += 5;
+  }
+
+  const finalScore = Math.max(0, Math.min(100, score));
+  return {
+    score: finalScore,
+    isHeroSuitable: finalScore >= 60 && aspectRatio >= 1.2,
+    aspectRatio,
+  };
 }
 
 export class GroundedAssetSelector {
@@ -35,7 +67,12 @@ export class GroundedAssetSelector {
   }
 
   /**
-   * Selects and allocates verified business assets and clean fallbacks for website generation.
+   * Selects and allocates verified business assets using the 5-Tier Fallback Hierarchy:
+   * Tier 1: Verified Google Places Photos (scored and sorted)
+   * Tier 2: Official Website Crawl Photos (from verified business website)
+   * Tier 3: Client-Provided Business Assets
+   * Tier 4: Category-Gated Semantic Stock (strictly positive matched, never SaaS for non-SaaS)
+   * Tier 5: Neutral Typographic Layout (no irrelevant stock imagery)
    */
   public selectAssets(
     profile: GroundedBusinessProfile,
@@ -46,11 +83,21 @@ export class GroundedAssetSelector {
     const category = options.category || profile.archetype || "commercial";
     const freshness = profile.freshness.freshnessStatus;
 
+    // Raw sources from profile or options
     const rawPhotos = options.photos && options.photos.length > 0 ? options.photos : profile.placesPhotos || [];
     const rawReviews = options.reviews && options.reviews.length > 0 ? options.reviews : profile.placesReviews || [];
+    const websitePhotos = profile.websitePhotos || [];
+    const clientAssets = profile.clientAssets || [];
 
+    // Sort Google Places photos by quality/resolution score
+    const sortedGooglePhotos = [...rawPhotos].sort((a, b) => {
+      return scoreGooglePlacesPhoto(b).score - scoreGooglePlacesPhoto(a).score;
+    });
+
+    const usedGooglePhotos = new Set<string>();
+    const usedWebsitePhotos = new Set<string>();
+    const usedClientAssets = new Set<string>();
     const selectedAssets: GroundedBusinessAsset[] = [];
-    const usedPhotoNames = new Set<string>();
 
     const fallbackGen =
       options.fallbackImageGenerator ||
@@ -66,113 +113,138 @@ export class GroundedAssetSelector {
         return res.imageUrl;
       });
 
-    // ----------------------------------------------------
-    // 1. Hero Asset Selection
-    // ----------------------------------------------------
-    let heroAsset: GroundedBusinessAsset | undefined;
-    if (rawPhotos.length > 0) {
-      const p0 = rawPhotos[0];
-      usedPhotoNames.add(p0.name);
-      heroAsset = {
-        id: `ast_hero_${crypto.randomBytes(3).toString("hex")}`,
-        type: "BUSINESS_PHOTO",
-        source: "google_places",
-        sourceReference: p0.name,
-        businessId,
-        targetSection: "hero",
-        contentUrl: googlePlacesSource.resolvePhotoUrl(p0.name, 1600, 1000),
-        photoReference: p0.name,
-        photoDimensions: { widthPx: p0.widthPx, heightPx: p0.heightPx },
-        attribution: p0.authorAttributions?.[0],
-        evidenceId: profile.evidence.find((e) => e.supports === "visual.photos")?.id || "ev_places_photo",
-        confidence: 0.98,
-        freshness,
-        allowedForGeneration: true,
-        isFallback: false,
-        metadata: { position: "hero_primary", exteriorOrMain: true },
-      };
-    } else {
-      const fallbackUrl = fallbackGen("hero");
-      heroAsset = {
-        id: `ast_hero_fallback_${crypto.randomBytes(3).toString("hex")}`,
-        type: "STOCK_FALLBACK_IMAGE",
+    // Helper: 5-Tier Image Resolver for a specific section role
+    const resolveTieredImage = (
+      targetSection: GroundedBusinessAsset["targetSection"],
+      role: string,
+      reqWidth = 1200,
+      reqHeight = 800,
+      itemIndex?: number,
+      itemTitle?: string
+    ): GroundedBusinessAsset => {
+      // Tier 1: Google Places Photo
+      const availableGoogle = sortedGooglePhotos.filter((p) => !usedGooglePhotos.has(p.name));
+      if (availableGoogle.length > 0) {
+        const p = availableGoogle[0];
+        usedGooglePhotos.add(p.name);
+        return {
+          id: `ast_${targetSection}_${crypto.randomBytes(3).toString("hex")}`,
+          type: "BUSINESS_PHOTO",
+          source: "google_places",
+          sourceReference: p.name,
+          businessId,
+          targetSection,
+          contentUrl: googlePlacesSource.resolvePhotoUrl(p.name, reqWidth, reqHeight),
+          photoReference: p.name,
+          photoDimensions: { widthPx: p.widthPx, heightPx: p.heightPx },
+          attribution: p.authorAttributions?.[0],
+          evidenceId: profile.evidence.find((e) => e.supports === "visual.photos")?.id || "ev_places_photo",
+          confidence: 0.98,
+          freshness,
+          allowedForGeneration: true,
+          isFallback: false,
+          metadata: { tier: 1, position: targetSection },
+        };
+      }
+
+      // Tier 2: Official Website Crawl Asset
+      const availableWebsite = websitePhotos.filter((w) => !usedWebsitePhotos.has(w.url));
+      if (availableWebsite.length > 0) {
+        const w = availableWebsite[0];
+        usedWebsitePhotos.add(w.url);
+        return {
+          id: `ast_${targetSection}_crawl_${crypto.randomBytes(3).toString("hex")}`,
+          type: "WEBSITE_CRAWL_IMAGE",
+          source: "business_website",
+          sourceReference: w.url,
+          businessId,
+          targetSection,
+          contentUrl: w.url,
+          attribution: { displayName: `${businessName} Official Website` },
+          evidenceId: "ev_website_crawl_photo",
+          confidence: 0.90,
+          freshness,
+          allowedForGeneration: true,
+          isFallback: false,
+          metadata: { tier: 2, position: targetSection, sourceUrl: w.sourceUrl },
+        };
+      }
+
+      // Tier 3: Client-Provided Business Asset
+      const availableClient = clientAssets.filter((c) => !usedClientAssets.has(c.url));
+      if (availableClient.length > 0) {
+        const c = availableClient[0];
+        usedClientAssets.add(c.url);
+        return {
+          id: `ast_${targetSection}_client_${crypto.randomBytes(3).toString("hex")}`,
+          type: "CLIENT_ASSET",
+          source: "user_input",
+          sourceReference: c.url,
+          businessId,
+          targetSection,
+          contentUrl: c.url,
+          evidenceId: "ev_client_uploaded_asset",
+          confidence: 0.95,
+          freshness,
+          allowedForGeneration: true,
+          isFallback: false,
+          metadata: { tier: 3, label: c.label },
+        };
+      }
+
+      // Tier 4: Category-Gated Semantic Stock
+      const isSaaSOrTech = /saas|software|platform|tech|devops|api/i.test(category) || /saas/i.test(profile.archetype);
+      const fallbackUrl = fallbackGen(role, itemIndex, itemTitle);
+
+      // Guard: Never use developer/laptop imagery for non-tech businesses
+      const isDevImage = fallbackUrl && /photo-1531482615713|photo-1550751827|photo-1517694712/i.test(fallbackUrl);
+      if (fallbackUrl && (!isDevImage || isSaaSOrTech)) {
+        return {
+          id: `ast_${targetSection}_stock_${crypto.randomBytes(3).toString("hex")}`,
+          type: "STOCK_FALLBACK_IMAGE",
+          source: "user_input",
+          sourceReference: "unsplash_semantic",
+          businessId,
+          targetSection,
+          contentUrl: fallbackUrl,
+          evidenceId: `ev_stock_fallback_${targetSection}`,
+          confidence: 0.70,
+          freshness,
+          allowedForGeneration: true,
+          isFallback: true,
+          metadata: { tier: 4, note: "Curated category-gated stock asset" },
+        };
+      }
+
+      // Tier 5: Neutral Typographic Layout (No irrelevant stock image)
+      return {
+        id: `ast_${targetSection}_typo_${crypto.randomBytes(3).toString("hex")}`,
+        type: "TYPOGRAPHIC_LAYOUT",
         source: "user_input",
-        sourceReference: "unsplash_semantic",
+        sourceReference: "typographic_design",
         businessId,
-        targetSection: "hero",
-        contentUrl: fallbackUrl,
-        evidenceId: "ev_stock_fallback_hero",
-        confidence: 0.70,
+        targetSection,
+        contentUrl: undefined,
+        evidenceId: `ev_typographic_${targetSection}`,
+        confidence: 0.85,
         freshness,
         allowedForGeneration: true,
         isFallback: true,
-        metadata: { note: "High-quality stock fallback image; verified business photo unavailable" },
+        metadata: { tier: 5, note: "Neutral high-design typographic layout without irrelevant stock" },
       };
-    }
+    };
+
+    // ----------------------------------------------------
+    // 1. Hero Asset Selection
+    // ----------------------------------------------------
+    const heroAsset = resolveTieredImage("hero", "hero", 1600, 1000);
     selectedAssets.push(heroAsset);
 
     // ----------------------------------------------------
     // 2. About Asset Selection
     // ----------------------------------------------------
-    let aboutAsset: GroundedBusinessAsset | undefined;
-    const remainingPhotosForAbout = rawPhotos.filter((p) => !usedPhotoNames.has(p.name));
-    if (remainingPhotosForAbout.length > 0) {
-      const p1 = remainingPhotosForAbout[0];
-      usedPhotoNames.add(p1.name);
-      aboutAsset = {
-        id: `ast_about_${crypto.randomBytes(3).toString("hex")}`,
-        type: "BUSINESS_PHOTO",
-        source: "google_places",
-        sourceReference: p1.name,
-        businessId,
-        targetSection: "about",
-        contentUrl: googlePlacesSource.resolvePhotoUrl(p1.name, 1200, 800),
-        photoReference: p1.name,
-        photoDimensions: { widthPx: p1.widthPx, heightPx: p1.heightPx },
-        attribution: p1.authorAttributions?.[0],
-        evidenceId: profile.evidence.find((e) => e.supports === "visual.photos")?.id || "ev_places_photo",
-        confidence: 0.95,
-        freshness,
-        allowedForGeneration: true,
-        isFallback: false,
-        metadata: { position: "about_story" },
-      };
-    } else {
-      const fallbackUrl = fallbackGen("about");
-      aboutAsset = {
-        id: `ast_about_fallback_${crypto.randomBytes(3).toString("hex")}`,
-        type: "STOCK_FALLBACK_IMAGE",
-        source: "user_input",
-        sourceReference: "unsplash_semantic",
-        businessId,
-        targetSection: "about",
-        contentUrl: fallbackUrl,
-        evidenceId: "ev_stock_fallback_about",
-        confidence: 0.70,
-        freshness,
-        allowedForGeneration: true,
-        isFallback: true,
-        metadata: { note: "High-quality stock fallback image; verified business photo unavailable" },
-      };
-    }
+    const aboutAsset = resolveTieredImage("about", "about", 1200, 800);
     selectedAssets.push(aboutAsset);
-
-    // Remaining photos after Hero and About
-    const remainingPhotos = rawPhotos.filter((p) => !usedPhotoNames.has(p.name));
-    const servicePhotosPool = remainingPhotos.filter((p) => p.name.includes("srv") || p.name.includes("service"));
-    const galleryPhotosPool = remainingPhotos.filter((p) => p.name.includes("gal") || p.name.includes("gallery"));
-    const neutralPhotos = remainingPhotos.filter((p) => !servicePhotosPool.includes(p) && !galleryPhotosPool.includes(p));
-
-    // Allocate neutral photos: first 2 to gallery if gallery empty, then to services, then rest to gallery
-    for (const ph of neutralPhotos) {
-      if (galleryPhotosPool.length < 2) {
-        galleryPhotosPool.push(ph);
-      } else if (servicePhotosPool.length < profile.services.length) {
-        servicePhotosPool.push(ph);
-      } else {
-        galleryPhotosPool.push(ph);
-      }
-    }
 
     // ----------------------------------------------------
     // 3. Service Assets Selection (Deduplicated)
@@ -182,58 +254,22 @@ export class GroundedAssetSelector {
 
     for (let idx = 0; idx < servicesCount; idx++) {
       const serviceTitle = profile.services[idx]?.name || `Service ${idx + 1}`;
-      if (servicePhotosPool.length > 0) {
-        const ph = servicePhotosPool.shift()!;
-        usedPhotoNames.add(ph.name);
-        const sAsset: GroundedBusinessAsset = {
-          id: `ast_service_${idx}_${crypto.randomBytes(3).toString("hex")}`,
-          type: "BUSINESS_PHOTO",
-          source: "google_places",
-          sourceReference: ph.name,
-          businessId,
-          targetSection: "services",
-          contentUrl: googlePlacesSource.resolvePhotoUrl(ph.name, 800, 600),
-          photoReference: ph.name,
-          photoDimensions: { widthPx: ph.widthPx, heightPx: ph.heightPx },
-          attribution: ph.authorAttributions?.[0],
-          evidenceId: profile.evidence.find((e) => e.supports === "visual.photos")?.id || "ev_places_photo",
-          confidence: 0.92,
-          freshness,
-          allowedForGeneration: true,
-          isFallback: false,
-          metadata: { serviceIndex: idx, serviceTitle },
-        };
-        serviceAssets[idx] = sAsset;
-        selectedAssets.push(sAsset);
-      } else {
-        const fallbackUrl = fallbackGen("services", idx, serviceTitle);
-        const sAsset: GroundedBusinessAsset = {
-          id: `ast_service_fallback_${idx}_${crypto.randomBytes(3).toString("hex")}`,
-          type: "STOCK_FALLBACK_IMAGE",
-          source: "user_input",
-          sourceReference: "unsplash_semantic",
-          businessId,
-          targetSection: "services",
-          contentUrl: fallbackUrl,
-          evidenceId: `ev_stock_fallback_service_${idx}`,
-          confidence: 0.70,
-          freshness,
-          allowedForGeneration: true,
-          isFallback: true,
-          metadata: { serviceIndex: idx, serviceTitle },
-        };
-        serviceAssets[idx] = sAsset;
-        selectedAssets.push(sAsset);
-      }
+      const sAsset = resolveTieredImage("services", "services", 800, 600, idx, serviceTitle);
+      sAsset.metadata = { ...sAsset.metadata, serviceIndex: idx, serviceTitle };
+      serviceAssets[idx] = sAsset;
+      selectedAssets.push(sAsset);
     }
 
     // ----------------------------------------------------
     // 4. Gallery / Features Asset Selection
     // ----------------------------------------------------
     const galleryAssets: GroundedBusinessAsset[] = [];
-    for (let i = 0; i < Math.min(galleryPhotosPool.length, 6); i++) {
-      const ph = galleryPhotosPool[i];
-      usedPhotoNames.add(ph.name);
+    const remainingGoogleForGallery = sortedGooglePhotos.filter((p) => !usedGooglePhotos.has(p.name));
+    const galleryCount = Math.min(remainingGoogleForGallery.length, 6);
+
+    for (let i = 0; i < galleryCount; i++) {
+      const ph = remainingGoogleForGallery[i];
+      usedGooglePhotos.add(ph.name);
       const galAsset: GroundedBusinessAsset = {
         id: `ast_gallery_${i}_${crypto.randomBytes(3).toString("hex")}`,
         type: "BUSINESS_PHOTO",
@@ -250,7 +286,7 @@ export class GroundedAssetSelector {
         freshness,
         allowedForGeneration: true,
         isFallback: false,
-        metadata: { galleryIndex: i },
+        metadata: { tier: 1, galleryIndex: i },
       };
       galleryAssets.push(galAsset);
       selectedAssets.push(galAsset);
@@ -264,11 +300,11 @@ export class GroundedAssetSelector {
       const rv = rawReviews[i];
       const text = rv.text?.text || "";
       const author = rv.authorAttribution?.displayName || "Verified Customer";
-      const rating = rv.rating ?? 5;
+      const rating = rv.rating;
 
       const sanitized = sanitizeReview(text, author);
       if (!sanitized.isSafe) continue;
-      if (rating < 4.0) continue; // Only showcase positive verified endorsements
+      if (rating !== undefined && (rating < 1 || rating > 5)) continue;
 
       const rAsset: GroundedBusinessAsset = {
         id: `ast_review_${i}_${crypto.randomBytes(3).toString("hex")}`,

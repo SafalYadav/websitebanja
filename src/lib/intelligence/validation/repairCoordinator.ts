@@ -15,6 +15,7 @@ import type {
   ValidationContext,
   CeoValidationAlert,
 } from "./types";
+import { placeContactAtEnd } from "../planning/sectionOrder";
 import type { TaskEnvelope, TaskResultEnvelope } from "../delegation/delegationTypes";
 import { BossDelegator } from "../delegation/bossDelegator";
 import { emitAgentEvent } from "@/lib/telemetry/agentTelemetry";
@@ -295,7 +296,7 @@ export class RepairCoordinator {
       case "SEM_TOO_FEW_SECTIONS": {
         data.sectionOrder = ["hero", "services", "about", "contact", "footer"];
         if (!data.hero) data.hero = { title: `Welcome to ${verifiedName}`, subtitle: "Dedicated Service", button: "Contact Us" };
-        if (!data.contact) data.contact = { phone: "+91 9876543210", email: "info@business.com", address: "City Center" };
+        if (!data.contact) data.contact = { phone: grounded?.identity?.phone, email: undefined, address: grounded?.location?.formattedAddress || "Business Location" };
         if (!data.footer) data.footer = { copyright: `© ${new Date().getFullYear()} ${verifiedName}. All rights reserved.` };
         return "Injected minimum required structural sections (hero, services, about, contact, footer)";
       }
@@ -312,11 +313,91 @@ export class RepairCoordinator {
 
       case "SEM_MISSING_CONTACT_SECTION": {
         data.contact = {
-          phone: "+91 9876543210",
-          email: "info@business.com",
+          phone: grounded?.identity?.phone,
+          email: undefined,
           address: grounded?.location?.formattedAddress || "Business Location",
         };
         return "Added contact section with contact details";
+      }
+
+      case "SEM_FORBIDDEN_BOILERPLATE_TEXT": {
+        const archetype = grounded?.archetype || data.category || "Professional";
+        const city = grounded?.location?.city || "";
+        if (data.hero) {
+          data.hero.title = `${verifiedName} — Premier ${archetype.replace(/_/g, " ")}${city ? ` in ${city}` : ""}`;
+          data.hero.eyebrow = `${archetype.replace(/_/g, " ")} • ${city || "Verified Establishment"}`;
+        }
+        return `Cleansed boilerplate copy; regenerated hero title and eyebrow for ${verifiedName}`;
+      }
+
+      case "SEM_LEAKED_INTERNAL_SLOGANS": {
+        data.features = [
+          { title: "Verified Quality Standards", description: "Proven methods and uncompromising attention to detail." },
+          { title: "Prompt Responsive Service", description: "Clear scheduling and reliable turnaround on all requests." },
+          { title: "Direct Dedicated Support", description: "Personal assistance from knowledgeable staff." },
+        ];
+        return "Replaced internal developer/architecture slogans with customer-facing features";
+      }
+
+      case "SEM_FABRICATED_CONTACT_DATA": {
+        if (data.contact) {
+          if (data.contact.phone && String(data.contact.phone).includes("98250")) {
+            data.contact.phone = grounded?.identity?.phone || undefined;
+          }
+          if (data.contact.email && String(data.contact.email).includes("websitebanja.local")) {
+            data.contact.email = undefined;
+          }
+        }
+        return "Sanitized fabricated phone/email from contact information";
+      }
+
+      case "SEM_CITY_LEAK_CONTRADICTION": {
+        const targetCity = grounded?.location?.city || context.businessLocation || "";
+        let jsonStr = JSON.stringify(data);
+        jsonStr = jsonStr.replace(/\bvadodara\b/gi, targetCity || "the local area");
+        const repairedObj = JSON.parse(jsonStr);
+        Object.assign(data, repairedObj);
+        return `Replaced leaked city references with verified location "${targetCity}"`;
+      }
+
+      case "SEM_DUPLICATE_CONTACT_SECTIONS": {
+        if (Array.isArray(data.sectionOrder)) {
+          let hasFoundContact = false;
+          data.sectionOrder = data.sectionOrder.filter((s: string) => {
+            const isContact = ["contact", "booking", "reservation", "inquiry", "appointment", "lead_capture", "get_in_touch"].includes(s.toLowerCase().trim());
+            if (isContact) {
+              if (hasFoundContact) return false;
+              hasFoundContact = true;
+            }
+            return true;
+          });
+          data.sectionOrder = placeContactAtEnd(data.sectionOrder);
+        }
+        return "Deduplicated redundant contact and booking sections into a single primary contact section";
+      }
+
+      case "SEM_CONTACT_NOT_LAST": {
+        if (Array.isArray(data.sectionOrder)) {
+          data.sectionOrder = placeContactAtEnd(data.sectionOrder);
+          if (Array.isArray(data.pages)) {
+            data.pages = data.pages.map((page: { sectionOrder?: string[] }) => ({
+              ...page,
+              sectionOrder: placeContactAtEnd(page.sectionOrder || data.sectionOrder),
+            }));
+          }
+          return "Moved the contact/conversion section to the final position before the footer";
+        }
+        return null;
+      }
+
+      case "SEM_IRRELEVANT_DEVELOPER_IMAGE": {
+        if (data.hero) {
+          delete data.hero.image;
+        }
+        if (Array.isArray(data.features)) {
+          data.features.forEach((f: any) => delete f.image);
+        }
+        return "Removed irrelevant software developer images in favor of neutral design layout";
       }
 
       case "SEM_SERVICE_INDUSTRY_MISMATCH": {
