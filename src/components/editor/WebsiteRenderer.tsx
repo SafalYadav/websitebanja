@@ -174,7 +174,8 @@ export default function WebsiteRenderer({
       if (text.includes("architect") || text.includes("interior design") || text.includes("spatial")) return "Architecture Studio";
       if (text.includes("restaurant") || text.includes("cafe") || text.includes("coffee") || text.includes("dining") || text.includes("bistro")) return "Restaurant & Cafe";
       if (text.includes("couture") || (text.includes("fashion") && !text.includes("agency"))) return "Luxury Fashion";
-      if (text.includes("saas") || text.includes("software") || text.includes("ai platform") || text.includes("pipeline")) return "SaaS & Technology";
+      if (text.includes("spa") || text.includes("massage") || text.includes("wellness")) return "Wellness Spa";
+      if (/\b(?:saas|software|ai platform|pipeline)\b/i.test(text)) return "SaaS & Technology";
       if (text.includes("electric") || text.includes("plumb") || text.includes("locksmith") || text.includes("hvac")) return "Local Service Business";
       if (text.includes("agency") || text.includes("branding") || text.includes("creative studio")) return "Creative Agency";
 
@@ -217,7 +218,7 @@ export default function WebsiteRenderer({
     typography: websiteTypography,
   });
 
-  const fontImportUrl = React.useMemo(() => {
+  const fontImportUrl = (() => {
     if (!websiteTypography) return null;
     const cleanFont = (f?: string) => (f ? f.split(",")[0].replace(/['"]/g, "").trim() : "");
     const hFamily = cleanFont(websiteTypography.headingFont);
@@ -228,7 +229,7 @@ export default function WebsiteRenderer({
       .map((f) => `family=${encodeURIComponent(f)}:wght@300;400;500;600;700;800`)
       .join("&");
     return `https://fonts.googleapis.com/css2?${query}&display=swap`;
-  }, [websiteTypography]);
+  })();
 
   if (!rawWebsite && !website) {
     return (
@@ -410,7 +411,7 @@ export default function WebsiteRenderer({
           const cat = (resolvedCategory || "").toLowerCase();
           if (cat.includes("restaurant") || cat.includes("cafe") || cat.includes("dining") || cat.includes("bistro")) return "warm_glow";
           if (cat.includes("dental") || cat.includes("clinic") || cat.includes("doctor") || cat.includes("medical")) return "clinical_calm";
-          if (cat.includes("saas") || cat.includes("software") || cat.includes("ai") || cat.includes("tech")) return "tech_grid";
+          if (/\b(?:saas|software|ai|tech)\b/i.test(cat)) return "tech_grid";
           if (cat.includes("fashion") || cat.includes("luxury") || cat.includes("atelier")) return "luxury_noir";
           return "subtle_grain";
         })();
@@ -683,8 +684,11 @@ export default function WebsiteRenderer({
 
       {/* Render Active Page Sections */}
       {(() => {
-        let hasRenderedContactSection = false;
-        return activeSectionOrder.map((key) => {
+        const firstContactSectionIndex = activeSectionOrder.findIndex((sectionKey) => {
+          const sectionBaseType = sectionKey.split("_")[0];
+          return isContactSection(sectionKey) || sectionBaseType === "contact" || sectionBaseType === "reservation" || sectionBaseType === "booking";
+        });
+        return activeSectionOrder.map((key, sectionIndex) => {
         const rawSectionData = (rawWebsite as Record<string, unknown> | null | undefined)?.[key] ?? (website as Record<string, unknown>)[key];
         const baseType = key.split("_")[0];
         const isSelected = isInteractiveStudio && selectedSection === key;
@@ -825,13 +829,13 @@ export default function WebsiteRenderer({
             if (hasCustomServices) {
               servicesData = (rawSectionData as Service[]).map((item, idx) => ({
                 ...item,
-                image: item.image || website.services?.[idx]?.image,
+                image: website.services?.[idx]?.image,
               }));
             } else if (rawSectionData && typeof rawSectionData === "object" && !Array.isArray(rawSectionData)) {
               const vals = Object.values(rawSectionData).filter((v): v is Service => Boolean(v && typeof v === "object" && "title" in v));
               servicesData = (vals.length > 0 ? vals : website.services).map((item, idx) => ({
                 ...item,
-                image: item.image || website.services?.[idx]?.image,
+                image: website.services?.[idx]?.image,
               }));
             } else {
               if (key !== designatedServicesKey) {
@@ -886,13 +890,13 @@ export default function WebsiteRenderer({
             if (hasCustomFeatures) {
               featuresData = (rawSectionData as Feature[]).map((item, idx) => ({
                 ...item,
-                image: item.image || website.features?.[idx]?.image,
+                image: website.features?.[idx]?.image,
               }));
             } else if (rawSectionData && typeof rawSectionData === "object" && !Array.isArray(rawSectionData)) {
               const vals = Object.values(rawSectionData).filter((v): v is Feature => Boolean(v && typeof v === "object" && "title" in v));
               featuresData = (vals.length > 0 ? vals : website.features).map((item, idx) => ({
                 ...item,
-                image: item.image || website.features?.[idx]?.image,
+                image: website.features?.[idx]?.image,
               }));
             } else {
               if (key !== designatedFeaturesKey) {
@@ -957,10 +961,9 @@ export default function WebsiteRenderer({
             }
             content = <FAQSection sectionKey={key} faq={faqData} />;
           } else if (isContactSection(key) || baseType === "contact" || baseType === "reservation" || baseType === "booking") {
-            if (hasRenderedContactSection) {
+            if (sectionIndex !== firstContactSectionIndex) {
               return null;
             }
-            hasRenderedContactSection = true;
             const contactData = (rawSectionData && typeof rawSectionData === "object" ? rawSectionData : website.contact) as Contact;
             content = <ContactSection sectionKey={key} contact={contactData} />;
           } else if (key === "footer" || baseType === "footer") {

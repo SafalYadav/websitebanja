@@ -12,6 +12,8 @@
 import type { BusinessLead } from "@/lib/discovery/types";
 import type { LeadAuditReport } from "@/lib/audit/types";
 import type { WebsiteData } from "@/types/website";
+import type { BusinessSemanticProfile } from "@/lib/intelligence/semantic/businessSemanticReasoner";
+import type { ExecutiveGenerationBrief } from "@/lib/intelligence/orchestration/types";
 
 export interface ImageManifestEntry {
   role: string;
@@ -61,6 +63,8 @@ export interface PersonalizedPreviewRequest {
   groundedProfile?: import("@/lib/intelligence/grounding/types").GroundedBusinessProfile;
   placesPhotos?: import("@/lib/intelligence/grounding/assetTypes").RawPlacesPhoto[];
   placesReviews?: import("@/lib/intelligence/grounding/assetTypes").RawPlacesReview[];
+  semanticProfile?: BusinessSemanticProfile;
+  executiveBrief?: ExecutiveGenerationBrief;
 }
 
 export interface PersonalizedPreviewResponse {

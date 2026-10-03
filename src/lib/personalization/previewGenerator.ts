@@ -31,6 +31,8 @@ import { groundedAssetSelector } from "@/lib/intelligence/grounding/groundedAsse
 import { applyGroundedAssetsToWebsite } from "@/lib/intelligence/grounding/groundedWebsiteGenerator";
 import { GroundedIntelligenceService } from "@/lib/intelligence/grounding/groundedIntelligenceService";
 import { businessSemanticReasoner } from "@/lib/intelligence/semantic/businessSemanticReasoner";
+import { containsSemanticPhrase } from "@/lib/intelligence/semantic/businessSemanticReasoner";
+import type { BusinessSemanticProfile } from "@/lib/intelligence/semantic/businessSemanticReasoner";
 import { StrategyManager } from "@/lib/intelligence/learning/strategyManager";
 import type { GroundedBusinessProfile } from "@/lib/intelligence/grounding/types";
 import type { WebsiteRequirement } from "@/lib/ai/requirementModel";
@@ -82,13 +84,18 @@ function slugify(text: string): string {
 /**
  * Derives rich, personalized service offerings based on industry and business context
  */
-function derivePersonalizedServices(
+export function derivePersonalizedServices(
   lead: BusinessLead,
   industry: string,
-  contentPriorities: string[]
+  contentPriorities: string[],
+  semanticProfile?: BusinessSemanticProfile
 ): Array<{ title: string; description: string; price?: string }> {
   const norm = `${industry} ${lead.industry || ""} ${lead.category || ""} ${lead.businessName || ""}`.toLowerCase();
   const name = lead.businessName;
+
+  if (semanticProfile && semanticProfile.confidence >= 0.7 && semanticProfile.recommendedServices.length > 0) {
+    return semanticProfile.recommendedServices;
+  }
 
   if (norm.includes("hotel") || norm.includes("hospitality") || norm.includes("resort")) {
     return [
@@ -140,7 +147,13 @@ function derivePersonalizedServices(
     ];
   }
 
-  if (norm.includes("saas") || norm.includes("software") || norm.includes("tech") || norm.includes("ai")) {
+  if (
+    containsSemanticPhrase(norm, "saas") ||
+    containsSemanticPhrase(norm, "software") ||
+    containsSemanticPhrase(norm, "technology") ||
+    containsSemanticPhrase(norm, "tech") ||
+    containsSemanticPhrase(norm, "ai")
+  ) {
     return [
       {
         title: "Autonomous Workflow Orchestration",
@@ -300,7 +313,37 @@ function derivePersonalizedServices(
     ];
   }
 
-  if (norm.includes("salon") || norm.includes("beauty") || norm.includes("hair") || norm.includes("spa")) {
+  if (
+    containsSemanticPhrase(norm, "spa") ||
+    containsSemanticPhrase(norm, "massage") ||
+    containsSemanticPhrase(norm, "wellness") ||
+    containsSemanticPhrase(norm, "aromatherapy")
+  ) {
+    return [
+      {
+        title: "Traditional Thai Massage",
+        description: `A restorative wellness session at ${name} focused on assisted stretching, rhythmic pressure, and relaxation.`,
+        price: "Contact for current pricing",
+      },
+      {
+        title: "Relaxation Massage",
+        description: "A calming full-body wellness experience designed to ease everyday tension and encourage deep relaxation.",
+        price: "Contact for current pricing",
+      },
+      {
+        title: "Aromatherapy Wellness Ritual",
+        description: "A gentle massage experience using aromatic oils in a private and peaceful treatment setting.",
+        price: "Contact for current pricing",
+      },
+      {
+        title: "Personalised Wellness Session",
+        description: "Discuss your preferences and current availability directly with the spa before choosing a treatment.",
+        price: "Advance booking recommended",
+      },
+    ];
+  }
+
+  if (norm.includes("salon") || norm.includes("beauty") || norm.includes("hair")) {
     return [
       {
         title: "Bespoke Hair Architecture & Styling",
@@ -356,7 +399,7 @@ function derivePersonalizedServices(
  */
 function derivePersonalizedFeatures(
   lead: BusinessLead,
-  audit: LeadAuditReport
+  _audit: LeadAuditReport
 ): Array<{ title: string; description: string }> {
   return [
     { title: "Discuss Your Requirements", description: "Contact the business to discuss the services you need and current availability." },
@@ -364,19 +407,6 @@ function derivePersonalizedFeatures(
     ...(lead.address ? [{ title: "Find Us", description: lead.address }] : []),
     ...(lead.rating ? [{ title: "Customer Rating", description: `${lead.rating}/5${lead.reviewCount ? ` across ${lead.reviewCount} reviews` : ""}.` }] : []),
   ];
-}
-
-/**
- * Generates personalized customer reviews reflecting actual verified review metrics.
- * STRICT ANTI-FABRICATION RULE: Returns empty array if no verified reviews exist.
- */
-function derivePersonalizedReviews(
-  lead: BusinessLead,
-  industry: string
-): Array<{ name: string; role: string; quote: string; rating: number }> {
-  // Anti-fabrication: Never invent fake testimonial names or synthetic reviews.
-  // Reviews are only populated from authentic Google Places or verified lead data.
-  return [];
 }
 
 /**
@@ -543,7 +573,7 @@ export async function generatePersonalizedPreview(
   }
 
   // 2.2 Semantic Business Reasoning (Root-Cause Fix: Universal semantic understanding of business domain)
-  const semanticAnalysis = businessSemanticReasoner.analyzeBusiness({
+  const semanticAnalysis = request.semanticProfile || businessSemanticReasoner.analyzeBusiness({
     businessName: businessName,
     category: lead.category || industry,
     location: location,
@@ -556,7 +586,7 @@ export async function generatePersonalizedPreview(
   const activeStrategy = await StrategyManager.getInstance().getActiveStrategy("generation").catch(() => null);
 
   // 3. Formulate WebsiteRequirement with semantic CTA and Brand Style
-  let primaryCta = semanticAnalysis.primaryCta?.label || "Inquire Today";
+  let primaryCta = request.executiveBrief?.primaryCta.label || semanticAnalysis.primaryCta?.label || "Inquire Today";
   const GENERIC_CTA_BLACKLIST = new Set([
     "submit", "send", "click here", "click", "learn more", "read more", "search", "ok", "cancel", "reset", "close", "menu"
   ]);
@@ -591,6 +621,9 @@ export async function generatePersonalizedPreview(
   } else if (semanticAnalysis.domain.includes("fitness")) {
     brandStyle = "high_trust_service";
   }
+  if (request.executiveBrief?.designDirection) {
+    brandStyle = request.executiveBrief.designDirection;
+  }
 
   if (activeStrategy && activeStrategy.directives) {
     // Active strategy directives can influence brand style if specified
@@ -610,7 +643,7 @@ export async function generatePersonalizedPreview(
     location,
     services: ((lead as any).services && Array.isArray((lead as any).services) && (lead as any).services.length > 0)
       ? (lead as any).services
-      : derivePersonalizedServices(lead, industry, designInputs.contentPriorities).map((s) => s.title),
+      : derivePersonalizedServices(lead, industry, designInputs.contentPriorities, semanticAnalysis).map((s) => s.title),
     brand: {
       style: brandStyle,
     },
@@ -631,7 +664,7 @@ export async function generatePersonalizedPreview(
   const brandStyleText = requirement.brand?.style || "modern";
 
   const strategyInput = {
-    category: normalizedInd,
+    category: semanticAnalysis.subdomain || normalizedInd,
     businessName,
     description: heroSubtitleText,
     style: brandStyleText,
@@ -648,7 +681,9 @@ export async function generatePersonalizedPreview(
   });
 
   // 5. Dynamic Section Selection based on Audit Inputs + Industry Archetype
-  let sectionSequence = designInputs.requiredSections && designInputs.requiredSections.length >= 4
+  const sectionSequence = request.executiveBrief?.sectionOrder?.length
+    ? [...request.executiveBrief.sectionOrder]
+    : designInputs.requiredSections && designInputs.requiredSections.length >= 4
     ? [...designInputs.requiredSections]
     : deriveSectionSequence(archetype, {
         category: normalizedInd,
@@ -673,14 +708,16 @@ export async function generatePersonalizedPreview(
   // Helper for tracking manifest
   const resolveAndTrackImage = (role: any, itemIndex?: number, itemTitle?: string) => {
     const meta = resolveSemanticImage({
-      category: normalizedInd,
+      category: semanticAnalysis.subdomain || normalizedInd,
       businessName,
-      archetype,
+      archetype: semanticAnalysis.domain,
       role,
       itemIndex,
       itemTitle,
       usedInPage,
       avoidImages: recentAvoidUrls,
+      preferredSubjects: semanticAnalysis.primaryObjects,
+      forbiddenSubjects: semanticAnalysis.forbiddenObjects,
     });
 
     // Enforce Level 1 deduplication by tracking both raw and canonicalized URLs
@@ -702,7 +739,7 @@ export async function generatePersonalizedPreview(
   const heroImageMeta = resolveAndTrackImage("hero");
   const aboutImageMeta = resolveAndTrackImage("about");
 
-  const rawServices = derivePersonalizedServices(lead, normalizedInd, designInputs.contentPriorities);
+  const rawServices = derivePersonalizedServices(lead, normalizedInd, designInputs.contentPriorities, semanticAnalysis);
   const servicesData: Service[] = rawServices.map((s, idx) => {
     const meta = resolveAndTrackImage("services", idx, s.title);
     return {
@@ -722,8 +759,6 @@ export async function generatePersonalizedPreview(
       image: meta.imageUrl,
     };
   });
-
-  const reviewsData = derivePersonalizedReviews(lead, normalizedInd);
 
   const faqItems: FAQ[] = [
     {
@@ -756,6 +791,15 @@ export async function generatePersonalizedPreview(
     button: primaryCta,
     eyebrow: `${lead.category || designRules.industryProfile.displayName} • ${lead.city || "Verified Establishment"}`,
     image: heroImageMeta.imageUrl,
+    imageIntent: {
+      subject: heroImageMeta.semanticIntent,
+      visualStyle: semanticAnalysis.preferredImageryThemes.join(", "),
+      aspectRatio: "16:9",
+      composition: "business-relevant hero focal scene",
+      crop: "responsive center crop",
+      purpose: semanticAnalysis.customerIntent,
+      fallbackType: "tonal_composition" as const,
+    },
     buttonAction: {
       type: "scroll" as const,
       target: "contact",
@@ -788,23 +832,6 @@ export async function generatePersonalizedPreview(
   if (taglineCategory === "Generic Service") {
     taglineCategory = "Dedicated Professional Service";
   }
-
-  const defaultEmailPrefix = (
-    semanticAnalysis.domain.includes("rental") ||
-    semanticAnalysis.domain.includes("transportation") ||
-    semanticAnalysis.domain.includes("mobility")
-      ? "rentals"
-      : semanticAnalysis.domain.includes("restaurant") || semanticAnalysis.domain.includes("hotel")
-      ? "reservations"
-      : semanticAnalysis.domain.includes("fitness")
-      ? "membership"
-      : semanticAnalysis.domain.includes("beauty") ||
-        semanticAnalysis.domain.includes("aesthetic") ||
-        semanticAnalysis.domain.includes("personal_care") ||
-        semanticAnalysis.domain.includes("clinical")
-      ? "appointments"
-      : "contact"
-  );
 
   let websiteData: WebsiteData = {
     businessName,

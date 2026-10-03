@@ -42,6 +42,11 @@ function sanitizeString(str: unknown, fallback = ""): string {
   return cleaned || fallback;
 }
 
+function containsToken(text: string, token: string): boolean {
+  const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(?:^|[^a-z0-9])${escaped}(?:$|[^a-z0-9])`, "i").test(text);
+}
+
 export function normalizeWebsiteData(
   raw: any,
   category?: string | null | { category?: string | null; businessName?: string | null; description?: string | null },
@@ -159,7 +164,25 @@ export function normalizeWebsiteData(
         trustBadges: ["Licensed, Bonded & Insured", "100% Workmanship Guarantee", "Rapid Local Arrival"],
       };
     }
-    if (catLower.includes("saas") || catLower.includes("software") || catLower.includes("tech") || catLower.includes("ai")) {
+    if (
+      catLower.includes("spa") ||
+      catLower.includes("massage") ||
+      catLower.includes("wellness") ||
+      catLower.includes("body treatment")
+    ) {
+      return {
+        title: `Restorative Wellness & Thoughtful Care at ${name}`,
+        subtitle: "Unwind with considered massage and wellness experiences designed around comfort, calm, and personal care.",
+        button: "Book a Treatment",
+        trustBadges: ["Skilled Practitioners", "Calm Private Setting", "Personalised Care"],
+      };
+    }
+    if (
+      containsToken(catLower, "saas") ||
+      containsToken(catLower, "software") ||
+      containsToken(catLower, "tech") ||
+      containsToken(catLower, "ai")
+    ) {
       return {
         title: `Next-Generation Platform Built for Speed & Precision`,
         subtitle: `Empower your workflows with intelligent automation, seamless integrations, and real-time clarity.`,
@@ -179,18 +202,21 @@ export function normalizeWebsiteData(
 
   // Intra-page image uniqueness registry
   const usedImages = new Set<string>();
+  const imageIdentity = (image: string): string => image.trim().split("?")[0];
 
   const assignUniqueImage = (candidate?: string, pool: string[] = []): string => {
     if (candidate && typeof candidate === "string" && candidate.trim()) {
       const clean = candidate.trim();
-      if (!usedImages.has(clean)) {
-        usedImages.add(clean);
+      const identity = imageIdentity(clean);
+      if (!usedImages.has(identity)) {
+        usedImages.add(identity);
         return clean;
       }
     }
     for (const img of pool) {
-      if (img && !usedImages.has(img)) {
-        usedImages.add(img);
+      const identity = img ? imageIdentity(img) : "";
+      if (img && !usedImages.has(identity)) {
+        usedImages.add(identity);
         return img;
       }
     }
@@ -201,16 +227,15 @@ export function normalizeWebsiteData(
       ...(images.features || []),
     ];
     for (const img of allCategoryPool) {
-      if (img && !usedImages.has(img)) {
-        usedImages.add(img);
+      const identity = img ? imageIdentity(img) : "";
+      if (img && !usedImages.has(identity)) {
+        usedImages.add(identity);
         return img;
       }
     }
-    const baseImg = (candidate && typeof candidate === "string" && candidate.trim()) || pool[0] || images.hero;
-    const delimiter = baseImg.includes("?") ? "&" : "?";
-    const variantImg = `${baseImg}${delimiter}uid=${usedImages.size + 1}`;
-    usedImages.add(variantImg);
-    return variantImg;
+    // Exhausted pools must render the component's non-photographic fallback.
+    // Query-string variants are still the same photograph and violate deduplication.
+    return "";
   };
 
   const hero: Hero & { image?: string } = {

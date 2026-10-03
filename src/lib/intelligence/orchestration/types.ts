@@ -11,6 +11,22 @@ import type { ValidationReport } from "../validation/types";
 import type { LeadAuditReport } from "@/lib/audit/types";
 import type { BusinessLead } from "@/lib/discovery/types";
 import type { PersonalizedPreviewResponse } from "@/lib/personalization/types";
+import type { BusinessSemanticProfile } from "../semantic/businessSemanticReasoner";
+
+export interface ExecutiveGenerationBrief {
+  approvedDomain: string;
+  approvedSubdomain: string;
+  designDirection: string;
+  offeringConstraints: string[];
+  preferredImageSubjects: string[];
+  forbiddenImageSubjects: string[];
+  sectionOrder: string[];
+  primaryCta: { label: string; intent: string };
+  uniquenessDirectives: string[];
+  confidence: number;
+  evidence: string[];
+  delegationTaskId?: string;
+}
 
 export interface CanonicalGenerationRequest {
   businessName: string;
@@ -62,6 +78,8 @@ export interface CanonicalGenerationResponse {
     tenantId?: string | null;
     auditReport?: unknown;
     executiveDirectives?: unknown;
+    semanticProfile?: BusinessSemanticProfile;
+    executiveBrief?: ExecutiveGenerationBrief;
   };
   groundedProfile?: GroundedBusinessProfile;
   assetSelection?: GroundedAssetSelectionResult;

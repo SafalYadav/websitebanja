@@ -1,12 +1,8 @@
 "use client";
 
-import { motion, useReducedMotion } from "framer-motion";
-import { Wrench, Sparkles, ArrowRight, Layers, Cpu, Gem } from "lucide-react";
-import ImageWithFallback from "@/components/ui/ImageWithFallback";
+import { Wrench, Sparkles, Layers, Cpu, Gem } from "lucide-react";
 import EditableElement from "@/components/editor/EditableElement";
-import { handleButtonActionClick } from "@/lib/buttonActions";
 import type { Service, CardFamily } from "@/types/website";
-import { useWebsiteUI } from "@/contexts/WebsiteUIContext";
 import { CardRenderer } from "@/components/registry/cardRendererRegistry";
 
 const SERVICE_ICONS = [Wrench, Sparkles, Layers, Cpu, Gem];
@@ -23,93 +19,7 @@ interface ServicesSectionProps {
   cardFamily?: CardFamily;
 }
 
-function getServiceBadge(index: number, category?: string, archetype?: string): string | null {
-  const cat = (category || "").toLowerCase();
-  if (cat.includes("restaurant") || cat.includes("cafe") || cat.includes("dining")) {
-    return index === 0 ? "Chef's Selection" : index === 1 ? "House Special" : "Farm Sourced";
-  }
-  if (cat.includes("dental") || cat.includes("dentist") || cat.includes("clinic")) {
-    return index === 0 ? "3D Guided Care" : index === 1 ? "Sedation Comfort" : "Smile Restorative";
-  }
-  if (cat.includes("electric") || cat.includes("plumb") || cat.includes("repair")) {
-    return index === 0 ? "24/7 Rapid Dispatch" : index === 1 ? "Code Compliant" : "Lifetime Warranty";
-  }
-  if (cat.includes("ceramic") || cat.includes("pottery") || cat.includes("tableware")) {
-    return index === 0 ? "Wheel-Thrown" : index === 1 ? "Small Batch" : "Wood-Fired Kiln";
-  }
-  if (cat.includes("fashion") || cat.includes("couture")) {
-    return index === 0 ? "Atelier Bespoke" : index === 1 ? "Limited Run" : "Pure Cashmere";
-  }
-  if (cat.includes("architect") || cat.includes("interior")) {
-    return index === 0 ? "Spatial Concept" : index === 1 ? "Passive Solar" : "Turnkey Execution";
-  }
-  if (cat.includes("agency") || cat.includes("creative")) {
-    return index === 0 ? "Brand Strategy" : index === 1 ? "Digital Systems" : "Kinetic Visuals";
-  }
-  if (cat.includes("tech") || cat.includes("saas") || cat.includes("ai") || archetype === "dark_technical") {
-    return index === 0 ? "Real-time Telemetry" : index === 1 ? "Cloud Engine" : "Zero Latency";
-  }
-  return null;
-}
-
-function getCategoryServicesCopy(category?: string) {
-  const cat = (category || "").toLowerCase();
-  if (cat.includes("restaurant") || cat.includes("cafe") || cat.includes("dining") || cat.includes("bakery") || cat.includes("bistro")) {
-    return {
-      badge: "Culinary Highlights",
-      title: "Signature Offerings & Menu",
-      subtitle: "Artisan-crafted dishes and handcrafted beverages prepared with fresh seasonal ingredients.",
-    };
-  }
-  if (cat.includes("dental") || cat.includes("dentist") || cat.includes("clinic")) {
-    return {
-      badge: "Clinical Care",
-      title: "Comprehensive Dental Treatments",
-      subtitle: "Modern diagnostic technology paired with gentle, personalized clinical care.",
-    };
-  }
-  if (cat.includes("architect") || cat.includes("interior")) {
-    return {
-      badge: "Design Disciplines",
-      title: "Architectural & Spatial Practice",
-      subtitle: "From bespoke residential sanctuaries to visionary commercial developments.",
-    };
-  }
-  if (cat.includes("couture") || (cat.includes("fashion") && !cat.includes("agency"))) {
-    return {
-      badge: "Atelier Creations",
-      title: "Curated Seasonal Collection",
-      subtitle: "Masterful tailoring, elevated materials, and timeless aesthetic silhouettes.",
-    };
-  }
-  if (cat.includes("ceramic") || cat.includes("pottery") || cat.includes("tableware") || cat.includes("stoneware")) {
-    return {
-      badge: "Studio Collections",
-      title: "Handcrafted Ceramic Series",
-      subtitle: "Functional stoneware and sculptural vessels crafted on the wheel and fired in small batches.",
-    };
-  }
-  if (cat.includes("agency") || cat.includes("branding") || cat.includes("creative studio")) {
-    return {
-      badge: "Our Capabilities",
-      title: "Strategic Design & Creative Services",
-      subtitle: "Transforming vision into iconic identity, digital experiences, and measurable cultural impact.",
-    };
-  }
-  if (cat.includes("plumb") || cat.includes("electric") || cat.includes("trade") || cat.includes("repair")) {
-    return {
-      badge: "Expert Trades",
-      title: "Professional Service Solutions",
-      subtitle: "Licensed master technicians, upfront pricing, and guaranteed rapid response.",
-    };
-  }
-  if (cat.includes("saas") || cat.includes("tech") || cat.includes("software") || cat.includes("ai")) {
-    return {
-      badge: "Platform Capabilities",
-      title: "Engineered For Peak Performance",
-      subtitle: "Automated workflows, scalable cloud infrastructure, and intelligent integrations.",
-    };
-  }
+function getServicesFallbackCopy() {
   return {
     badge: "What We Offer",
     title: "Signature Services & Capabilities",
@@ -123,16 +33,12 @@ export default function ServicesSection({
   title,
   subtitle,
   badge,
-  category,
+  category: _category,
   cardTreatment,
   visualArchetype,
   cardFamily,
 }: ServicesSectionProps) {
-  const shouldReduceMotion = useReducedMotion();
-  const { publicSlug, onSwitchPage } = useWebsiteUI();
-  const context = { siteSlug: publicSlug, onSwitchPage };
-
-  const fallbackCopy = getCategoryServicesCopy(category);
+  const fallbackCopy = getServicesFallbackCopy();
   const safeTitle = typeof title === "string" && title.trim() ? title : fallbackCopy.title;
   const safeSubtitle = typeof subtitle === "string" && subtitle.trim() ? subtitle : fallbackCopy.subtitle;
   const safeBadge = typeof badge === "string" && badge.trim() ? badge : fallbackCopy.badge;
@@ -163,12 +69,6 @@ export default function ServicesSection({
       </section>
     );
   }
-
-  const catLower = (category || "").toLowerCase();
-  const isFoodOrDining = catLower.includes("restaurant") || catLower.includes("cafe") || catLower.includes("food") || catLower.includes("bistro") || catLower.includes("bakery");
-  const isTradeService = catLower.includes("electric") || catLower.includes("plumb") || catLower.includes("service") || catLower.includes("repair");
-  const isTechOrSaaS = catLower.includes("tech") || catLower.includes("saas") || catLower.includes("software") || catLower.includes("ai") || visualArchetype === "dark_technical";
-  const isEditorialOrLuxury = visualArchetype === "minimal_editorial" || visualArchetype === "luxury_bespoke" || cardTreatment === "flat_minimal";
 
   return (
     <section
@@ -220,7 +120,7 @@ export default function ServicesSection({
         <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-3">
           {safeServices.map((service, index) => {
             const Icon = SERVICE_ICONS[index % SERVICE_ICONS.length];
-            const cardBadge = getServiceBadge(index, category, visualArchetype) || service.badge || service.tag;
+            const cardBadge = service.badge || service.tag;
 
             const effectiveCardFamily: CardFamily =
               service.cardFamily ||
@@ -251,7 +151,7 @@ export default function ServicesSection({
                   index={index}
                   treatment={typeof cardTreatment === "object" ? cardTreatment : undefined}
                   visualArchetype={visualArchetype}
-                  ctaText={isFoodOrDining ? "Inquire / Reserve" : isTradeService ? "Request Immediate Dispatch" : isTechOrSaaS ? "Explore Architecture" : "Explore Offering"}
+                  ctaText="Explore Offering"
                 />
               </div>
             );

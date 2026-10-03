@@ -24,7 +24,6 @@ import type {
   FeaturesCardGeometry,
   FeaturesAnimationStrategy,
 } from "@/types/website";
-import { getCategoryImages } from "@/lib/categoryImages";
 
 const FEATURE_ICONS = [Sparkles, Shield, Zap, TrendingUp, CheckCircle, Award, Coffee, Heart, Star, Compass];
 
@@ -42,117 +41,11 @@ interface FeaturesSectionProps {
   is3d?: boolean;
 }
 
-function getFeatureMetric(index: number, category?: string, archetype?: string): string | null {
-  const cat = (category || "").toLowerCase();
-  if (cat.includes("restaurant") || cat.includes("cafe") || cat.includes("dining") || cat.includes("coffee") || archetype === "warm_artisanal") {
-    return index === 0 ? "Single-Origin Sourced" : index === 1 ? "Roasted Weekly" : "Direct Ethical Trade";
-  }
-  if (cat.includes("tech") || cat.includes("saas") || cat.includes("software") || cat.includes("ai") || archetype === "dark_technical") {
-    return index === 0 ? "99.99% Uptime SLA" : index === 1 ? "< 15ms Query Latency" : "SOC2 Type II Certified";
-  }
-  if (cat.includes("dental") || cat.includes("clinic") || cat.includes("medical")) {
-    return index === 0 ? "100% Pain-Free Care" : index === 1 ? "Digital 3D Diagnostics" : "Board Certified Specialists";
-  }
-  if (cat.includes("electric") || cat.includes("plumb") || cat.includes("repair")) {
-    return index === 0 ? "30-Min Rapid Arrival" : index === 1 ? "100% Upfront Pricing" : "Licensed & Bonded";
-  }
-  if (cat.includes("ceramic") || cat.includes("pottery") || cat.includes("stoneware")) {
-    return index === 0 ? "100% Handcrafted Stoneware" : index === 1 ? "Food-Safe Mineral Glaze" : "High-Fire 1260°C Kiln";
-  }
-  if (cat.includes("fashion") || cat.includes("couture") || cat.includes("atelier")) {
-    return index === 0 ? "European Master Tailoring" : index === 1 ? "Pure Silk & Cashmere" : "Zero-Waste Atelier";
-  }
-  if (cat.includes("architect") || cat.includes("interior")) {
-    return index === 0 ? "Published Works" : index === 1 ? "Sustainable Passivhaus" : "Bespoke Spatial Craft";
-  }
-  if (cat.includes("agency") || cat.includes("creative")) {
-    return index === 0 ? "Global Design Awards" : index === 1 ? "Founder-Led Sprints" : "10x Brand Impact";
-  }
-  return index === 0 ? "Verified Standards" : index === 1 ? "Dedicated Craft" : "Uncompromising Quality";
-}
-
-function getFeatureMetricLabel(index: number, category?: string): string {
-  const cat = (category || "").toLowerCase();
-  if (cat.includes("restaurant") || cat.includes("cafe") || cat.includes("dining") || cat.includes("coffee")) {
-    return index === 0 ? "SOURCING" : index === 1 ? "ROAST STANDARD" : "ETHICAL TRADE";
-  }
-  if (cat.includes("tech") || cat.includes("saas") || cat.includes("software") || cat.includes("ai")) {
-    return index === 0 ? "AVAILABILITY" : index === 1 ? "PERFORMANCE" : "COMPLIANCE";
-  }
-  if (cat.includes("dental") || cat.includes("clinic") || cat.includes("medical")) {
-    return index === 0 ? "PATIENT CARE" : index === 1 ? "DIAGNOSTICS" : "CREDENTIALS";
-  }
-  if (cat.includes("electric") || cat.includes("plumb") || cat.includes("repair")) {
-    return index === 0 ? "RESPONSE TIME" : index === 1 ? "TRANSPARENCY" : "GUARANTEE";
-  }
-  if (cat.includes("ceramic") || cat.includes("pottery") || cat.includes("stoneware")) {
-    return index === 0 ? "ARTISANAL FORM" : index === 1 ? "SAFETY" : "KILN PROCESS";
-  }
-  return index === 0 ? "STANDARD" : index === 1 ? "INTEGRITY" : "COMMITMENT";
-}
-
-function getCategoryFeaturesCopy(category?: string) {
-  const cat = (category || "").toLowerCase();
-  if (cat.includes("restaurant") || cat.includes("cafe") || cat.includes("dining") || cat.includes("bakery") || cat.includes("bistro") || cat.includes("coffee")) {
-    return {
-      badge: "The Experience",
-      title: "Why Dine With Us",
-      subtitle: "Artisanal sourcing, warm hospitality, and a welcoming dining atmosphere.",
-    };
-  }
-  if (cat.includes("dental") || cat.includes("dentist") || cat.includes("clinic")) {
-    return {
-      badge: "Patient Excellence",
-      title: "The Standard of Care",
-      subtitle: "Comfortable procedures, sterile modern facilities, and compassionate clinical experts.",
-    };
-  }
-  if (cat.includes("architect") || cat.includes("interior")) {
-    return {
-      badge: "Design Rigor",
-      title: "Our Architectural Principles",
-      subtitle: "Contextual sensitivity, structural elegance, and sustainable material craftsmanship.",
-    };
-  }
-  if (cat.includes("couture") || (cat.includes("fashion") && !cat.includes("agency"))) {
-    return {
-      badge: "Atelier Standards",
-      title: "The Art of Sartorial Craft",
-      subtitle: "Uncompromising attention to detail, heirloom quality, and bespoke craftsmanship.",
-    };
-  }
-  if (cat.includes("ceramic") || cat.includes("pottery") || cat.includes("tableware") || cat.includes("stoneware")) {
-    return {
-      badge: "Craft Heritage",
-      title: "Artisanal Clay & Glaze Standards",
-      subtitle: "Wheel-thrown integrity, durable high-fire stoneware, and toxic-free food-safe glazes.",
-    };
-  }
-  if (cat.includes("agency") || cat.includes("branding") || cat.includes("creative studio")) {
-    return {
-      badge: "Agency Values",
-      title: "Why Forward-Thinking Brands Choose Us",
-      subtitle: "Uncompromising craft, high-velocity iteration, and measurable business growth.",
-    };
-  }
-  if (cat.includes("plumb") || cat.includes("electric") || cat.includes("trade") || cat.includes("repair")) {
-    return {
-      badge: "Customer Guarantee",
-      title: "The Reliable Choice",
-      subtitle: "Upfront pricing, certified master tradespeople, and 100% guaranteed workmanship.",
-    };
-  }
-  if (cat.includes("saas") || cat.includes("tech") || cat.includes("software") || cat.includes("ai")) {
-    return {
-      badge: "Core Advantages",
-      title: "Built For Modern Scale",
-      subtitle: "Sub-millisecond latency, bank-grade encryption, and seamless team collaboration.",
-    };
-  }
+function getFeaturesFallbackCopy() {
   return {
     badge: "Key Advantages",
     title: "Why Clients Choose Us",
-    subtitle: "Built with precision, uncompromising reliability, and dedicated support.",
+    subtitle: "Practical benefits and service details selected for this business.",
   };
 }
 
@@ -247,23 +140,16 @@ export default function FeaturesSection({
   title,
   subtitle,
   badge,
-  category,
-  cardTreatment,
-  visualArchetype,
-  cardFamily,
+  category: _category,
   featuresLayoutStrategy,
   is3d,
 }: FeaturesSectionProps) {
   const shouldReduceMotion = useReducedMotion();
 
-  const fallbackCopy = getCategoryFeaturesCopy(category);
+  const fallbackCopy = getFeaturesFallbackCopy();
   const safeTitle = typeof title === "string" && title.trim() ? title : fallbackCopy.title;
   const safeSubtitle = typeof subtitle === "string" && subtitle.trim() ? subtitle : fallbackCopy.subtitle;
   const safeBadge = typeof badge === "string" && badge.trim() ? badge : fallbackCopy.badge;
-
-  // Fallback images from curated pool for image-led layouts
-  const categoryImages = getCategoryImages(category);
-  const fallbackFeatureImages = categoryImages.features || categoryImages.services || [];
 
   const rawFeatures = Array.isArray(features)
     ? features.filter((f): f is Feature & { image?: string; name?: string; text?: string } => Boolean(f && typeof f === "object"))
@@ -274,12 +160,15 @@ export default function FeaturesSection({
       const itemTitle = (f.title || f.name || "").trim();
       const itemDesc = (f.description || f.text || "").trim();
       if (!itemTitle && !itemDesc) return null;
-      const metricVal = (f as any).metric || getFeatureMetric(idx, category, visualArchetype);
-      const metricLabelVal = (f as any).metricLabel || getFeatureMetricLabel(idx, category);
+      const metricVal = f.metric;
+      const metricLabelVal = f.tag || f.badge;
       const result: Feature & { image?: string; metric?: string; metricLabel?: string } = {
         title: itemTitle || `Key Advantage ${idx + 1}`,
         description: itemDesc || "Engineered with meticulous craft, rigorous standards, and dedicated client focus.",
-        image: f.image || fallbackFeatureImages[idx % (fallbackFeatureImages.length || 1)],
+        // Image selection belongs to the grounded generation pipeline. When it
+        // cannot provide a relevant unique asset, the card renders its neutral
+        // non-photographic treatment instead of injecting category stock here.
+        image: f.image || undefined,
         icon: f.icon,
         metric: metricVal || undefined,
         metricLabel: metricLabelVal || undefined,

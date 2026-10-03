@@ -76,6 +76,19 @@ export const CATEGORY_MAP: Record<string, CategoryImageSet> = {
       "https://images.unsplash.com/photo-1521590832167-7bcbfaa6381f?auto=format&fit=crop&w=800&q=80", // Beauty wellness care
     ],
   },
+  spa: {
+    hero: "https://images.unsplash.com/photo-1600334089648-b0d9d3028eb2?auto=format&fit=crop&w=1200&q=80",
+    about: "https://images.unsplash.com/photo-1540555700478-4be289fbecef?auto=format&fit=crop&w=1000&q=80",
+    services: [
+      "https://images.unsplash.com/photo-1570172619644-dfd03ed5d881?auto=format&fit=crop&w=800&q=80",
+      "https://images.unsplash.com/photo-1544161515-4ab6ce6db874?auto=format&fit=crop&w=800&q=80",
+      "https://images.unsplash.com/photo-1512290923902-8a9f81dc236c?auto=format&fit=crop&w=800&q=80",
+    ],
+    features: [
+      "https://images.unsplash.com/photo-1570172619644-dfd03ed5d881?auto=format&fit=crop&w=800&q=80",
+      "https://images.unsplash.com/photo-1540555700478-4be289fbecef?auto=format&fit=crop&w=800&q=80",
+    ],
+  },
   clinic: {
     hero: "https://images.unsplash.com/photo-1629909613654-28e377c37b09?auto=format&fit=crop&w=1200&q=80", // Modern clinic reception & lobby
     about: "https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?auto=format&fit=crop&w=1000&q=80", // Compassionate doctor consultation
@@ -851,7 +864,17 @@ export function resolveCategoryKey(
     return "gym";
   }
 
-  // 12. Check Salon / Barber / Hair / Beauty (Strict Tokenization + Negative Guards)
+  // 12. Check spa/massage before salon so wellness never receives hair imagery.
+  if (
+    combined.includes("wellness_spa") ||
+    combined.includes("spa_and_massage") ||
+    hasTokens(combined, ["thai spa", "day spa", "massage", "wellness center", "wellness centre", "aromatherapy", "reflexology"]) ||
+    (/\bspa\b/i.test(combined) && !combined.includes("spa-like") && !combined.includes("spa atmosphere"))
+  ) {
+    return "spa";
+  }
+
+  // 13. Check Salon / Barber / Hair / Beauty (Strict Tokenization + Negative Guards)
   // CRITICAL: Must NEVER match "spatial" or "dispatch" or dental "spa atmosphere"
   const isProtectedOtherCategory = hasTokens(combined, [
     "spatial",
@@ -883,9 +906,7 @@ export function resolveCategoryKey(
         "cosmetology",
         "esthetician",
         "beauty salon",
-      ]) ||
-      /\b(day\s*spa|medical\s*spa|medspa|wellness\s*spa|spa\s*resort|spa\s*treatment)\b/i.test(combined) ||
-      (/\bspa\b/i.test(combined) && !combined.includes("spa-like") && !combined.includes("spa atmosphere"))
+      ])
     ) {
       return "salon";
     }
@@ -1011,7 +1032,7 @@ export function getCategoryImages(
   options?: CategoryImageOptions
 ): CategoryImageSet {
   const key = resolveCategoryKey(category, businessName, description);
-  const pool = CATEGORY_IMAGE_POOLS[key] || CATEGORY_IMAGE_POOLS.general;
+  const pool = CATEGORY_IMAGE_POOLS[key];
   const baseSet = CATEGORY_MAP[key] || CATEGORY_MAP.general;
 
   if (!pool) return baseSet;
@@ -1062,6 +1083,18 @@ export function getImageIntentForSection(
   businessName?: string | null
 ): ImageIntentConfig {
   const cat = (category || "").toLowerCase();
+
+  if (cat.includes("wellness_spa") || cat.includes("spa_and_massage") || /\b(spa|massage|wellness)\b/i.test(cat)) {
+    return {
+      subject: `Calm massage treatment room, restorative spa ritual, or aromatherapy setting for ${businessName || "the wellness business"}`,
+      visualStyle: "warm natural light, serene neutral palette, authentic wellness setting",
+      aspectRatio: sectionKey === "hero" ? "16:9" : "4:3",
+      composition: "quiet treatment-focused scene with uncluttered negative space",
+      crop: "spa treatment, therapist hands, or peaceful interior",
+      purpose: "Communicate relaxation, trust, and restorative wellness",
+      fallbackType: "tonal_composition",
+    };
+  }
 
   if (cat.includes("restaurant") || cat.includes("cafe") || cat.includes("coffee") || cat.includes("dining")) {
     return {
@@ -1197,4 +1230,3 @@ export function getHeroAtmosphereImage(
 
   return "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=1600&q=80"; // Universal subtle ambient fluid mesh
 }
-

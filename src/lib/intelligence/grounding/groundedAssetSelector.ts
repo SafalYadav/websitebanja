@@ -6,22 +6,22 @@
 import crypto from "crypto";
 import { googlePlacesSource } from "./sources/googlePlacesSource";
 import { sanitizeReview } from "./reviewSanitizer";
-import { resolveSemanticImage } from "@/lib/images/semanticImageSourcing";
+import { normalizeCategoryKey, resolveSemanticImage } from "@/lib/images/semanticImageSourcing";
+import type { BusinessSemanticProfile } from "../semantic/businessSemanticReasoner";
 import type {
   GroundedBusinessAsset,
   GroundedAssetSelectionResult,
   RawPlacesPhoto,
   RawPlacesReview,
-  AssetType,
-  AssetAttribution,
 } from "./assetTypes";
-import type { GroundedBusinessProfile, EvidenceSourceType } from "./types";
+import type { GroundedBusinessProfile } from "./types";
 
 export interface AssetSelectorOptions {
   photos?: RawPlacesPhoto[];
   reviews?: RawPlacesReview[];
   category?: string;
   fallbackImageGenerator?: (role: string, itemIndex?: number, itemTitle?: string) => string;
+  semanticProfile?: BusinessSemanticProfile;
 }
 
 export function scoreGooglePlacesPhoto(photo: RawPlacesPhoto): { score: number; isHeroSuitable: boolean; aspectRatio: number } {
@@ -97,6 +97,8 @@ export class GroundedAssetSelector {
     const usedGooglePhotos = new Set<string>();
     const usedWebsitePhotos = new Set<string>();
     const usedClientAssets = new Set<string>();
+    const usedFallbackImages = new Set<string>();
+    const allocatedFallbackImages = new Set<string>();
     const selectedAssets: GroundedBusinessAsset[] = [];
 
     const fallbackGen =
@@ -109,7 +111,13 @@ export class GroundedAssetSelector {
           role: role as any,
           itemIndex,
           itemTitle,
+          usedInPage: usedFallbackImages,
+          preferredSubjects: options.semanticProfile?.primaryObjects,
+          forbiddenSubjects: options.semanticProfile?.forbiddenObjects,
         });
+        const canonicalUrl = res.imageUrl.split("?")[0];
+        if (allocatedFallbackImages.has(canonicalUrl)) return "";
+        allocatedFallbackImages.add(canonicalUrl);
         return res.imageUrl;
       });
 
@@ -194,7 +202,8 @@ export class GroundedAssetSelector {
 
       // Tier 4: Category-Gated Semantic Stock
       const isSaaSOrTech = /saas|software|platform|tech|devops|api/i.test(category) || /saas/i.test(profile.archetype);
-      const fallbackUrl = fallbackGen(role, itemIndex, itemTitle);
+      const categoryKey = normalizeCategoryKey(category, businessName, profile.archetype);
+      const fallbackUrl = categoryKey === "general" ? "" : fallbackGen(role, itemIndex, itemTitle);
 
       // Guard: Never use developer/laptop imagery for non-tech businesses
       const isDevImage = fallbackUrl && /photo-1531482615713|photo-1550751827|photo-1517694712/i.test(fallbackUrl);

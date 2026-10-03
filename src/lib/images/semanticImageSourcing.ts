@@ -53,6 +53,8 @@ export interface ImageResolutionRequest {
   avoidImages?: string[];
   recentImages?: string[];
   usedInPage?: Set<string>;
+  preferredSubjects?: string[];
+  forbiddenSubjects?: string[];
 }
 
 export interface CuratedImageEntry {
@@ -926,7 +928,46 @@ export const REGISTRY: Record<string, CuratedImageEntry[]> = {
     },
   ],
 
-  // 5D. Salon, Hair & Aesthetic Wellness
+  // 5D. Spa, massage and restorative wellness (never hair-salon imagery)
+  wellness_spa: [
+    {
+      url: "https://images.unsplash.com/photo-1544161515-4ab6ce6db874",
+      author: "Conscious Design",
+      authorHandle: "conscious_design",
+      intent: "Professional massage therapy in a calm private spa treatment room",
+      roles: ["hero", "heroBackground", "services"],
+    },
+    {
+      url: "https://images.unsplash.com/photo-1600334089648-b0d9d3028eb2",
+      author: "Alan Caishan",
+      authorHandle: "alancaishan",
+      intent: "Restorative spa massage with folded towels and warm ambient light",
+      roles: ["hero", "about", "services"],
+    },
+    {
+      url: "https://images.unsplash.com/photo-1540555700478-4be289fbecef",
+      author: "Jared Rice",
+      authorHandle: "jareddrice",
+      intent: "Serene wellness spa interior prepared for a relaxing treatment",
+      roles: ["about", "heroBackground", "gallery"],
+    },
+    {
+      url: "https://images.unsplash.com/photo-1570172619644-dfd03ed5d881",
+      author: "Content Pixie",
+      authorHandle: "contentpixie",
+      intent: "Botanical facial massage and restorative spa treatment",
+      roles: ["services", "features", "gallery"],
+    },
+    {
+      url: "https://images.unsplash.com/photo-1512290923902-8a9f81dc236c",
+      author: "Raphael Lovaski",
+      authorHandle: "raphael_lovaski",
+      intent: "Relaxing body wellness treatment in a peaceful spa setting",
+      roles: ["services", "features"],
+    },
+  ],
+
+  // 5E. Salon, Hair & Aesthetic Wellness
   salon: [
     {
       url: "https://images.unsplash.com/photo-1560066984-138dadb4c035",
@@ -1305,6 +1346,19 @@ export function normalizeCategoryKey(rawCategory?: string, businessName?: string
 
   // 0C. Salon & Beauty Aesthetics check (Must NEVER match local_service/trades)
   if (
+    combined.includes("wellness_personal_care") ||
+    combined.includes("spa_and_massage") ||
+    /\bspa\b/i.test(combined) ||
+    /\bmassage\b/i.test(combined) ||
+    /\bwellness\b/i.test(combined) ||
+    combined.includes("aromatherapy") ||
+    combined.includes("reflexology")
+  ) {
+    return "wellness_spa";
+  }
+
+  // 0D. Salon & Beauty Aesthetics check
+  if (
     combined.includes("salon") ||
     combined.includes("hair styling") ||
     combined.includes("hair cut") ||
@@ -1461,6 +1515,25 @@ export function resolveSemanticImage(req: ImageResolutionRequest): ImageMetadata
   if (candidates.length === 0) {
     // If no candidate matches exact role, use any other candidate in the SAME category pool
     candidates = pool;
+  }
+
+  const forbiddenTerms = (req.forbiddenSubjects || []).flatMap((subject) =>
+    subject.toLowerCase().split(/[^a-z0-9]+/).filter((term) => term.length >= 4)
+  );
+  const semanticallyAllowed = candidates.filter((entry) => {
+    const intent = entry.intent.toLowerCase();
+    return !forbiddenTerms.some((term) => intent.includes(term));
+  });
+  if (semanticallyAllowed.length > 0) candidates = semanticallyAllowed;
+
+  const preferredTerms = (req.preferredSubjects || []).flatMap((subject) =>
+    subject.toLowerCase().split(/[^a-z0-9]+/).filter((term) => term.length >= 4)
+  );
+  if (preferredTerms.length > 0) {
+    candidates = [...candidates].sort((a, b) => {
+      const score = (entry: CuratedImageEntry) => preferredTerms.filter((term) => entry.intent.toLowerCase().includes(term)).length;
+      return score(b) - score(a);
+    });
   }
 
   // 2. Build avoidance sets: strict in-page set vs best-effort cross-preview set

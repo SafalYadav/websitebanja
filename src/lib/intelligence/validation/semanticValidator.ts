@@ -164,7 +164,7 @@ export function validateSemantics(context: ValidationContext): StageValidationRe
         const contradictoryDomains = Object.entries(domainKeywords).filter(
           ([dom]) => dom !== groundedDomain
         );
-        for (const [otherDom, otherKeywords] of contradictoryDomains) {
+        for (const [, otherKeywords] of contradictoryDomains) {
           if (otherKeywords.some((k) => generatedCategory.includes(k))) {
             failures.push({
               id: randomUUID(),
@@ -236,6 +236,27 @@ export function validateSemantics(context: ValidationContext): StageValidationRe
       context.businessName ||
       ""
   ).toLowerCase();
+  const semanticProfile = context.semanticProfile;
+
+  if (
+    semanticProfile &&
+    context.executiveBrief &&
+    (context.executiveBrief.approvedDomain !== semanticProfile.domain ||
+      context.executiveBrief.approvedSubdomain !== semanticProfile.subdomain)
+  ) {
+    failures.push({
+      id: randomUUID(),
+      stage: "SEMANTIC",
+      severity: "CRITICAL",
+      failure: "Executive generation brief contradicts the authoritative semantic profile",
+      evidence: `Semantic profile: ${semanticProfile.domain}/${semanticProfile.subdomain}; executive brief: ${context.executiveBrief.approvedDomain}/${context.executiveBrief.approvedSubdomain}`,
+      affectedElement: "executiveBrief",
+      suggestedFix: "Regenerate the executive brief from the grounded semantic profile",
+      blocking: true,
+      field: "executiveBrief.approvedDomain",
+      ruleCode: "SEM_EXECUTIVE_DOMAIN_CONTRADICTION",
+    });
+  }
 
   const isCarOrVehicle =
     effectiveIndustry.includes("car") ||
@@ -252,7 +273,10 @@ export function validateSemantics(context: ValidationContext): StageValidationRe
   const isSalonOrSpa =
     effectiveIndustry.includes("salon") ||
     effectiveIndustry.includes("beauty") ||
-    effectiveName.includes("salon");
+    effectiveIndustry.includes("spa") ||
+    effectiveIndustry.includes("wellness") ||
+    effectiveName.includes("salon") ||
+    effectiveName.includes("spa");
 
   const isNonFoodIndustry = isCarOrVehicle || isGymOrFitness || isSalonOrSpa;
 
@@ -287,8 +311,64 @@ export function validateSemantics(context: ValidationContext): StageValidationRe
     });
   }
 
+  const semanticDomainText = `${semanticProfile?.domain || ""} ${semanticProfile?.subdomain || ""}`.toLowerCase();
+  const isWellnessSpa = semanticDomainText.includes("wellness") || semanticDomainText.includes("spa");
+  const websiteBusinessText = [
+    String(hero?.title || ""),
+    String(hero?.subtitle || ""),
+    servicesText,
+    JSON.stringify(data.features || []),
+    JSON.stringify(hero?.trustBadges || []),
+  ].join(" ").toLowerCase();
+  const saasLeakTerms = [
+    "workflow orchestration",
+    "telemetry",
+    "zero-trust",
+    "soc2",
+    "model fine-tuning",
+    "query latency",
+    "uptime sla",
+    "enterprise-grade security",
+  ];
+  const detectedSaasLeaks = saasLeakTerms.filter((term) => websiteBusinessText.includes(term));
+  if (isWellnessSpa && detectedSaasLeaks.length > 0) {
+    failures.push({
+      id: randomUUID(),
+      stage: "SEMANTIC",
+      severity: "CRITICAL",
+      failure: "Wellness/spa website contains software or SaaS content",
+      evidence: `Detected cross-domain terms: ${detectedSaasLeaks.join(", ")}`,
+      affectedElement: "services/features",
+      suggestedFix: "Regenerate content from the approved wellness semantic profile",
+      blocking: true,
+      field: "services",
+      ruleCode: "SEM_CROSS_DOMAIN_SAAS_LEAK",
+    });
+  }
+
+  if (semanticProfile) {
+    const forbiddenMatches = semanticProfile.forbiddenObjects.filter((term) =>
+      websiteBusinessText.includes(term.toLowerCase())
+    );
+    if (forbiddenMatches.length > 0) {
+      failures.push({
+        id: randomUUID(),
+        stage: "SEMANTIC",
+        severity: "CRITICAL",
+        failure: "Generated content contains objects forbidden by the semantic profile",
+        evidence: `Forbidden objects detected: ${forbiddenMatches.join(", ")}`,
+        affectedElement: "websiteData",
+        suggestedFix: "Remove cross-domain objects and regenerate from approved offerings",
+        blocking: true,
+        field: "websiteData",
+        ruleCode: "SEM_FORBIDDEN_DOMAIN_OBJECT",
+      });
+    }
+  }
+
   // Check hero image compatibility
   const heroImage = String((data.hero as Record<string, unknown>)?.image || "");
+  const heroImageIntent = JSON.stringify((data.hero as Record<string, unknown>)?.imageIntent || {}).toLowerCase();
   const knownFoodRestaurantImageUrls = [
     "photo-1517248135467-4c7edcad34c4",
     "photo-1552566626-52f8b828add9",
@@ -308,6 +388,27 @@ export function validateSemantics(context: ValidationContext): StageValidationRe
       field: "hero.image",
       ruleCode: "SEM_IMAGE_INDUSTRY_MISMATCH",
     });
+  }
+
+  if (semanticProfile && heroImageIntent) {
+    const forbiddenImageMatches = [
+      ...semanticProfile.forbiddenObjects,
+      ...semanticProfile.forbiddenImageryThemes,
+    ].filter((term) => heroImageIntent.includes(term.toLowerCase().replaceAll("_", " ")));
+    if (forbiddenImageMatches.length > 0) {
+      failures.push({
+        id: randomUUID(),
+        stage: "SEMANTIC",
+        severity: "CRITICAL",
+        failure: "Hero image intent contradicts the approved business domain",
+        evidence: `Forbidden image concepts detected: ${forbiddenImageMatches.join(", ")}`,
+        affectedElement: "hero.imageIntent",
+        suggestedFix: "Re-source an image using preferred semantic subjects",
+        blocking: true,
+        field: "hero.image",
+        ruleCode: "SEM_IMAGE_INTENT_MISMATCH",
+      });
+    }
   }
 
   const fullText = JSON.stringify(data).toLowerCase();

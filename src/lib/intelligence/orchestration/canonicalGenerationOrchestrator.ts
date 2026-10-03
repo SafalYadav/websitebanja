@@ -37,6 +37,8 @@ import { generatePersonalizedPreview } from "@/lib/personalization/previewGenera
 import { auditQualifiedLead } from "@/lib/audit/auditService";
 import { emitAgentEvent } from "@/lib/telemetry/agentTelemetry";
 import { leadRepository } from "@/lib/discovery/leadRepository";
+import { delegationManager } from "../delegation/delegationManager";
+import type { ExecutiveGenerationBrief } from "./types";
 
 const PREVIEW_DIR = path.join(process.cwd(), "scratch", "previews");
 
@@ -94,7 +96,13 @@ export class CanonicalGenerationOrchestrator {
     let friction = ["Unclear offerings", "Hidden pricing", "Difficult contact points"];
     let proof = ["Transparent verified standards", "Authentic customer experiences"];
 
-    if (params.transactionType === "direct_booking") {
+    if (domain.includes("wellness") || domain.includes("personal_care")) {
+      positioning = `Calm, trust-first wellness booking experience for ${params.businessName}`;
+      target = "Local customers comparing treatments, availability, and verified guest experiences";
+      objective = "Direct treatment booking or consultation";
+      friction = ["Unclear treatment options", "Unverified claims", "Difficult appointment booking"];
+      proof = ["Authentic business imagery", "Verified reviews and contact details"];
+    } else if (params.transactionType === "direct_booking") {
       positioning = `High-converting, transparent booking engine for ${params.businessName}`;
       target = "Travelers, commuters, and patrons seeking immediate vehicle/slot availability";
       objective = "Direct instant booking with zero hesitation";
@@ -161,7 +169,7 @@ export class CanonicalGenerationOrchestrator {
         tenantId: request.tenantId || request.userId,
       };
       // 1. Business Semantic Reasoning & Intent Analysis
-      const semanticAnalysis = this.semanticReasoner.analyzeBusiness({
+      let semanticAnalysis = this.semanticReasoner.analyzeBusiness({
         businessName: request.businessName,
         category: request.category,
         location: request.location,
@@ -196,6 +204,19 @@ export class CanonicalGenerationOrchestrator {
       if (profile.tenantId !== (request.tenantId ?? null)) {
         throw new Error("Grounded profile belongs to a different workspace.");
       }
+
+      // Reconcile semantics after grounding. Google evidence and observed services
+      // are authoritative over a guess made from the business name alone.
+      semanticAnalysis = this.semanticReasoner.analyzeBusiness({
+        businessName: profile.identity.canonicalName || request.businessName,
+        category: [request.category, profile.archetype, profile.industryFamily]
+          .filter(Boolean)
+          .join(" "),
+        types: profile.services.map((service) => service.name),
+        description: profile.evidence.map((item) => item.observation).join(" ").slice(0, 4000),
+        location: profile.location.formattedAddress || request.location,
+        phone: profile.identity.phone || request.phone,
+      });
 
       // 3B. Automatic Existing Website Crawl & Audit (Rule 2)
       let auditReport = request.overrideAudit;
@@ -243,6 +264,84 @@ export class CanonicalGenerationOrchestrator {
         hasServices: true,
       });
 
+      const deterministicExecutiveBrief: ExecutiveGenerationBrief = {
+        approvedDomain: semanticAnalysis.domain,
+        approvedSubdomain: semanticAnalysis.subdomain,
+        designDirection: semanticAnalysis.tone.join(", "),
+        offeringConstraints: semanticAnalysis.forbiddenClaims,
+        preferredImageSubjects: semanticAnalysis.primaryObjects,
+        forbiddenImageSubjects: semanticAnalysis.forbiddenObjects,
+        sectionOrder: sectionPlan.sectionOrder,
+        primaryCta: {
+          label: semanticAnalysis.primaryCta.label,
+          intent: semanticAnalysis.primaryCta.intent,
+        },
+        uniquenessDirectives: activeStrategy?.directives || [],
+        confidence: semanticAnalysis.confidence,
+        evidence: [
+          ...semanticAnalysis.evidenceSummary.factsObserved,
+          ...semanticAnalysis.evidenceSummary.inferencesDeducted,
+        ],
+      };
+
+      let executiveBrief = deterministicExecutiveBrief;
+      try {
+        const delegated = await delegationManager.executeCeoDelegation({
+          objective: `Create a semantically faithful, differentiated website strategy for ${request.businessName}`,
+          input: {
+            businessName: request.businessName,
+            category: semanticAnalysis.subdomain,
+            description: semanticAnalysis.factualTagline,
+            targetAudience: semanticAnalysis.customerIntent,
+            requestedFeatures: semanticAnalysis.offerings,
+            semanticProfile: semanticAnalysis,
+          },
+          constraints: [
+            `Approved domain is ${semanticAnalysis.domain}/${semanticAnalysis.subdomain}`,
+            "Do not introduce offerings or imagery from another business domain",
+            "Use verified evidence and avoid unsupported claims",
+          ],
+          tenantId: request.tenantId || null,
+          projectId: request.leadId || null,
+          createdBy: request.userId || "canonical_orchestrator",
+          correlationId,
+          riskLevel: "low",
+          budget: { maxToolCalls: 8, maxModelCalls: 2, maxRetries: 1, maxDurationMs: 20_000 },
+        });
+
+        if (delegated.result.status === "completed" && delegated.result.confidence >= 0.5) {
+          const delegatedData = delegated.result.data as {
+            skills?: { designDirection?: { visualStyle?: string } };
+            resolvedDirectives?: string[];
+          } | null;
+          executiveBrief = {
+            ...deterministicExecutiveBrief,
+            designDirection:
+              delegatedData?.skills?.designDirection?.visualStyle || deterministicExecutiveBrief.designDirection,
+            uniquenessDirectives: [
+              ...(delegatedData?.resolvedDirectives || []),
+              ...delegated.result.recommendations,
+            ],
+            confidence: Math.min(semanticAnalysis.confidence, delegated.result.confidence),
+            evidence: [
+              ...deterministicExecutiveBrief.evidence,
+              ...delegated.result.evidence.map((item) => item.description),
+            ],
+            delegationTaskId: delegated.result.taskId,
+          };
+        }
+      } catch (delegationError: unknown) {
+        emitAgentEvent({
+          event: "agent.thinking",
+          agent: "canonical_orchestrator",
+          requestId: correlationId,
+          metadata: {
+            reason: delegationError instanceof Error ? delegationError.message : String(delegationError),
+            approvedDomain: semanticAnalysis.domain,
+          },
+        });
+      }
+
       // 4B. Executive CEO/Boss Directives (Rule 5)
       const executiveDirectives = this.synthesizeExecutiveDirectives({
         businessName: request.businessName,
@@ -269,6 +368,8 @@ export class CanonicalGenerationOrchestrator {
         },
         overrideAudit: auditReport,
         groundedProfile: profile,
+        semanticProfile: semanticAnalysis,
+        executiveBrief,
         placesPhotos: request.placesPhotos,
         placesReviews: request.placesReviews,
         userId: request.userId,
@@ -300,6 +401,7 @@ export class CanonicalGenerationOrchestrator {
           category: request.category || semanticAnalysis.domain,
           photos: request.placesPhotos,
           reviews: request.placesReviews,
+          semanticProfile: semanticAnalysis,
         });
         websiteData = applyGroundedAssetsToWebsite(websiteData, assetSelection, profile);
       }
@@ -311,10 +413,12 @@ export class CanonicalGenerationOrchestrator {
         projectId: basePreview.preview.id,
         groundedProfile: profile,
         retryCount: 0,
-        maxRetries: 3,
+        maxRetries: 1,
         tenantId: request.tenantId || "default_tenant",
         businessName: request.businessName,
         businessCategory: request.category || semanticAnalysis.domain,
+        semanticProfile: semanticAnalysis,
+        executiveBrief,
         businessLocation: request.location,
       };
 
@@ -323,7 +427,7 @@ export class CanonicalGenerationOrchestrator {
       let currentStatus: CanonicalGenerationResponse["status"] = "READY";
 
       // 7. Bounded Self-Correction Repair Loop (Requirement #15)
-      while (valReport.decision !== "READY" && repairCount < 3) {
+      while (valReport.decision !== "READY" && repairCount < 1) {
         repairCount++;
         emitAgentEvent({
           event: "agent.thinking",
@@ -401,6 +505,8 @@ export class CanonicalGenerationOrchestrator {
           tenantId: request.tenantId || null,
           auditReport: auditReport || null,
           executiveDirectives,
+          semanticProfile: semanticAnalysis,
+          executiveBrief,
         },
         groundedProfile: profile,
         validationReport: valReport,

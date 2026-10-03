@@ -6,6 +6,8 @@
 
 import type { GroundedBusinessProfile } from "../grounding/types";
 import type { TaskEnvelope, TaskResultEnvelope } from "../delegation/delegationTypes";
+import type { BusinessSemanticProfile } from "../semantic/businessSemanticReasoner";
+import type { ExecutiveGenerationBrief } from "../orchestration/types";
 
 export type ValidationStage =
   | "SEMANTIC"
@@ -100,6 +102,8 @@ export interface ValidationContext {
   businessName?: string;
   businessCategory?: string;
   groundedProfile?: GroundedBusinessProfile | null;
+  semanticProfile?: BusinessSemanticProfile;
+  executiveBrief?: ExecutiveGenerationBrief;
   targetAudience?: string;
   services?: string[];
   location?: string;

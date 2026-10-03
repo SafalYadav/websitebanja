@@ -33,7 +33,7 @@ export interface SemanticConceptCluster {
   taglineTemplate: (name: string, location: string) => string;
 }
 
-export interface SemanticBusinessAnalysis {
+export interface BusinessSemanticProfile {
   domain: string;
   subdomain: string;
   confidence: number;
@@ -61,6 +61,27 @@ export interface SemanticBusinessAnalysis {
     inferencesDeducted: string[];
     unknownsIdentified: string[];
   };
+  googlePlaceTypes: string[];
+  offerings: string[];
+  tone: string[];
+  trustSignals: string[];
+  sectionStrategy: string[];
+  evidenceSources: Array<"business_name" | "category" | "google_places" | "description" | "location">;
+}
+
+/** @deprecated Use BusinessSemanticProfile. */
+export type SemanticBusinessAnalysis = BusinessSemanticProfile;
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** Match complete words/phrases so `Thai`, `Said`, and `Retail` never match `ai`. */
+export function containsSemanticPhrase(text: string, phrase: string): boolean {
+  const normalizedPhrase = phrase.trim().replace(/[_-]+/g, " ");
+  if (!normalizedPhrase) return false;
+  const pattern = escapeRegExp(normalizedPhrase).replace(/\s+/g, "[\\s_-]+");
+  return new RegExp(`(?:^|[^a-z0-9])${pattern}(?=$|[^a-z0-9])`, "i").test(text);
 }
 
 /**
@@ -378,7 +399,137 @@ const CONCEPT_CLUSTERS: SemanticConceptCluster[] = [
     taglineTemplate: (name, loc) => `Authentic Culinary & Dining Heritage in ${loc}`,
   },
 
-  // 5. Fitness Gym & Athletic Performance
+  // 5. Spa, Massage & Restorative Wellness (kept separate from hair/beauty)
+  {
+    domain: "wellness_personal_care",
+    subdomain: "spa_and_massage",
+    keywords: [
+      "thai spa",
+      "spa",
+      "massage",
+      "wellness centre",
+      "wellness center",
+      "body therapy",
+      "aromatherapy",
+      "reflexology",
+      "ayurvedic massage",
+      "holistic wellness",
+    ],
+    primaryObjects: [
+      "massage treatment room",
+      "spa treatment bed",
+      "folded towels",
+      "aromatherapy oils",
+      "calm wellness interior",
+    ],
+    forbiddenObjects: [
+      "computer dashboard",
+      "server rack",
+      "coffee beans",
+      "restaurant table",
+      "hair cutting chair",
+      "car",
+      "motorcycle",
+    ],
+    preferredImageryThemes: [
+      "spa_treatment_room",
+      "thai_massage_wellness",
+      "aromatherapy_ritual",
+      "calm_wellness_interior",
+      "restorative_body_therapy",
+    ],
+    forbiddenImageryThemes: [
+      "software_dashboards",
+      "server_infrastructure",
+      "coffee_shop",
+      "hair_salon",
+      "automotive",
+    ],
+    primaryCtaOptions: {
+      primary: "Book a Treatment",
+      secondary: "Explore Wellness Services",
+      intent: "book_wellness_treatment",
+    },
+    sampleServices: [
+      {
+        title: "Traditional Thai Massage",
+        description: "A restorative wellness session focused on assisted stretching, rhythmic pressure, and relaxation.",
+        price: "Contact for current pricing",
+      },
+      {
+        title: "Relaxation Massage",
+        description: "A calming full-body wellness experience designed to ease everyday tension and encourage deep relaxation.",
+        price: "Contact for current pricing",
+      },
+      {
+        title: "Aromatherapy Wellness Ritual",
+        description: "A gentle massage experience using aromatic oils in a private, peaceful treatment setting.",
+        price: "Contact for current pricing",
+      },
+      {
+        title: "Personalised Wellness Session",
+        description: "Discuss preferences and availability directly with the spa before choosing a suitable treatment.",
+        price: "Advance booking recommended",
+      },
+    ],
+    taglineTemplate: (_name, loc) => `Restorative Thai Spa & Wellness in ${loc}`,
+  },
+
+  // Software and AI technology. Short tokens are boundary-matched by containsSemanticPhrase.
+  {
+    domain: "software_technology",
+    subdomain: "saas_platform",
+    keywords: ["saas", "software", "ai", "artificial intelligence", "cloud platform", "developer platform", "api"],
+    primaryObjects: ["software interface", "product dashboard", "technology team", "data visualization"],
+    forbiddenObjects: ["massage bed", "coffee beans", "restaurant table", "car fleet"],
+    preferredImageryThemes: ["software_product_interface", "technology_team", "data_visualization"],
+    forbiddenImageryThemes: ["spa", "restaurant", "automotive"],
+    primaryCtaOptions: { primary: "Request a Demo", secondary: "Explore the Platform", intent: "software_demo" },
+    sampleServices: [
+      { title: "Platform Capabilities", description: "Explore the core workflows and product capabilities available to customers.", price: "Contact for plans" },
+      { title: "Implementation Support", description: "Structured guidance for setup, configuration, and team adoption.", price: "Plan dependent" },
+      { title: "Integrations", description: "Connect supported tools and data sources through documented product integrations.", price: "Contact for details" },
+    ],
+    taglineTemplate: (_name, loc) => `Modern Software Solutions in ${loc}`,
+  },
+
+  // Legal and advisory services.
+  {
+    domain: "professional_services",
+    subdomain: "legal_practice",
+    keywords: ["law firm", "lawyer", "attorney", "advocate", "legal counsel", "solicitor", "barrister"],
+    primaryObjects: ["legal consultation", "professional office", "case documents", "client meeting"],
+    forbiddenObjects: ["massage bed", "restaurant table", "software dashboard", "vehicle fleet"],
+    preferredImageryThemes: ["legal_consultation", "professional_office", "case_review"],
+    forbiddenImageryThemes: ["spa", "restaurant", "automotive"],
+    primaryCtaOptions: { primary: "Request a Consultation", secondary: "Explore Practice Areas", intent: "legal_consultation" },
+    sampleServices: [
+      { title: "Legal Consultation", description: "Discuss your matter, available options, and the appropriate next steps with the practice.", price: "Contact for consultation terms" },
+      { title: "Advisory & Documentation", description: "Professional guidance and document support based on the scope of your legal requirements.", price: "Scope-based quote" },
+      { title: "Matter Representation", description: "Representation services subject to an initial review, engagement terms, and applicable jurisdiction.", price: "Contact for details" },
+    ],
+    taglineTemplate: (_name, loc) => `Professional Legal Guidance in ${loc}`,
+  },
+
+  // Education and training.
+  {
+    domain: "education_training",
+    subdomain: "education_provider",
+    keywords: ["school", "academy", "college", "university", "coaching institute", "training center", "education"],
+    primaryObjects: ["classroom", "learning materials", "students", "instructor"],
+    forbiddenObjects: ["massage bed", "restaurant table", "server rack", "vehicle fleet"],
+    preferredImageryThemes: ["classroom_learning", "student_collaboration", "instructor_guidance"],
+    forbiddenImageryThemes: ["spa", "restaurant", "automotive"],
+    primaryCtaOptions: { primary: "Enquire About Admissions", secondary: "Explore Programs", intent: "education_enquiry" },
+    sampleServices: [
+      { title: "Programs & Courses", description: "Explore available learning programs, schedules, and suitability for different learner goals.", price: "Contact for current fees" },
+      { title: "Admissions Guidance", description: "Get clear information about eligibility, enrollment steps, and current availability.", price: "Enquiry available" },
+      { title: "Learning Support", description: "Structured instruction and learner support aligned with the provider's confirmed curriculum.", price: "Program dependent" },
+    ],
+    taglineTemplate: (_name, loc) => `Learning & Skill Development in ${loc}`,
+  },
+
+  // 6. Fitness Gym & Athletic Performance
   {
     domain: "wellness_fitness",
     subdomain: "fitness_gym",
@@ -801,10 +952,10 @@ export class BusinessSemanticReasoner {
     for (const cluster of CONCEPT_CLUSTERS) {
       let score = 0;
       for (const kw of cluster.keywords) {
-        if (rawText.includes(kw)) {
+        if (containsSemanticPhrase(rawText, kw)) {
           // Weight exact phrase matches in business name more heavily
           const nameLower = (params.businessName || "").toLowerCase();
-          if (nameLower.includes(kw)) {
+          if (containsSemanticPhrase(nameLower, kw)) {
             score += 4;
           } else {
             score += 2;
@@ -866,6 +1017,12 @@ export class BusinessSemanticReasoner {
     if (!params.rating) unknownsIdentified.push("Customer review score not verified");
     if (!params.phone) unknownsIdentified.push("Direct telephone line not verified");
 
+    const evidenceSources: BusinessSemanticProfile["evidenceSources"] = ["business_name"];
+    if (params.category) evidenceSources.push("category");
+    if (params.types?.length) evidenceSources.push("google_places");
+    if (params.description) evidenceSources.push("description");
+    if (params.location) evidenceSources.push("location");
+
     return {
       domain: bestCluster.domain,
       subdomain: bestCluster.subdomain,
@@ -894,6 +1051,14 @@ export class BusinessSemanticReasoner {
         inferencesDeducted,
         unknownsIdentified,
       },
+      googlePlaceTypes: params.types || [],
+      offerings: bestCluster.sampleServices.map((service) => service.title),
+      tone: bestCluster.domain.includes("wellness")
+        ? ["calm", "restorative", "grounded", "inviting"]
+        : ["clear", "credible", "customer-focused"],
+      trustSignals: groundedTrustBadges,
+      sectionStrategy: ["hero", "services", "about", "features", "faq", "contact", "footer"],
+      evidenceSources,
     };
   }
 }
