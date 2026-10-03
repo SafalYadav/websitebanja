@@ -211,6 +211,8 @@ export const GroundedBusinessProfileSchema = z.object({
   }),
   placesPhotos: z.array(z.any()).optional(),
   placesReviews: z.array(z.any()).optional(),
+  websitePhotos: z.array(z.any()).optional(),
+  clientAssets: z.array(z.any()).optional(),
   compositeConfidence: z.number().min(0).max(1),
   compositeConfidenceLevel: ConfidenceLevelSchema,
 });

@@ -25,6 +25,7 @@ export interface WebsiteGroundedData {
     hasWhatsApp: boolean;
   };
   sampleText: string;
+  images?: Array<{ url: string; alt?: string; sourceUrl?: string }>;
   evidence: EvidenceItem[];
   error?: string;
 }
@@ -196,6 +197,66 @@ export class WebsiteScraperSource {
         });
       }
 
+      // Extract high-resolution official website photographs
+      const images: Array<{ url: string; alt?: string; sourceUrl?: string }> = [];
+      const seenImageUrls = new Set<string>();
+
+      if (doc.ogImage) {
+        try {
+          const resolvedOg = new URL(doc.ogImage, urlToFetch).toString();
+          if (!seenImageUrls.has(resolvedOg)) {
+            seenImageUrls.add(resolvedOg);
+            images.push({ url: resolvedOg, alt: doc.ogTitle || doc.title, sourceUrl: urlToFetch });
+            evidence.push(
+              createEvidenceItem({
+                source: "business_website",
+                reference: urlToFetch,
+                observation: `Found primary OpenGraph hero photograph: ${resolvedOg}`,
+                supports: "visual.photos",
+                baseConfidence: 0.92,
+              })
+            );
+          }
+        } catch {}
+      }
+
+      if (Array.isArray(doc.images)) {
+        for (const img of doc.images) {
+          if (!img.src) continue;
+          const src = img.src.trim();
+          if (
+            src.startsWith("data:") ||
+            src.includes("pixel") ||
+            src.includes("tracking") ||
+            src.includes("1x1") ||
+            src.endsWith(".svg") ||
+            src.includes("favicon") ||
+            src.includes("logo") ||
+            src.includes("icon")
+          ) {
+            continue;
+          }
+          try {
+            const resolvedImg = new URL(src, urlToFetch).toString();
+            if (!seenImageUrls.has(resolvedImg)) {
+              seenImageUrls.add(resolvedImg);
+              images.push({ url: resolvedImg, alt: img.alt, sourceUrl: urlToFetch });
+              if (images.length <= 6) {
+                evidence.push(
+                  createEvidenceItem({
+                    source: "business_website",
+                    reference: urlToFetch,
+                    observation: `Verified official website photograph: ${resolvedImg}`,
+                    supports: "visual.photos",
+                    baseConfidence: 0.88,
+                  })
+                );
+              }
+            }
+          } catch {}
+        }
+      }
+
       return {
         isAvailable: true,
         normalizedUrl: urlToFetch,
@@ -213,6 +274,7 @@ export class WebsiteScraperSource {
           hasWhatsApp,
         },
         sampleText: doc.rawText ? doc.rawText.slice(0, 1500) : "",
+        images,
         evidence,
       };
     } catch (err) {

@@ -208,6 +208,8 @@ export interface GroundedBusinessProfile {
   };
   placesPhotos?: RawPlacesPhoto[];
   placesReviews?: RawPlacesReview[];
+  websitePhotos?: Array<{ url: string; alt?: string; sourceUrl?: string }>;
+  clientAssets?: Array<{ url: string; label?: string }>;
   compositeConfidence: number; // 0.0 to 1.0
   compositeConfidenceLevel: ConfidenceLevel;
 }

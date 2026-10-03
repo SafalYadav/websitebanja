@@ -103,6 +103,7 @@ export interface ValidationContext {
   targetAudience?: string;
   services?: string[];
   location?: string;
+  businessLocation?: string;
   retryCount?: number;
   maxRetries?: number;
   previousFingerprints?: string[];
