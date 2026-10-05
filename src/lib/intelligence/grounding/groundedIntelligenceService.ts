@@ -17,7 +17,7 @@ import {
 import { compileForbiddenClaims } from "./forbiddenClaimsEngine";
 import { groundedProfileStore } from "./groundedProfileStore";
 import { GroundedBusinessProfileSchema } from "./schemas";
-import { MemoryStore, redactSecretsInString } from "../memory/memoryStore";
+import { redactSecretsInString } from "../memory/memoryStore";
 import { businessSemanticReasoner } from "../semantic/businessSemanticReasoner";
 import type {
   BusinessResearchRequest,
@@ -279,7 +279,7 @@ export class GroundedIntelligenceService {
       this.inferArchetypeAndIndustry(combinedContext, sourcesFetched.length > 1);
 
     // If semantic reasoner discovered a specific domain and archetype was unknown, elevate it
-    if (archetype === "unknown" && semanticAnalysis.domain !== "generic_service") {
+    if (archetype === "unknown" && semanticAnalysis.domain !== "general_commercial" && semanticAnalysis.confidence >= 0.7) {
       archetype = semanticAnalysis.domain;
       archetypeConfidence = "HIGH";
       industryFamily = semanticAnalysis.domain;
@@ -495,6 +495,8 @@ export class GroundedIntelligenceService {
 
     // 15. Assemble Final Profile with Places Photos and Reviews
     const profile: GroundedBusinessProfile = {
+      googlePlaceTypes: placesRes?.types || [],
+      googlePrimaryType: placesRes?.primaryType,
       businessId,
       tenantId,
       identity,
@@ -532,39 +534,8 @@ export class GroundedIntelligenceService {
     // Save to profile store
     await groundedProfileStore.saveProfile(profile);
 
-    // 16. Evidence-Gated Integration with Phase 18 Memory
-    if (compositeConfidence >= 0.40 && profile.archetype !== "unknown") {
-      try {
-        const memStore = MemoryStore.getInstance();
-        await memStore.saveBusinessMemory({
-          id: `bmem_${businessId}`,
-          projectId: businessId,
-          userId: request.userId || null,
-          tenantId: request.tenantId || null,
-          businessName: brandSignals.businessName,
-          category: archetype,
-          verifiedFacts: {
-            address: location.formattedAddress,
-            phone: identity.phone,
-            website: identity.normalizedWebsite,
-            placeId: identity.placeId,
-            verifiedServices: services.filter((s) => s.isObserved).map((s) => s.name),
-          },
-          validatedPreferences: {
-            visualArchetype: archetype,
-            tone: brandSignals.tone,
-          },
-          previousOutcomes: [],
-          approvedBrandInfo: {
-            name: brandSignals.businessName,
-            tagline: brandSignals.tagline,
-          },
-          updatedAt: new Date().toISOString(),
-        });
-      } catch {
-        // Safe fallback
-      }
-    }
+    // Grounding is evidence, not approved learning. Only human-governed knowledge
+    // activation may promote reusable semantics into active runtime memory.
 
     return {
       success: true,

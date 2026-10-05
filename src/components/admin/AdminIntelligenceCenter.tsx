@@ -1,6 +1,10 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useMemo } from "react";
+import { useAsyncResource } from "@/hooks/useAsyncResource";
+import type { GovernanceAuditEntry, PolicyRule } from "@/lib/intelligence/policies/governanceTypes";
+import type { AgentStrategyRecord, AgentLessonRecord, AgentRunRecord, AgentFailureRecord, AgentExperimentRecord, AgentDecisionRecord } from "@/lib/intelligence/memory/memoryTypes";
+import type { ExecutionTreeNode } from "@/lib/intelligence/delegation/delegationTypes";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Sparkles,
@@ -63,6 +67,29 @@ import type {
 interface AdminIntelligenceCenterProps {
   sessionToken?: string;
   onNavigateTab?: (tabId: string) => void;
+}
+
+interface IntelligenceMemorySnapshot {
+  strategies: AgentStrategyRecord[];
+  lessons: AgentLessonRecord[];
+  runs: AgentRunRecord[];
+  failures: AgentFailureRecord[];
+  experiments: AgentExperimentRecord[];
+}
+
+interface IntelligenceOpsSnapshot {
+  agent: { name: string; status: string; executionMode: string; webhookConfigured: boolean };
+  securityInvariants: { whatsappStatus: string; emailAutoSend: string; optOutCompliance: string; secretRedaction: string };
+  tools: Array<{ name: string; available: boolean; type: string }>;
+  recentReports: AgentDecisionRecord[];
+}
+
+async function fetchIntelligenceResource<T>(url: string, sessionToken?: string): Promise<T> {
+  if (!sessionToken) throw new Error("Sign in with an administrator account to load intelligence evidence.");
+  const response = await fetch(url, { cache: "no-store", headers: { Authorization: `Bearer ${sessionToken}` } });
+  const body: T & { success?: boolean; message?: string; error?: string } = await response.json();
+  if (!response.ok || body.success !== true) throw new Error(body.message || body.error || "Intelligence evidence could not be loaded.");
+  return body;
 }
 
 const WINDOW_OPTIONS = [
@@ -197,16 +224,17 @@ function getSeverityBadge(severity: IssueSeverity) {
 
 // ─── Phase 25: Governance Section Sub-Component ──────────────────────────────
 
+interface GovernancePanelData {
+  auditSummary: { total: number; allowed: number; requireApproval: number; blocked: number };
+  pendingApprovals: number;
+  recentDecisions: GovernanceAuditEntry[];
+  policyRules: PolicyRule[];
+}
+
 function GovernanceSection({ sessionToken }: { sessionToken?: string }) {
-  const [govData, setGovData] = useState<any | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [showRules, setShowRules] = useState(false);
 
-  const fetchGovernance = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
-    try {
+  const loadGovernance = useCallback(async (): Promise<GovernancePanelData> => {
       const headers: Record<string, string> = {};
       if (sessionToken) headers["Authorization"] = `Bearer ${sessionToken}`;
       const res = await fetch(`/api/admin/intelligence/governance?t=${Date.now()}`, {
@@ -214,21 +242,10 @@ function GovernanceSection({ sessionToken }: { sessionToken?: string }) {
         cache: "no-store",
       });
       const data = await res.json();
-      if (data.success) {
-        setGovData(data.governance);
-      } else {
-        setError(data.message || "Failed to load governance data.");
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Network error");
-    } finally {
-      setIsLoading(false);
-    }
+      if (!res.ok || !data.success || !data.governance) throw new Error(data.message || "Failed to load governance data.");
+      return data.governance;
   }, [sessionToken]);
-
-  useEffect(() => {
-    void fetchGovernance();
-  }, [fetchGovernance]);
+  const { data: govData, loading: isLoading, error, refresh: fetchGovernance } = useAsyncResource("governance", loadGovernance);
 
   const summary = govData?.auditSummary;
 
@@ -360,7 +377,7 @@ function GovernanceSection({ sessionToken }: { sessionToken?: string }) {
                 </button>
               </div>
               <div className="space-y-1.5 max-h-48 overflow-y-auto">
-                {govData.recentDecisions.slice(0, 8).map((d: any) => (
+                {govData.recentDecisions.slice(0, 8).map((d) => (
                   <div
                     key={d.auditId}
                     className="flex items-center gap-2.5 rounded-xl border border-zinc-100 dark:border-white/5 bg-white dark:bg-zinc-900/60 px-3 py-2 text-[10px]"
@@ -395,7 +412,7 @@ function GovernanceSection({ sessionToken }: { sessionToken?: string }) {
             <div className="space-y-1.5">
               <span className="text-xs font-bold text-zinc-600 dark:text-zinc-300">Policy Rules</span>
               <div className="grid gap-1.5">
-                {govData.policyRules.map((rule: any) => (
+                {govData.policyRules.map((rule) => (
                   <div
                     key={rule.ruleId}
                     className="flex items-center gap-2.5 rounded-xl border border-zinc-100 dark:border-white/5 bg-white dark:bg-zinc-900/60 px-3 py-2 text-[10px]"
@@ -446,18 +463,10 @@ function GovernanceSection({ sessionToken }: { sessionToken?: string }) {
 
 export default function AdminIntelligenceCenter({ sessionToken, onNavigateTab }: AdminIntelligenceCenterProps) {
   const [windowMinutes, setWindowMinutes] = useState<number>(1440);
-  const [report, setReport] = useState<BossReport | null>(null);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
   const [selectedAgentDetail, setSelectedAgentDetail] = useState<AgentHealthMetric | null>(null);
   const [severityFilter, setSeverityFilter] = useState<string>("ALL");
 
   // Phase 26 CEO Command Center State
-  const [commandCenterData, setCommandCenterData] = useState<CeoCommandCenterData | null>(null);
-  const [isCommandCenterLoading, setIsCommandCenterLoading] = useState<boolean>(true);
-  const [commandCenterError, setCommandCenterError] = useState<string | null>(null);
   const [activeViewTab, setActiveViewTab] = useState<"command_center" | "deep_dive">("command_center");
 
   // Real-time SSE State
@@ -487,48 +496,22 @@ export default function AdminIntelligenceCenter({ sessionToken, onNavigateTab }:
   const [executiveError, setExecutiveError] = useState<string | null>(null);
 
   // Phase 18 Long-Term Memory & Learning State
-  const [memoryData, setMemoryData] = useState<{
-    strategies: any[];
-    lessons: any[];
-    runs: any[];
-    failures: any[];
-    experiments: any[];
-  } | null>(null);
-  const [isMemoryLoading, setIsMemoryLoading] = useState<boolean>(false);
   const [memoryTab, setMemoryTab] = useState<"strategies" | "lessons" | "failures" | "experiments">("lessons");
   const [promotingLessonId, setPromotingLessonId] = useState<string | null>(null);
   const [promotionMessage, setPromotionMessage] = useState<string | null>(null);
 
-  const fetchMemoryData = useCallback(async () => {
-    setIsMemoryLoading(true);
-    try {
-      const headers: Record<string, string> = {};
-      if (sessionToken) headers["Authorization"] = `Bearer ${sessionToken}`;
-      const res = await fetch(`/api/admin/intelligence/memory?t=${Date.now()}`, {
-        headers,
-        cache: "no-store",
-      });
-      const data = await res.json();
-      if (data.success) {
-        setMemoryData({
-          strategies: data.strategies || [],
-          lessons: data.lessons || [],
-          runs: data.runs || [],
-          failures: data.failures || [],
-          experiments: data.experiments || [],
-        });
-      }
-    } catch (err) {
-      console.error("[Memory Fetch Error]:", err);
-    } finally {
-      setIsMemoryLoading(false);
-    }
+  const loadMemoryData = useCallback(async () => {
+    const data = await fetchIntelligenceResource<IntelligenceMemorySnapshot>("/api/admin/intelligence/memory", sessionToken);
+    if (![data.strategies, data.lessons, data.runs, data.failures, data.experiments].every(Array.isArray)) throw new Error("Memory response is incomplete.");
+    return data;
   }, [sessionToken]);
+  const memoryResource = useAsyncResource(sessionToken || "signed-out", loadMemoryData);
+  const memoryData = memoryResource.data;
+  const isMemoryLoading = memoryResource.loading;
+  const fetchMemoryData = memoryResource.refresh;
 
   // Phase 19 Hierarchical Delegation State
-  const [delegationTrees, setDelegationTrees] = useState<any[]>([]);
-  const [selectedTree, setSelectedTree] = useState<any | null>(null);
-  const [isDelegationLoading, setIsDelegationLoading] = useState<boolean>(false);
+  const [treeSelection, setTreeSelection] = useState<{ sessionToken?: string; taskId: string } | null>(null);
   const [isDelegating, setIsDelegating] = useState<boolean>(false);
   const [delegationObjective, setDelegationObjective] = useState<string>(
     "Vadodara gourmet restaurant: derive custom 8pt UI tokens, bento layout, and audit visual uniqueness against competitors."
@@ -536,47 +519,20 @@ export default function AdminIntelligenceCenter({ sessionToken, onNavigateTab }:
   const [delegationError, setDelegationError] = useState<string | null>(null);
   const [delegationResult, setDelegationResult] = useState<any | null>(null);
 
-  const fetchDelegationData = useCallback(async () => {
-    setIsDelegationLoading(true);
-    try {
-      const headers: Record<string, string> = {};
-      if (sessionToken) headers["Authorization"] = `Bearer ${sessionToken}`;
-      const res = await fetch(`/api/admin/intelligence/delegation?t=${Date.now()}`, {
-        headers,
-        cache: "no-store",
-      });
-      const data = await res.json();
-      if (data.success && Array.isArray(data.trees)) {
-        setDelegationTrees(data.trees);
-        if (data.trees.length > 0 && !selectedTree) {
-          setSelectedTree(data.trees[0]);
-        }
-      }
-    } catch (err) {
-      console.error("[Delegation Fetch Error]:", err);
-    } finally {
-      setIsDelegationLoading(false);
-    }
-  }, [sessionToken, selectedTree]);
+  const loadDelegationData = useCallback(async () => {
+    const data = await fetchIntelligenceResource<{ trees: ExecutionTreeNode[] }>("/api/admin/intelligence/delegation", sessionToken);
+    if (!Array.isArray(data.trees)) throw new Error("Delegation response is incomplete.");
+    return data.trees;
+  }, [sessionToken]);
+  const delegationResource = useAsyncResource(sessionToken || "signed-out", loadDelegationData);
+  const delegationTrees = delegationResource.data ?? [];
+  const selectedTree = (treeSelection?.sessionToken === sessionToken
+    ? delegationTrees.find(tree => tree.taskId === treeSelection?.taskId) : null) ?? delegationTrees[0] ?? null;
+  const setSelectedTree = (tree: ExecutionTreeNode) => setTreeSelection({ sessionToken, taskId: tree.taskId });
+  const isDelegationLoading = delegationResource.loading;
+  const fetchDelegationData = delegationResource.refresh;
 
   // Phase 22 n8n Ops Agent State
-  const [opsData, setOpsData] = useState<{
-    agent: {
-      name: string;
-      status: string;
-      executionMode: string;
-      webhookConfigured: boolean;
-    };
-    securityInvariants: {
-      whatsappStatus: string;
-      emailAutoSend: string;
-      optOutCompliance: string;
-      secretRedaction: string;
-    };
-    tools: Array<{ name: string; available: boolean; type: string }>;
-    recentReports: any[];
-  } | null>(null);
-  const [isOpsLoading, setIsOpsLoading] = useState<boolean>(false);
   const [isOpsDispatching, setIsOpsDispatching] = useState<boolean>(false);
   const [opsObjective, setOpsObjective] = useState<string>(
     "Discover 3 local dental clinics in Kathmandu, audit their web presence, and draft personalized preview outreach."
@@ -584,48 +540,26 @@ export default function AdminIntelligenceCenter({ sessionToken, onNavigateTab }:
   const [opsDispatchError, setOpsDispatchError] = useState<string | null>(null);
   const [opsDispatchResult, setOpsDispatchResult] = useState<any | null>(null);
 
-  const fetchOpsData = useCallback(async () => {
-    setIsOpsLoading(true);
-    try {
-      const headers: Record<string, string> = {};
-      if (sessionToken) headers["Authorization"] = `Bearer ${sessionToken}`;
-      const res = await fetch(`/api/admin/intelligence/ops?t=${Date.now()}`, {
-        headers,
-        cache: "no-store",
-      });
-      const data = await res.json();
-      if (data.success) {
-        setOpsData(data);
-      }
-    } catch (err) {
-      console.error("[Ops Agent Fetch Error]:", err);
-    } finally {
-      setIsOpsLoading(false);
-    }
+  const loadOpsData = useCallback(async () => {
+    const data = await fetchIntelligenceResource<IntelligenceOpsSnapshot>("/api/admin/intelligence/ops", sessionToken);
+    if (!data.agent || !data.securityInvariants || !Array.isArray(data.tools) || !Array.isArray(data.recentReports)) throw new Error("Ops response is incomplete.");
+    return data;
   }, [sessionToken]);
+  const opsResource = useAsyncResource(sessionToken || "signed-out", loadOpsData);
+  const opsData = opsResource.data;
+  const isOpsLoading = opsResource.loading;
+  const fetchOpsData = opsResource.refresh;
 
-  const fetchCommandCenterData = useCallback(async () => {
-    setIsCommandCenterLoading(true);
-    setCommandCenterError(null);
-    try {
-      const headers: Record<string, string> = {};
-      if (sessionToken) headers["Authorization"] = `Bearer ${sessionToken}`;
-      const res = await fetch(`/api/admin/intelligence/command-center?t=${Date.now()}`, {
-        headers,
-        cache: "no-store",
-      });
-      const json = await res.json();
-      if (json.success && json.data) {
-        setCommandCenterData(json.data);
-      } else {
-        setCommandCenterError(json.message || "Failed to load CEO Command Center data.");
-      }
-    } catch (err) {
-      setCommandCenterError(err instanceof Error ? err.message : "Network error");
-    } finally {
-      setIsCommandCenterLoading(false);
-    }
+  const loadCommandCenterData = useCallback(async () => {
+    const body = await fetchIntelligenceResource<{ data: CeoCommandCenterData }>("/api/admin/intelligence/command-center", sessionToken);
+    if (!body.data) throw new Error("Command Center response is incomplete.");
+    return body.data;
   }, [sessionToken]);
+  const commandCenterResource = useAsyncResource(sessionToken || "signed-out", loadCommandCenterData);
+  const commandCenterData = commandCenterResource.data;
+  const isCommandCenterLoading = commandCenterResource.loading;
+  const commandCenterError = commandCenterResource.error;
+  const fetchCommandCenterData = commandCenterResource.refresh;
 
   const handleExecuteOpsDispatch = async (overrideObjective?: string) => {
     const obj = overrideObjective || opsObjective;
@@ -690,7 +624,7 @@ export default function AdminIntelligenceCenter({ sessionToken, onNavigateTab }:
         setDelegationResult(data.result);
         if (data.tree) {
           setSelectedTree(data.tree);
-          setDelegationTrees((prev) => [data.tree, ...prev.filter((t) => t.taskId !== data.tree.taskId)]);
+          fetchDelegationData();
         }
       }
     } catch (err) {
@@ -761,58 +695,18 @@ export default function AdminIntelligenceCenter({ sessionToken, onNavigateTab }:
     }
   };
 
-  const fetchDiagnostics = useCallback(
-    async (isManualRefresh = false) => {
-      if (isManualRefresh) {
-        setIsRefreshing(true);
-      } else {
-        setIsLoading(true);
-      }
-      setErrorMessage(null);
-
-      try {
-        const headers: Record<string, string> = {};
-        if (sessionToken) {
-          headers["Authorization"] = `Bearer ${sessionToken}`;
-        }
-
-        const res = await fetch(`/api/admin/agents/diagnostics?windowMinutes=${windowMinutes}&t=${Date.now()}`, {
-          cache: "no-store",
-          headers,
-        });
-
-        if (res.status === 401 || res.status === 403) {
-          setErrorMessage("Unauthorized: Administrator clearance is required to view AI Diagnostics.");
-          setIsLoading(false);
-          setIsRefreshing(false);
-          return;
-        }
-
-        const json = await res.json();
-        if (!res.ok || !json.success) {
-          throw new Error(json.message || "Failed to retrieve AI diagnostics report.");
-        }
-
-        setReport(json.data);
-        setLastUpdated(new Date());
-      } catch (err) {
-        console.error("[AdminIntelligenceCenter Fetch Error]:", err);
-        setErrorMessage(err instanceof Error ? err.message : "Error connecting to AI Diagnostics service.");
-      } finally {
-        setIsLoading(false);
-        setIsRefreshing(false);
-      }
-    },
-    [sessionToken, windowMinutes]
-  );
-
-  useEffect(() => {
-    void fetchCommandCenterData();
-    void fetchDiagnostics();
-    void fetchMemoryData();
-    void fetchDelegationData();
-    void fetchOpsData();
-  }, [fetchCommandCenterData, fetchDiagnostics, fetchMemoryData, fetchDelegationData, fetchOpsData]);
+  const loadDiagnostics = useCallback(async () => {
+    const body = await fetchIntelligenceResource<{ data: BossReport }>(`/api/admin/agents/diagnostics?windowMinutes=${windowMinutes}`, sessionToken);
+    if (!body.data) throw new Error("Diagnostics response is incomplete.");
+    return { report: body.data, receivedAt: new Date() };
+  }, [sessionToken, windowMinutes]);
+  const diagnosticsResource = useAsyncResource(`${sessionToken || "signed-out"}:${windowMinutes}`, loadDiagnostics);
+  const report = diagnosticsResource.data?.report ?? null;
+  const lastUpdated = diagnosticsResource.data?.receivedAt;
+  const isLoading = diagnosticsResource.loading && !report;
+  const isRefreshing = diagnosticsResource.loading && Boolean(report);
+  const errorMessage = diagnosticsResource.error;
+  const fetchDiagnostics = (_isManualRefresh = false) => diagnosticsResource.refresh();
 
   // Real-time Server-Sent Events (SSE) telemetry subscription
   useEffect(() => {
@@ -894,47 +788,8 @@ export default function AdminIntelligenceCenter({ sessionToken, onNavigateTab }:
             };
           });
 
-          // Incrementally update provider counts in report if present
-          if (event.provider && (event.event === "agent.provider_success" || event.event === "agent.provider_error")) {
-            setReport((currentReport) => {
-              if (!currentReport || !currentReport.telemetrySummary) return currentReport;
-              const provKey = event.provider!;
-              const currentProv = (currentReport.telemetrySummary.providerBreakdown as any)?.[provKey] || {
-                calls: 0,
-                errors: 0,
-                successes: 0,
-                fallbacks: 0,
-                avgLatencyMs: 0,
-                recentErrors: [],
-              };
-              const isError = event.event === "agent.provider_error";
-              const newCalls = (currentProv.calls || 0) + 1;
-              const newErrors = (currentProv.errors || 0) + (isError ? 1 : 0);
-              const newSuccesses = (currentProv.successes || 0) + (isError ? 0 : 1);
-              const newLatency = event.latencyMs
-                ? Math.round(((currentProv.avgLatencyMs || 0) * (currentProv.calls || 0) + event.latencyMs) / newCalls)
-                : currentProv.avgLatencyMs || 0;
-
-              return {
-                ...currentReport,
-                telemetrySummary: {
-                  ...currentReport.telemetrySummary,
-                  totalRuns: currentReport.telemetrySummary.totalRuns + 1,
-                  totalErrors: currentReport.telemetrySummary.totalErrors + (isError ? 1 : 0),
-                  providerBreakdown: {
-                    ...currentReport.telemetrySummary.providerBreakdown,
-                    [provKey]: {
-                      ...currentProv,
-                      calls: newCalls,
-                      errors: newErrors,
-                      successes: newSuccesses,
-                      avgLatencyMs: newLatency,
-                    },
-                  },
-                },
-              };
-            });
-          }
+          // Stream events are displayed separately. Only a fresh server report
+          // may update windowed provider/run aggregates; reconnects can replay events.
         } catch (err) {
           console.error("[SSE telemetry parse error]", err);
         }
@@ -1137,7 +992,7 @@ export default function AdminIntelligenceCenter({ sessionToken, onNavigateTab }:
           </button>
 
           <span className="text-[11px] font-mono text-zinc-400 hidden lg:inline">
-            Updated {lastUpdated.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+            {lastUpdated ? `Updated ${lastUpdated.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}` : "No diagnostics loaded"}
           </span>
         </div>
       </div>
@@ -1586,6 +1441,8 @@ export default function AdminIntelligenceCenter({ sessionToken, onNavigateTab }:
           </div>
         </div>
 
+        {memoryResource.error && <p role="alert" className="text-xs text-red-600 dark:text-red-400">{memoryResource.error}</p>}
+        {isMemoryLoading && <p role="status" className="text-xs text-zinc-500">Loading memory evidence…</p>}
         {/* Memory Stats Pills */}
         <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
           <div className="rounded-2xl border border-zinc-200/60 dark:border-white/5 bg-white/70 dark:bg-zinc-900/70 p-3.5 flex flex-col justify-between">
@@ -1679,7 +1536,7 @@ export default function AdminIntelligenceCenter({ sessionToken, onNavigateTab }:
         )}
 
         {/* Tab Content */}
-        {memoryTab === "lessons" && (
+        {!isMemoryLoading && !memoryResource.error && memoryTab === "lessons" && (
           <div className="space-y-3">
             {(!memoryData?.lessons || memoryData.lessons.length === 0) ? (
               <div className="rounded-2xl border border-zinc-200/60 dark:border-white/5 bg-white/50 dark:bg-zinc-900/50 p-6 text-center text-xs text-zinc-500">
@@ -1687,7 +1544,7 @@ export default function AdminIntelligenceCenter({ sessionToken, onNavigateTab }:
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {memoryData.lessons.map((lesson: any) => (
+                {memoryData.lessons.map(lesson => (
                   <div
                     key={lesson.id || lesson.lessonId}
                     className="rounded-2xl border border-zinc-200/80 dark:border-white/10 bg-white/90 dark:bg-zinc-900/90 p-4 space-y-3 flex flex-col justify-between"
@@ -1712,7 +1569,7 @@ export default function AdminIntelligenceCenter({ sessionToken, onNavigateTab }:
                       </div>
 
                       <p className="text-xs font-semibold text-zinc-800 dark:text-zinc-200 leading-snug">
-                        {lesson.rule || lesson.insight}
+                        {lesson.statement}
                       </p>
 
                       <div className="flex flex-wrap gap-1 text-[10px] text-zinc-500">
@@ -1720,7 +1577,7 @@ export default function AdminIntelligenceCenter({ sessionToken, onNavigateTab }:
                           Evidence: {Array.isArray(lesson.evidence) ? lesson.evidence.length : 0} items
                         </span>
                         <span className="rounded-md bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 font-mono">
-                          Confidence: {Math.round((lesson.confidenceScore || 0) * 100)}%
+                          Confidence: {Math.round(lesson.confidence * 100)}%
                         </span>
                       </div>
                     </div>
@@ -1749,7 +1606,7 @@ export default function AdminIntelligenceCenter({ sessionToken, onNavigateTab }:
           </div>
         )}
 
-        {memoryTab === "strategies" && (
+        {!isMemoryLoading && !memoryResource.error && memoryTab === "strategies" && (
           <div className="space-y-3">
             {(!memoryData?.strategies || memoryData.strategies.length === 0) ? (
               <div className="rounded-2xl border border-zinc-200/60 dark:border-white/5 bg-white/50 dark:bg-zinc-900/50 p-6 text-center text-xs text-zinc-500">
@@ -1757,7 +1614,7 @@ export default function AdminIntelligenceCenter({ sessionToken, onNavigateTab }:
               </div>
             ) : (
               <div className="space-y-2">
-                {memoryData.strategies.map((strategy: any) => (
+                {memoryData.strategies.map(strategy => (
                   <div
                     key={strategy.id || strategy.strategyId}
                     className="rounded-2xl border border-zinc-200/80 dark:border-white/10 bg-white/90 dark:bg-zinc-900/90 p-4 space-y-2"
@@ -1809,15 +1666,15 @@ export default function AdminIntelligenceCenter({ sessionToken, onNavigateTab }:
           </div>
         )}
 
-        {memoryTab === "failures" && (
+        {!isMemoryLoading && !memoryResource.error && memoryTab === "failures" && (
           <div className="space-y-3">
             {(!memoryData?.failures || memoryData.failures.length === 0) ? (
               <div className="rounded-2xl border border-zinc-200/60 dark:border-white/5 bg-white/50 dark:bg-zinc-900/50 p-6 text-center text-xs text-zinc-500">
-                No critical failure patterns logged. All agent runs healthy.
+                No failure records were returned for this evidence view. This does not prove all agent runs are healthy.
               </div>
             ) : (
               <div className="space-y-2">
-                {memoryData.failures.map((fail: any) => (
+                {memoryData.failures.map(fail => (
                   <div
                     key={fail.id || fail.failureId}
                     className="rounded-2xl border border-red-500/20 bg-red-500/5 p-4 space-y-2 text-xs"
@@ -1826,19 +1683,19 @@ export default function AdminIntelligenceCenter({ sessionToken, onNavigateTab }:
                       <div className="flex items-center gap-2">
                         <AlertTriangle className="h-4 w-4 text-red-500" />
                         <span className="font-bold text-red-700 dark:text-red-400">{fail.failureType}</span>
-                        <span className="font-mono text-[10px] text-zinc-400">Occurrences: {fail.occurrences || 1}</span>
+                        <span className="font-mono text-[10px] text-zinc-400">Retries: {fail.retryCount}</span>
                       </div>
                       <span className="font-mono text-[10px] text-zinc-400">{fail.domain || "general"}</span>
                     </div>
-                    <p className="font-mono text-[11px] text-zinc-700 dark:text-zinc-300">{fail.errorMessage}</p>
-                    {fail.rootCause && (
+                    <p className="font-mono text-[11px] text-zinc-700 dark:text-zinc-300">{fail.safeErrorMessage}</p>
+                    {typeof fail.metadata?.rootCause === "string" && (
                       <div className="text-[11px] text-zinc-600 dark:text-zinc-400">
-                        <strong>Root Cause:</strong> {fail.rootCause}
+                        <strong>Root Cause:</strong> {fail.metadata.rootCause}
                       </div>
                     )}
-                    {fail.recoveryStrategy && (
+                    {fail.recoveryAction && (
                       <div className="text-[11px] text-emerald-700 dark:text-emerald-400">
-                        <strong>Applied Recovery:</strong> {fail.recoveryStrategy}
+                        <strong>Recorded Recovery:</strong> {fail.recoveryAction}
                       </div>
                     )}
                   </div>
@@ -1848,7 +1705,7 @@ export default function AdminIntelligenceCenter({ sessionToken, onNavigateTab }:
           </div>
         )}
 
-        {memoryTab === "experiments" && (
+        {!isMemoryLoading && !memoryResource.error && memoryTab === "experiments" && (
           <div className="space-y-3">
             {(!memoryData?.experiments || memoryData.experiments.length === 0) ? (
               <div className="rounded-2xl border border-zinc-200/60 dark:border-white/5 bg-white/50 dark:bg-zinc-900/50 p-6 text-center text-xs text-zinc-500">
@@ -1856,7 +1713,7 @@ export default function AdminIntelligenceCenter({ sessionToken, onNavigateTab }:
               </div>
             ) : (
               <div className="space-y-2">
-                {memoryData.experiments.map((exp: any) => (
+                {memoryData.experiments.map(exp => (
                   <div
                     key={exp.id || exp.experimentId}
                     className="rounded-2xl border border-zinc-200/80 dark:border-white/10 bg-white/90 dark:bg-zinc-900/90 p-4 space-y-2 text-xs"
@@ -1987,6 +1844,7 @@ export default function AdminIntelligenceCenter({ sessionToken, onNavigateTab }:
           )}
         </div>
 
+        {delegationResource.error && <p role="alert" className="text-xs text-red-600 dark:text-red-400">{delegationResource.error}</p>}
         {/* Split View: Tree List & Interactive Node Visualizer */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
           {/* Recent Trees List (4 Cols) */}
@@ -1995,13 +1853,13 @@ export default function AdminIntelligenceCenter({ sessionToken, onNavigateTab }:
               Execution Trees ({delegationTrees.length})
             </span>
 
-            {delegationTrees.length === 0 ? (
+            {isDelegationLoading ? <p role="status" className="text-xs text-zinc-500">Loading delegation evidence…</p> : delegationResource.error ? null : delegationTrees.length === 0 ? (
               <div className="p-6 text-center text-xs text-zinc-400">
                 No execution trees logged yet. Run a delegation above.
               </div>
             ) : (
               <div className="space-y-2 max-h-[460px] overflow-y-auto pr-1">
-                {delegationTrees.map((tree: any) => {
+                {delegationTrees.map(tree => {
                   const isSelected = selectedTree?.taskId === tree.taskId;
                   const isSuccess = tree.status === "COMPLETED";
                   const isEscalated = tree.status === "ESCALATED";
@@ -2090,7 +1948,7 @@ export default function AdminIntelligenceCenter({ sessionToken, onNavigateTab }:
                 {selectedTree.children && selectedTree.children.length > 0 && (
                   <div className="pl-6 space-y-3 relative">
                     <div className="absolute left-2.5 top-0 bottom-4 w-0.5 bg-indigo-500/30" />
-                    {selectedTree.children.map((bossNode: any) => (
+                    {selectedTree.children.map(bossNode => (
                       <div key={bossNode.taskId} className="space-y-3">
                         <div className="rounded-xl border border-indigo-500/30 bg-indigo-500/5 p-4 space-y-2 relative">
                           <div className="flex items-center justify-between">
@@ -2114,7 +1972,7 @@ export default function AdminIntelligenceCenter({ sessionToken, onNavigateTab }:
                         {bossNode.children && bossNode.children.length > 0 && (
                           <div className="pl-6 grid grid-cols-1 md:grid-cols-2 gap-3 relative">
                             <div className="absolute left-2.5 top-0 bottom-4 w-0.5 bg-zinc-300 dark:bg-zinc-700" />
-                            {bossNode.children.map((child: any) => {
+                            {bossNode.children.map(child => {
                               const isSkill = child.agent === "skills";
                               return (
                                 <div
@@ -2185,7 +2043,7 @@ export default function AdminIntelligenceCenter({ sessionToken, onNavigateTab }:
               <span className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold border border-sky-500/30 bg-sky-500/10 text-sky-600 dark:text-sky-400">
                 <span className="h-2 w-2 rounded-full bg-sky-500 animate-pulse" />
                 <span>
-                  {opsData?.agent.executionMode === "n8n_webhook" ? "N8N LIVE WEBHOOK" : "LOCAL EXECUTOR LOOP"}
+                  {!opsData ? "OPS STATUS UNAVAILABLE" : opsData.agent.executionMode === "n8n_webhook" ? "N8N WEBHOOK CONFIGURED" : "LOCAL EXECUTOR CONFIGURED"}
                 </span>
               </span>
               <button
@@ -2200,6 +2058,8 @@ export default function AdminIntelligenceCenter({ sessionToken, onNavigateTab }:
             </div>
           </div>
 
+          {opsResource.error && <p role="alert" className="text-xs text-red-600 dark:text-red-400">{opsResource.error}</p>}
+          {isOpsLoading && <p role="status" className="text-xs text-zinc-500">Loading ops evidence…</p>}
           {/* Security & Policy Invariants Strip */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             <div className="rounded-xl border border-zinc-200 dark:border-white/10 bg-white/60 dark:bg-zinc-900/60 p-3 flex items-center justify-between">

@@ -32,7 +32,7 @@ import { validationStore } from "./validationStore";
 import { emitAgentEvent } from "@/lib/telemetry/agentTelemetry";
 import { redactSecretsInObject } from "../memory/memoryStore";
 
-export const DEFAULT_MAX_RETRIES = 3;
+export const DEFAULT_MAX_RETRIES = 1;
 
 export class ValidationOrchestrator {
   private static instance: ValidationOrchestrator;
@@ -52,7 +52,7 @@ export class ValidationOrchestrator {
   public async validateWebsite(context: ValidationContext): Promise<ValidationReport> {
     const startTime = new Date().toISOString();
     const validationId = `val_${randomUUID().slice(0, 10)}`;
-    const maxRetries = context.maxRetries ?? DEFAULT_MAX_RETRIES;
+    const maxRetries = Math.max(0, Math.min(DEFAULT_MAX_RETRIES, context.maxRetries ?? DEFAULT_MAX_RETRIES));
     const retryCount = context.retryCount ?? 0;
     const remainingRetries = Math.max(0, maxRetries - retryCount);
 
@@ -221,7 +221,7 @@ export class ValidationOrchestrator {
   }> {
     let currentData = JSON.parse(JSON.stringify(context.websiteData || {}));
     let currentRetryCount = context.retryCount ?? 0;
-    const maxRetries = context.maxRetries ?? DEFAULT_MAX_RETRIES;
+    const maxRetries = Math.max(0, Math.min(DEFAULT_MAX_RETRIES, context.maxRetries ?? DEFAULT_MAX_RETRIES));
     const historyFingerprints: string[] = [...(context.previousFingerprints || [])];
 
     let cycles = 0;

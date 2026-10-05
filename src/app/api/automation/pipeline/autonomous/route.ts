@@ -1,6 +1,9 @@
 // src/app/api/automation/pipeline/autonomous/route.ts
 import { NextResponse } from "next/server";
-import { isAuthorized } from "@/lib/automation/auth";
+import { authorizeAutomationTenant } from "@/lib/automation/automationApiIdentity";
+import { z } from "zod";
+import { PipelineCriteriaSchema } from "@/lib/intelligence/pipeline/pipelineTypes";
+import { authorizeHumanApproval } from "@/lib/intelligence/pipeline/humanApprovalAuthorization";
 import { verifyAdminAuth } from "@/lib/adminAuth";
 import { checkMemoryRateLimit } from "@/lib/rateLimit";
 import { getClientIp } from "@/lib/supabaseServer";
@@ -9,6 +12,20 @@ import { approvalGate } from "@/lib/intelligence/pipeline/approvalGate";
 import { sanitizeErrorOutput } from "@/lib/ai/router/modelConfig";
 
 export const dynamic = "force-dynamic";
+
+const RequestSchema = z.object({
+  action: z.enum(["start", "approve", "reject", "send", "reply", "terminal", "resume_research"]).default("start"),
+  criteria: PipelineCriteriaSchema.optional(), niche: z.string().min(1).max(200).optional(),
+  location: z.string().min(1).max(300).optional(), limit: z.number().int().min(1).max(100).optional(),
+  projectId: z.string().min(1).max(200).nullable().optional(), taskId: z.string().min(1).max(200).optional(),
+  idempotencyKey: z.string().min(1).max(200).optional(),
+  pipelineRunId: z.string().min(1).max(200).optional(), leadId: z.string().min(1).max(200).optional(),
+  outreachId: z.string().min(1).max(200).optional(), approvalId: z.string().min(1).max(200).optional(),
+  notes: z.string().max(2000).optional(), reason: z.string().min(1).max(2000).optional(),
+  sendNow: z.boolean().optional(), messageText: z.string().min(1).max(10000).optional(),
+  senderEmail: z.string().email().optional(), messageId: z.string().min(1).max(200).optional(),
+  outcome: z.enum(["WON", "LOST"]).optional(),
+});
 
 /**
  * GET /api/automation/pipeline/autonomous
@@ -25,23 +42,15 @@ export async function GET(req: Request) {
       );
     }
 
-    const authorized = await isAuthorized(req);
-    if (!authorized) {
-      const adminAuth = await verifyAdminAuth(req);
-      if (!adminAuth.isAdmin) {
-        return NextResponse.json(
-          { success: false, message: "Unauthorized: Invalid service secret or administrator credentials." },
-          { status: 401 }
-        );
-      }
-    }
+    const auth = await authorizeAutomationTenant(req);
+    if (auth.response) return auth.response;
 
     const { searchParams } = new URL(req.url);
     const runId = searchParams.get("runId");
     const action = searchParams.get("action");
 
     if (action === "pending_approvals") {
-      const pending = approvalGate.getPendingApprovals();
+      const pending = await approvalGate.getStoredPendingApprovals(auth.identity.tenantId);
       const telegramPayloads = pending.map((p) =>
         approvalGate.formatTelegramApprovalRequest(p)
       );
@@ -54,8 +63,8 @@ export async function GET(req: Request) {
     }
 
     if (runId) {
-      const run = autonomousPipeline.getRun(runId);
-      if (!run) {
+      const run = await autonomousPipeline.readStoredRun(runId, auth.identity.tenantId);
+      if (!run || run.tenantId !== auth.identity.tenantId) {
         return NextResponse.json(
           { success: false, message: `Pipeline run '${runId}' not found.` },
           { status: 404 }
@@ -64,7 +73,7 @@ export async function GET(req: Request) {
       return NextResponse.json({ success: true, run });
     }
 
-    const runs = autonomousPipeline.listRuns(20);
+    const runs = await autonomousPipeline.listStoredRuns(20, auth.identity.tenantId);
     return NextResponse.json({
       success: true,
       count: runs.length,
@@ -94,27 +103,49 @@ export async function POST(req: Request) {
       );
     }
 
-    const authorized = await isAuthorized(req);
-    if (!authorized) {
-      const adminAuth = await verifyAdminAuth(req);
-      if (!adminAuth.isAdmin) {
-        return NextResponse.json(
-          { success: false, message: "Unauthorized: Invalid service secret or administrator credentials." },
-          { status: 401 }
-        );
+    const auth = await authorizeAutomationTenant(req);
+    if (auth.response) return auth.response;
+    const parsed = RequestSchema.safeParse(await req.json().catch(() => null));
+    if (!parsed.success) return NextResponse.json({ success: false, message: "Invalid autonomous pipeline request" }, { status: 400 });
+    const admin = await verifyAdminAuth(req);
+    const body = { ...parsed.data, tenantId: auth.identity.tenantId, userId: auth.identity.userId,
+      approvedBy: admin.userId, rejectedBy: admin.userId };
+    const action = body.action;
+    if (["approve", "reject"].includes(action) && (!admin.isAdmin || !admin.userId || admin.userId !== auth.identity.tenantId)) {
+      return NextResponse.json({ success: false, message: "Authenticated human tenant administrator required" }, { status: 403 });
+    }
+    if (["approve", "reject", "send"].includes(action)) {
+      const approval = await approvalGate.getStoredApprovalRecord(body.outreachId || body.approvalId || "", auth.identity.tenantId);
+      if (!approval || approval.tenantId !== auth.identity.tenantId) return NextResponse.json({ success: false, message: "Approval not found" }, { status: 404 });
+      if ((action === "send" || body.sendNow) && (body.pipelineRunId !== approval.pipelineRunId || body.leadId !== approval.leadId)) {
+        return NextResponse.json({ success: false, message: "Send must match the original approved run and lead" }, { status: 400 });
       }
     }
-
-    const body = await req.json().catch(() => ({}));
-    const action = body.action || "start";
+    if (["send", "reply", "terminal"].includes(action) || body.sendNow) {
+      const run = autonomousPipeline.getRun(body.pipelineRunId || "");
+      if (!run || run.tenantId !== auth.identity.tenantId || !body.leadId || !run.leads[body.leadId]) {
+        return NextResponse.json({ success: false, message: "Owned pipeline run and lead not found" }, { status: 404 });
+      }
+    }
+    if ((action === "reply" && !body.messageText) || (action === "terminal" && !body.outcome)) {
+      return NextResponse.json({ success: false, message: "Required action payload is missing" }, { status: 400 });
+    }
 
     switch (action) {
+      case "resume_research": {
+        const run = await autonomousPipeline.readStoredRun(body.pipelineRunId || "", auth.identity.tenantId);
+        if (!run || run.tenantId !== auth.identity.tenantId) return NextResponse.json({ success: false, message: "Owned pipeline run not found" }, { status: 404 });
+        const resumed = await autonomousPipeline.resumeResearch(run.pipelineRunId, auth.identity.tenantId);
+        return NextResponse.json({ success: true, pipelineRunId: resumed.pipelineRunId, status: resumed.status, run: resumed });
+      }
       case "start": {
-        const criteria = body.criteria || {
+        const criteriaResult = PipelineCriteriaSchema.safeParse(body.criteria || {
           niche: body.niche,
           location: body.location,
           limit: body.limit || 5,
-        };
+        });
+        if (!criteriaResult.success) return NextResponse.json({ success: false, message: "Invalid discovery criteria" }, { status: 400 });
+        const criteria = criteriaResult.data;
 
         const run = await autonomousPipeline.startPipeline(criteria, {
           tenantId: body.tenantId || null,
@@ -135,10 +166,11 @@ export async function POST(req: Request) {
 
       case "approve": {
         const outreachId = String(body.outreachId || body.approvalId || "");
-        const approvedBy = String(body.approvedBy || "human_admin");
+        const approvedBy = admin.userId!;
         const notes = body.notes;
 
-        const approval = await approvalGate.approveDraft(outreachId, approvedBy, notes);
+        const authorization = await authorizeHumanApproval(req, auth.identity.tenantId);
+        const approval = await approvalGate.approveDraft(outreachId, authorization, notes);
 
         // If sendNow is requested, dispatch immediately after human approval
         if (body.sendNow && body.pipelineRunId && body.leadId) {
@@ -163,10 +195,9 @@ export async function POST(req: Request) {
 
       case "reject": {
         const outreachId = String(body.outreachId || body.approvalId || "");
-        const rejectedBy = String(body.rejectedBy || "human_admin");
         const reason = String(body.reason || "Rejected by administrator");
-
-        const approval = await approvalGate.rejectDraft(outreachId, rejectedBy, reason);
+        const authorization = await authorizeHumanApproval(req, auth.identity.tenantId);
+        const approval = await approvalGate.rejectDraft(outreachId, authorization, reason);
         return NextResponse.json({
           success: true,
           approval,
@@ -188,6 +219,7 @@ export async function POST(req: Request) {
         return NextResponse.json({
           success: sendResult.success,
           messageId: sendResult.messageId,
+          isSimulated: sendResult.isSimulated || false,
           error: sendResult.error,
         });
       }

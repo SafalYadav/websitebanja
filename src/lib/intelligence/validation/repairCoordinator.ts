@@ -1,8 +1,8 @@
 // src/lib/intelligence/validation/repairCoordinator.ts
 /**
  * Repair Coordinator & Bounded Regeneration Engine
- * Reuses Phase 19 Hierarchical Delegation (CEO -> Boss -> Skills/Uniqueness)
- * Implements targeted repair strategy, loop protection, and server-side bounded retries.
+ * Applies evidence-preserving deterministic edits only. Independent employee
+ * review belongs to the canonical generation pipeline, not synthetic task results.
  */
 
 import crypto from "crypto";
@@ -16,8 +16,6 @@ import type {
   CeoValidationAlert,
 } from "./types";
 import { placeContactAtEnd } from "../planning/sectionOrder";
-import type { TaskEnvelope, TaskResultEnvelope } from "../delegation/delegationTypes";
-import { BossDelegator } from "../delegation/bossDelegator";
 import { emitAgentEvent } from "@/lib/telemetry/agentTelemetry";
 
 export class RepairCoordinator {
@@ -45,19 +43,19 @@ export class RepairCoordinator {
   }
 
   /**
-   * Detects if a failure loop is occurring (same fingerprint repeating or alternating).
+   * Detects the first repeated failure signature.
    */
   public detectLoop(currentFingerprint: string, previousFingerprints: string[] = []): boolean {
     if (!previousFingerprints || previousFingerprints.length === 0) return false;
-    // Check if the current fingerprint matches the immediate previous 2 or appears >= 2 times
+    // Stop on the first repeated signature, not after another identical retry.
     const occurrences = previousFingerprints.filter((fp) => fp === currentFingerprint).length;
-    return occurrences >= 2;
+    return occurrences >= 1;
   }
 
   /**
    * Plans targeted repair instructions for blocking failures.
    */
-  public planRepairs(report: ValidationReport, websiteData: Record<string, unknown>): RepairInstruction[] {
+  public planRepairs(report: ValidationReport, _websiteData: Record<string, unknown>): RepairInstruction[] {
     const instructions: RepairInstruction[] = [];
     const blocking = report.blockingFailures;
 
@@ -94,7 +92,7 @@ export class RepairCoordinator {
   }
 
   /**
-   * Executes targeted repair across Boss delegation, returning patched websiteData.
+   * Executes bounded deterministic repair without impersonating an employee review.
    */
   public async executeRepair(
     context: ValidationContext,
@@ -106,7 +104,7 @@ export class RepairCoordinator {
     const patchedData: Record<string, any> = JSON.parse(JSON.stringify(context.websiteData || {}));
 
     emitAgentEvent({
-      agent: "Boss",
+      agent: "repair_coordinator",
       event: "agent.started",
       status: "running",
       metadata: {
@@ -122,6 +120,11 @@ export class RepairCoordinator {
 
 
     try {
+      if (!context.semanticProfile?.domain || ["general", "general_commercial", "unknown"].includes(context.semanticProfile.domain) ||
+        !Number.isFinite(context.semanticProfile.confidence) || context.semanticProfile.confidence < 0.7) {
+        throw new Error("Repair requires a resolved approved semantic profile; research or specialist review required");
+      }
+      if ((context.retryCount || 0) > 1 || report.isLoopDetected) throw new Error("Repair limit or repeated failure signature reached");
       // 1. Apply targeted patches for each blocking failure
       for (const failure of report.blockingFailures) {
         const patchDesc = this.applyTargetedPatch(patchedData, failure, context);
@@ -130,73 +133,12 @@ export class RepairCoordinator {
         }
       }
 
-      // 2. Synthesize Phase 19 Boss Delegation Task Envelope for governance traceability
-      const bossTask: TaskEnvelope = {
-        taskId: `task_repair_${repairId}`,
-        parentTaskId: `task_ceo_val_${report.validationId}`,
-        objective: `Perform bounded repair on project ${context.projectId} to resolve ${report.blockingFailures.length} validation failures`,
-        agent: "Boss",
-        input: {
-          validationId: report.validationId,
-          blockingFailures: report.blockingFailures,
-          appliedPatches,
-        },
-        constraints: [
-          "Do not escalate permissions",
-          "Retain verified grounded facts",
-          "Apply minimal targeted changes",
-          "No external communication",
-        ],
-        toolAllowlist: ["repair_content", "repair_layout", "repair_cta"],
-        budget: {
-          maxToolCalls: 5,
-          maxModelCalls: 2,
-          maxRetries: 1,
-          maxDurationMs: 15000,
-        },
-        deadline: new Date(Date.now() + 60000).toISOString(),
-        expectedOutput: { status: "repaired", patchedFields: appliedPatches },
-        successCriteria: ["All blocking failures resolved", "Valid website data schema"],
-        riskLevel: "low",
-        depth: 1, // Depth 1: Boss
-        createdAt: new Date().toISOString(),
-        createdBy: "CEO",
-        correlationId: context.runId,
-        tenantId: context.tenantId,
-        projectId: context.projectId,
-        approvalRequired: false,
-        status: "COMPLETED",
-      };
-
-      const bossResult: TaskResultEnvelope = {
-        taskId: bossTask.taskId,
-        parentTaskId: bossTask.parentTaskId,
-        agent: "Boss",
-        status: "completed",
-        data: { appliedPatches },
-        findings: [`Applied ${appliedPatches.length} deterministic self-correction patches`],
-        conflicts: [],
-        recommendations: ["Re-run validation pipeline against patched website data"],
-        confidence: 0.95,
-        evidence: [
-          {
-            source: "RepairCoordinator",
-            description: "Targeted correction of identified validation failures",
-            verified: true,
-          },
-        ],
-        artifacts: [
-          {
-            type: "patched_website_data",
-            name: "websiteData",
-            content: { patchedFieldCount: appliedPatches.length },
-          },
-        ],
-        durationMs: Date.now() - startTime,
-      };
+      // Deterministic edits are not an independent Boss review. The canonical
+      // publication pipeline must perform the real review after revalidation.
+      if (!appliedPatches.length) throw new Error("No evidence-preserving deterministic repair is available; specialist regeneration required");
 
       emitAgentEvent({
-        agent: "Boss",
+        agent: "repair_coordinator",
         event: "agent.completed",
         status: "success",
         metadata: {
@@ -216,13 +158,11 @@ export class RepairCoordinator {
         success: true,
         repairedData: patchedData,
         appliedPatches,
-        delegationTask: bossTask,
-        delegationResult: bossResult,
         durationMs: Date.now() - startTime,
       };
     } catch (err: any) {
       emitAgentEvent({
-        agent: "Boss",
+        agent: "repair_coordinator",
         event: "agent.failed",
         status: "error",
         error: String(err?.message || err),
@@ -259,13 +199,13 @@ export class RepairCoordinator {
     const verifiedName =
       grounded?.identity?.canonicalName ||
       context.businessName ||
-      data.businessName ||
-      "Verified Business";
+      data.businessName;
 
     switch (failure.ruleCode) {
       // 1. Semantic Repairs
       case "SEM_MISSING_BUSINESS_NAME":
       case "SEM_GROUNDED_NAME_CONTRADICTION": {
+        if (typeof verifiedName !== "string" || !verifiedName.trim()) return null;
         data.businessName = verifiedName;
         if (!data.brand) data.brand = {};
         data.brand.name = verifiedName;
@@ -273,11 +213,11 @@ export class RepairCoordinator {
       }
 
       case "SEM_GROUNDED_ARCHETYPE_CONTRADICTION": {
-        if (grounded?.archetype) {
+        if (context.semanticProfile?.domain) {
           if (!data.brand) data.brand = {};
-          data.brand.industry = grounded.archetype.replace(/_/g, " ");
-          data.category = grounded.archetype.replace(/_/g, " ");
-          return `Realigned business industry to Grounded BI archetype "${grounded.archetype}"`;
+          data.brand.industry = context.semanticProfile.domain;
+          data.category = context.semanticProfile.domain;
+          return "Realigned industry to the approved semantic profile";
         }
         return null;
       }
@@ -293,51 +233,23 @@ export class RepairCoordinator {
         return null;
       }
 
-      case "SEM_TOO_FEW_SECTIONS": {
-        data.sectionOrder = ["hero", "services", "about", "contact", "footer"];
-        if (!data.hero) data.hero = { title: `Welcome to ${verifiedName}`, subtitle: "Dedicated Service", button: "Contact Us" };
-        if (!data.contact) data.contact = { phone: grounded?.identity?.phone, email: undefined, address: grounded?.location?.formattedAddress || "Business Location" };
-        if (!data.footer) data.footer = { copyright: `© ${new Date().getFullYear()} ${verifiedName}. All rights reserved.` };
-        return "Injected minimum required structural sections (hero, services, about, contact, footer)";
-      }
-
-      case "SEM_MISSING_HERO": {
-        data.hero = {
-          title: `Welcome to ${verifiedName}`,
-          subtitle: "Premium Professional Service",
-          button: "Contact Us",
-          buttonAction: { type: "scroll", target: "contact", label: "Contact Us" },
-        };
-        return "Constructed default hero section with verified headline";
-      }
+      case "SEM_TOO_FEW_SECTIONS":
+      case "SEM_MISSING_HERO":
+      case "SEM_FORBIDDEN_BOILERPLATE_TEXT":
+      case "SEM_LEAKED_INTERNAL_SLOGANS":
+      case "A11Y_MISSING_H1":
+        return null; // Requires accountable specialist content/layout regeneration.
 
       case "SEM_MISSING_CONTACT_SECTION": {
+        if (!grounded?.identity?.phone && !grounded?.location?.formattedAddress) return null;
         data.contact = {
           phone: grounded?.identity?.phone,
           email: undefined,
-          address: grounded?.location?.formattedAddress || "Business Location",
+          address: grounded?.location?.formattedAddress,
         };
         return "Added contact section with contact details";
       }
 
-      case "SEM_FORBIDDEN_BOILERPLATE_TEXT": {
-        const archetype = grounded?.archetype || data.category || "Professional";
-        const city = grounded?.location?.city || "";
-        if (data.hero) {
-          data.hero.title = `${verifiedName} — Premier ${archetype.replace(/_/g, " ")}${city ? ` in ${city}` : ""}`;
-          data.hero.eyebrow = `${archetype.replace(/_/g, " ")} • ${city || "Verified Establishment"}`;
-        }
-        return `Cleansed boilerplate copy; regenerated hero title and eyebrow for ${verifiedName}`;
-      }
-
-      case "SEM_LEAKED_INTERNAL_SLOGANS": {
-        data.features = [
-          { title: "Verified Quality Standards", description: "Proven methods and uncompromising attention to detail." },
-          { title: "Prompt Responsive Service", description: "Clear scheduling and reliable turnaround on all requests." },
-          { title: "Direct Dedicated Support", description: "Personal assistance from knowledgeable staff." },
-        ];
-        return "Replaced internal developer/architecture slogans with customer-facing features";
-      }
 
       case "SEM_FABRICATED_CONTACT_DATA": {
         if (data.contact) {
@@ -401,63 +313,37 @@ export class RepairCoordinator {
       }
 
       case "SEM_SERVICE_INDUSTRY_MISMATCH": {
-        const cat = String(data.category || data.brand?.industry || context.businessCategory || "").toLowerCase();
-        if (cat.includes("car") || cat.includes("rental") || cat.includes("vehicle") || String(data.businessName || "").toLowerCase().includes("car")) {
-          data.services = [
-            { title: "Self-Drive Fleet & Sedans", description: `Well-maintained sedans and compact cars at ${verifiedName} for city and highway transit.`, price: "From ₹1,800 / day" },
-            { title: "All-Terrain SUVs", description: "High-clearance SUVs with GPS and safety features for outstation trips.", price: "From ₹3,500 / day" },
-            { title: "Airport & Doorstep Delivery", description: "Express vehicle handover directly at your preferred terminal or address.", price: "Complimentary" },
-            { title: "Unlimited Mileage Packages", description: "Fixed-rate multi-day rentals with 24/7 roadside assistance.", price: "Flexible plans" },
-          ];
-          return "Replaced mismatched culinary services with automotive self-drive rental services";
-        } else if (cat.includes("gym") || cat.includes("fitness")) {
-          data.services = [
-            { title: "Strength & Conditioning", description: "Olympic lifting and resistance equipment zone.", price: "Membership tier" },
-            { title: "High-Intensity Functional Training", description: "Coach-led interval training sessions.", price: "Class passes" },
-            { title: "Personal Performance Coaching", description: "1-on-1 movement and strength development.", price: "Per session" },
-          ];
-          return "Replaced mismatched services with fitness offerings";
-        }
-        return null;
+        if (!context.semanticProfile) return null;
+        data.services = (grounded?.services || []).filter(service => service.isObserved && service.description)
+          .map(service => ({ title: service.name, description: service.description }));
+        return "Removed unsupported services; restored only observed offerings with grounded descriptions";
       }
 
       case "SEM_IMAGE_INDUSTRY_MISMATCH": {
-        const cat = String(data.category || data.brand?.industry || context.businessCategory || "").toLowerCase();
-        if (cat.includes("car") || cat.includes("rental") || cat.includes("vehicle") || String(data.businessName || "").toLowerCase().includes("car")) {
-          if (!data.hero) data.hero = {};
-          data.hero.image = "https://images.unsplash.com/photo-1449965408869-eaa3f722e40d";
-          return "Replaced mismatched restaurant hero image with vehicle rental highway imagery";
-        }
-        return null;
+        if (!context.semanticProfile) return null;
+        if (data.hero) delete data.hero.image;
+        if (data.about) delete data.about.image;
+        for (const service of data.services || []) delete service.image;
+        return "Removed contradictory imagery; preserved intentional non-photographic fallback";
       }
 
       // 2. CTA Repairs
       case "CTA_MISSING_PRIMARY":
       case "CTA_GENERIC_TEXT": {
         if (!data.hero) data.hero = {};
-        data.hero.button = "Get Free Consultation";
+        if (!context.semanticProfile) return null;
+        data.hero.button = context.semanticProfile.primaryCta.label;
         data.hero.buttonAction = {
           type: "scroll",
           target: "contact",
-          label: "Get Free Consultation",
+          label: context.semanticProfile.primaryCta.label,
         };
-        return "Configured action-oriented primary hero CTA 'Get Free Consultation' targeting #contact";
+        return "Restored approved primary CTA targeting contact";
       }
 
       case "CTA_INDUSTRY_MISMATCH": {
-        const cat = String(data.category || data.brand?.industry || context.businessCategory || "").toLowerCase();
-        let fixCta = "Book Consultation";
-        if (cat.includes("car") || cat.includes("rental") || cat.includes("vehicle") || String(data.businessName || "").toLowerCase().includes("car")) {
-          fixCta = "Book a Vehicle";
-        } else if (cat.includes("gym") || cat.includes("fitness")) {
-          fixCta = "Claim Free Pass";
-        } else if (cat.includes("salon")) {
-          fixCta = "Book Appointment";
-        } else if (cat.includes("hotel")) {
-          fixCta = "Reserve a Room";
-        } else if (cat.includes("restaurant") || cat.includes("cafe")) {
-          fixCta = "Reserve a Table";
-        }
+        if (!context.semanticProfile) return null;
+        const fixCta = context.semanticProfile.primaryCta.label;
         if (!data.hero) data.hero = {};
         data.hero.button = fixCta;
         if (data.hero.buttonAction) {
@@ -518,16 +404,10 @@ export class RepairCoordinator {
       }
 
       // 5. Accessibility Repairs
-      case "A11Y_MISSING_H1": {
-        if (!data.hero) data.hero = {};
-        data.hero.title = `Welcome to ${verifiedName}`;
-        return `Added accessible <h1> title to hero section`;
-      }
-
       case "A11Y_EMPTY_BUTTON_LABEL": {
         if (data.hero) {
-          data.hero.button = "Contact Us";
-          if (data.hero.buttonAction) data.hero.buttonAction.label = "Contact Us";
+          data.hero.button = context.semanticProfile?.primaryCta.label;
+          if (data.hero.buttonAction) data.hero.buttonAction.label = context.semanticProfile?.primaryCta.label;
           return "Added accessible button label to hero CTA";
         }
         return null;

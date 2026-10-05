@@ -61,7 +61,10 @@ export class GeminiAdapter implements ModelProviderAdapter {
         }
       }
 
-      const contents = [{ role: "user", parts: [{ text: req.userPrompt }] }];
+      const contents = [{ role: "user", parts: [
+        { text: req.userPrompt },
+        ...(req.images || []).map(image => ({ inlineData: image })),
+      ] }];
 
       const apiCall = client.models.generateContent({
         model,

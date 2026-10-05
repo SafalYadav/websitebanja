@@ -179,6 +179,7 @@ export interface AgentLessonRecord {
 }
 
 export interface AgentStrategyRecord {
+  tenantId?: string | null;
   id: string;
   strategyId: string;
   name: string;
@@ -241,6 +242,7 @@ export interface BusinessMemoryItem {
 }
 
 export interface MemoryQuery {
+  tenantId?: string | null;
   domain?: string;
   projectId?: string;
   userId?: string;
@@ -277,3 +279,26 @@ export interface MemoryRetrievalResult {
     knownFailurePatterns: string[];
   };
 }
+
+export type MemoryRecordKind =
+  | "run"
+  | "event"
+  | "decision"
+  | "feedback"
+  | "failure"
+  | "evaluation"
+  | "lesson"
+  | "strategy"
+  | "experiment"
+  | "business";
+
+export interface TenantMemoryRecord<T = unknown> {
+  tenantId: string;
+  recordKind: MemoryRecordKind;
+  recordId: string;
+  payload: T;
+  revision: number;
+  createdAt: string;
+  updatedAt: string;
+}
+

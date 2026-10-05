@@ -11,6 +11,7 @@ import { getClientIp } from "@/lib/supabaseServer";
 import { sanitizeErrorOutput } from "@/lib/ai/router/modelConfig";
 import { LearningLoopOrchestrator } from "@/lib/intelligence/learningLoop/learningLoopOrchestrator";
 import { z } from "zod";
+import { authorizeHumanApproval } from "@/lib/intelligence/pipeline/humanApprovalAuthorization";
 
 export const dynamic = "force-dynamic";
 
@@ -87,7 +88,7 @@ export async function GET(req: Request) {
     }
 
     const auth = await verifyAdminAuth(req);
-    if (!auth.isAdmin) {
+    if (!auth.isAdmin || !auth.userId) {
       return NextResponse.json(
         { success: false, message: auth.error || "Forbidden: Administrator access required." },
         { status: auth.error?.includes("Missing") ? 401 : 403 }
@@ -98,14 +99,14 @@ export async function GET(req: Request) {
     const candidateId = searchParams.get("candidateId");
     const domain = searchParams.get("domain");
     const status = searchParams.get("status");
-    const tenantId = searchParams.get("tenantId");
+    const tenantId = auth.userId;
     const view = searchParams.get("view") || "summary";
 
     const orchestrator = LearningLoopOrchestrator.getInstance();
 
     if (candidateId) {
       const candidate = orchestrator.getCandidate(candidateId);
-      if (!candidate) {
+      if (!candidate || candidate.tenantId !== auth.userId) {
         return NextResponse.json(
           { success: false, message: `Candidate lesson '${candidateId}' not found.` },
           { status: 404 }
@@ -124,12 +125,12 @@ export async function GET(req: Request) {
     }
 
     if (view === "history" && domain) {
-      const history = orchestrator.getStrategyHistory(domain);
+      const history = orchestrator.getStrategyHistory(domain, auth.userId);
       return NextResponse.json({ success: true, domain, history });
     }
 
     // Default view: summary
-    const summary = orchestrator.getLearningSummary();
+    const summary = orchestrator.getLearningSummary(auth.userId);
     return NextResponse.json({ success: true, summary });
   } catch (err: any) {
     return NextResponse.json(
@@ -154,7 +155,7 @@ export async function POST(req: Request) {
     }
 
     const auth = await verifyAdminAuth(req);
-    if (!auth.isAdmin) {
+    if (!auth.isAdmin || !auth.userId) {
       return NextResponse.json(
         { success: false, message: auth.error || "Forbidden: Administrator access required." },
         { status: auth.error?.includes("Missing") ? 401 : 403 }
@@ -176,6 +177,12 @@ export async function POST(req: Request) {
 
     const data = parsed.data;
     const orchestrator = LearningLoopOrchestrator.getInstance();
+    if ("candidateId" in data) {
+      const candidate = orchestrator.getCandidate(data.candidateId);
+      if (!candidate || candidate.tenantId !== auth.userId) {
+        return NextResponse.json({ success: false, message: "Candidate not found" }, { status: 404 });
+      }
+    }
 
     switch (data.action) {
       case "create_candidate": {
@@ -185,7 +192,7 @@ export async function POST(req: Request) {
           rule: data.statement,
           source: data.sourceType,
           runId: data.sourceRunId || `run_${Date.now()}`,
-          tenantId: data.tenantId,
+          tenantId: auth.userId,
         });
         return NextResponse.json({ success: true, candidate }, { status: 201 });
       }
@@ -235,8 +242,9 @@ export async function POST(req: Request) {
         const result = await orchestrator.promoteWithApproval({
           candidateId: data.candidateId,
           approvalId: data.approvalId,
-          approvedBy: data.approvedBy,
-          tenantId: data.tenantId,
+          approvedBy: auth.userId,
+          tenantId: auth.userId,
+          authorization: await authorizeHumanApproval(req, auth.userId),
         });
         return NextResponse.json({ success: true, ...result });
       }
@@ -246,7 +254,9 @@ export async function POST(req: Request) {
           domain: data.domain,
           targetVersion: data.targetVersion,
           rollbackReason: data.rollbackReason,
-          executedBy: data.executedBy,
+          executedBy: auth.userId,
+          tenantId: auth.userId,
+          authorization: await authorizeHumanApproval(req, auth.userId),
         });
         return NextResponse.json({ success: true, ...result });
       }

@@ -1122,12 +1122,12 @@ export async function dbInsertAnalyticsEvent(params: {
 
 export async function dbGetProjectByPublicSlug(
   slug: string
-): Promise<{ id: string; user_id: string } | null> {
+): Promise<{ id: string; user_id: string; is_published: boolean } | null> {
   if (!isAzureCircuitOpen()) {
     try {
       const result = await Promise.race([
         getPool().query(
-          `SELECT id, user_id FROM public.projects WHERE public_slug = $1`,
+          `SELECT id, user_id, is_published FROM public.projects WHERE public_slug = $1`,
           [slug]
         ),
         new Promise<never>((_, reject) =>
@@ -1147,12 +1147,12 @@ export async function dbGetProjectByPublicSlug(
   const supabase = getServiceRoleClient();
   const { data, error } = await supabase
     .from("projects")
-    .select("id, user_id")
+    .select("id, user_id, is_published")
     .eq("public_slug", slug)
     .maybeSingle();
 
   if (error) return null;
-  return (data as { id: string; user_id: string }) || null;
+  return (data as { id: string; user_id: string; is_published: boolean }) || null;
 }
 
 export async function dbAppendLeadToProject(
@@ -2217,4 +2217,3 @@ export async function dbHealthCheck(): Promise<{
     };
   }
 }
-

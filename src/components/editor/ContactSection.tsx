@@ -5,6 +5,7 @@ import { motion, useReducedMotion } from "framer-motion";
 import { Phone, Mail, MapPin, Send, CheckCircle2, MessageSquare } from "lucide-react";
 import EditableElement from "@/components/editor/EditableElement";
 import type { Contact } from "@/types/website";
+import { publicInquiryRoute } from "@/lib/editorRoutes";
 
 interface ContactSectionProps {
   sectionKey?: string;
@@ -15,6 +16,7 @@ export default function ContactSection({ sectionKey = "contact", contact }: Cont
   const shouldReduceMotion = useReducedMotion();
   const [submitted, setSubmitted] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submissionError, setSubmissionError] = useState<string | null>(null);
   const [formName, setFormName] = useState("");
   const [formEmail, setFormEmail] = useState("");
   const [formPhone, setFormPhone] = useState("");
@@ -35,6 +37,7 @@ export default function ContactSection({ sectionKey = "contact", contact }: Cont
     if (!formName.trim() || !formEmail.trim()) return;
 
     setIsSubmitting(true);
+    setSubmissionError(null);
     try {
       let publicSlug = "";
       if (typeof window !== "undefined") {
@@ -44,7 +47,8 @@ export default function ContactSection({ sectionKey = "contact", contact }: Cont
         }
       }
 
-      await fetch("/api/public/submit-lead", {
+      if (!publicSlug) throw new Error("This is a preview. Publish the website to enable inquiries, or use the contact details above.");
+      const response = await fetch(publicInquiryRoute(), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -56,6 +60,12 @@ export default function ContactSection({ sectionKey = "contact", contact }: Cont
           sourcePage: typeof window !== "undefined" ? window.location.pathname : "Contact",
         }),
       });
+      const result: unknown = await response.json();
+      if (!response.ok || !result || typeof result !== "object" || !("success" in result) || result.success !== true) {
+        const message = result && typeof result === "object" && "message" in result && typeof result.message === "string"
+          ? result.message : "Your message was not sent. Please try again or use the contact details above.";
+        throw new Error(message);
+      }
 
       setSubmitted(true);
       setTimeout(() => {
@@ -65,8 +75,8 @@ export default function ContactSection({ sectionKey = "contact", contact }: Cont
         setFormPhone("");
         setFormMsg("");
       }, 5000);
-    } catch {
-      setSubmitted(true);
+    } catch (error) {
+      setSubmissionError(error instanceof Error ? error.message : "Your message was not sent. Please try again.");
     } finally {
       setIsSubmitting(false);
     }
@@ -261,11 +271,14 @@ export default function ContactSection({ sectionKey = "contact", contact }: Cont
                 </div>
               ) : (
                 <form onSubmit={handleSubmit} className="space-y-5">
+                  {submissionError && <p role="alert" style={{ color: "var(--wb-fg)" }}>{submissionError}</p>}
                   <div>
-                    <label className="block text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: "var(--wb-muted)" }}>
+                    <label htmlFor={`${sectionKey}-name`} className="block text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: "var(--wb-muted)" }}>
                       Your Full Name
                     </label>
                     <input
+                      id={`${sectionKey}-name`}
+                      aria-label="Your Full Name"
                       type="text"
                       required
                       placeholder="Jane Doe"
@@ -280,10 +293,12 @@ export default function ContactSection({ sectionKey = "contact", contact }: Cont
                   </div>
 
                   <div>
-                    <label className="block text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: "var(--wb-muted)" }}>
+                    <label htmlFor={`${sectionKey}-email`} className="block text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: "var(--wb-muted)" }}>
                       Your Email
                     </label>
                     <input
+                      id={`${sectionKey}-email`}
+                      aria-label="Your Email"
                       type="email"
                       required
                       placeholder="jane@example.com"
@@ -298,10 +313,12 @@ export default function ContactSection({ sectionKey = "contact", contact }: Cont
                   </div>
 
                   <div>
-                    <label className="block text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: "var(--wb-muted)" }}>
+                    <label htmlFor={`${sectionKey}-phone`} className="block text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: "var(--wb-muted)" }}>
                       Phone / WhatsApp (Optional)
                     </label>
                     <input
+                      id={`${sectionKey}-phone`}
+                      aria-label="Phone / WhatsApp (Optional)"
                       type="tel"
                       placeholder="+91 98765 43210"
                       value={formPhone}
@@ -315,10 +332,12 @@ export default function ContactSection({ sectionKey = "contact", contact }: Cont
                   </div>
 
                   <div>
-                    <label className="block text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: "var(--wb-muted)" }}>
+                    <label htmlFor={`${sectionKey}-message`} className="block text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: "var(--wb-muted)" }}>
                       Your Message
                     </label>
                     <textarea
+                      id={`${sectionKey}-message`}
+                      aria-label="Your Message"
                       rows={4}
                       placeholder="How can we help your business today?"
                       value={formMsg}

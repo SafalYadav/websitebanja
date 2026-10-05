@@ -5,7 +5,8 @@ import { NextResponse } from "next/server";
 import { isAuthorized } from "@/lib/automation/auth";
 import { PipelineOrchestrator } from "@/lib/automation/pipelineOrchestrator";
 import { sanitizeErrorOutput } from "@/lib/ai/router/modelConfig";
-import type { PipelineRunCriteria } from "@/lib/automation/pipelineTypes";
+import { PipelineRunCriteriaSchema } from "@/lib/automation/pipelineTypes";
+import { verifyAdminAuth } from "@/lib/adminAuth";
 
 export async function POST(req: Request) {
   if (!(await isAuthorized(req))) {
@@ -19,7 +20,7 @@ export async function POST(req: Request) {
   }
 
   try {
-    let body: { criteria?: PipelineRunCriteria; userId?: string } = {};
+    let body: unknown;
     try {
       body = await req.json();
     } catch {
@@ -32,21 +33,24 @@ export async function POST(req: Request) {
       );
     }
 
-    const { criteria, userId } = body;
-    if (!criteria || !criteria.industry || !criteria.city) {
+    const parsed = PipelineRunCriteriaSchema.safeParse(body && typeof body === "object" && "criteria" in body ? body.criteria : undefined);
+    if (!parsed.success) {
       return NextResponse.json(
         {
           success: false,
           error: {
             code: "VALIDATION_ERROR",
-            message: "Missing required criteria fields: 'industry' and 'city' are mandatory.",
+            message: "Invalid pipeline criteria: provide industry, city, a supported outreach channel and a bounded numeric limit.",
           },
         },
         { status: 400 }
       );
     }
 
-    const run = await PipelineOrchestrator.startRun(criteria, userId);
+    const admin = await verifyAdminAuth(req);
+    const tenantId = admin.isAdmin && admin.userId ? admin.userId : process.env.AUTOMATION_TENANT_ID;
+    if (!tenantId) return NextResponse.json({ success: false, error: { code: "AUTOMATION_TENANT_REQUIRED", message: "Configure a server-side automation tenant" } }, { status: 403 });
+    const run = await PipelineOrchestrator.startRun(parsed.data, admin.isAdmin ? admin.userId : undefined, tenantId);
 
     return NextResponse.json({
       success: true,

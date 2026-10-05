@@ -234,6 +234,14 @@ export function normalizeIndustry(req: WebsiteRequirement): SupportedIndustry {
     combined.includes("rental") ||
     combined.includes("car rental") ||
     combined.includes("vehicle rental") ||
+    combined.includes("bike rental") ||
+    combined.includes("motorcycle rental") ||
+    combined.includes("scooter rental") ||
+    combined.includes("bike") ||
+    combined.includes("motorcycle") ||
+    combined.includes("scooter") ||
+    combined.includes("two wheeler") ||
+    combined.includes("two-wheeler") ||
     combined.includes("fleet") ||
     combined.includes("auto hire") ||
     combined.includes("cab") ||

@@ -21,17 +21,27 @@ import type {
   OutreachChannel,
   OutreachStatus,
 } from "@/lib/outreach/types";
+import { authorizeAutomationTenant } from "@/lib/automation/automationApiIdentity";
+import { authorizeHumanApproval } from "@/lib/intelligence/pipeline/humanApprovalAuthorization";
+import { verifyAdminAuth } from "@/lib/adminAuth";
+import { z } from "zod";
 
-import { isAuthorized } from "@/lib/automation/auth";
+const UpdateSchema = z.object({ outreachId: z.string().min(1).max(200),
+  status: z.enum(["draft","review","approved","rejected","cancelled","simulated_sent"]),
+  editedSubject: z.string().max(1000).optional(), editedMessage: z.string().max(20000).optional(),
+  recipientEmail: z.string().email().optional(), notes: z.string().max(5000).optional(),
+  expectedReviewedMessage: z.string().max(20000).optional(),
+  expectedReviewedSubject: z.string().max(1000).optional(),
+  expectedReviewedRecipient: z.string().max(320).optional(),
+}).refine(value => value.status !== "approved" ||
+  (typeof value.expectedReviewedMessage === "string" && value.expectedReviewedMessage.length > 0 &&
+    typeof value.expectedReviewedSubject === "string" && typeof value.expectedReviewedRecipient === "string" && value.expectedReviewedRecipient.length > 0),
+{ message: "Approval requires the exact reviewed message, subject and recipient" });
 
 
 export async function GET(req: Request) {
-  if (!(await isAuthorized(req))) {
-    return NextResponse.json(
-      { success: false, error: { code: "UNAUTHORIZED", message: "Missing or invalid authorization." } },
-      { status: 401 }
-    );
-  }
+  const auth = await authorizeAutomationTenant(req);
+  if (auth.response) return auth.response;
 
   try {
     const { searchParams } = new URL(req.url);
@@ -40,7 +50,7 @@ export async function GET(req: Request) {
       channel: (searchParams.get("channel") as OutreachChannel) || undefined,
       status: (searchParams.get("status") as OutreachStatus) || undefined,
       search: searchParams.get("search") || undefined,
-      userId: searchParams.get("userId") || undefined,
+      userId: auth.identity.userId || auth.identity.tenantId,
     };
 
     const records = await outreachRepository.listOutreachRecords(filter);
@@ -71,16 +81,14 @@ export async function GET(req: Request) {
 }
 
 export async function PATCH(req: Request) {
-  if (!(await isAuthorized(req))) {
-    return NextResponse.json(
-      { success: false, error: { code: "UNAUTHORIZED", message: "Missing or invalid authorization." } },
-      { status: 401 }
-    );
-  }
+  const auth = await authorizeAutomationTenant(req);
+  if (auth.response) return auth.response;
 
   let body: UpdateOutreachStatusRequest;
   try {
-    body = await req.json();
+    const parsed = UpdateSchema.safeParse(await req.json());
+    if (!parsed.success) return NextResponse.json({ success: false, error: { code: "VALIDATION_FAILED", message: "Invalid outreach update" } }, { status: 400 });
+    body = { ...parsed.data, userId: auth.identity.userId || auth.identity.tenantId };
   } catch {
     return NextResponse.json(
       { success: false, error: { code: "MALFORMED_JSON", message: "Invalid JSON syntax." } },
@@ -113,7 +121,13 @@ export async function PATCH(req: Request) {
       );
     }
 
-    const updated = await outreachRepository.updateOutreachStatus(body);
+    let authorization;
+    if (body.status === "approved") {
+      const admin = await verifyAdminAuth(req);
+      if (!admin.isAdmin || admin.userId !== auth.identity.tenantId) return NextResponse.json({ success: false, error: { code: "HUMAN_APPROVAL_REQUIRED", message: "Authenticated human owner must approve outreach" } }, { status: 403 });
+      authorization = await authorizeHumanApproval(req, auth.identity.tenantId);
+    }
+    const updated = await outreachRepository.updateOutreachStatus(body, authorization);
     if (!updated) {
       return NextResponse.json(
         {

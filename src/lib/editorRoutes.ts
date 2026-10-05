@@ -40,3 +40,11 @@ export function authCallbackRoute() {
 export function homeRoute() {
   return "/";
 }
+
+export function generationResearchRoute(researchId: string) {
+  return `/api/generation/research/${encodeURIComponent(researchId)}`;
+}
+
+export function publicInquiryRoute() {
+  return "/api/public/submit-lead";
+}

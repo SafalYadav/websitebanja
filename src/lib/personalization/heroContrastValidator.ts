@@ -106,7 +106,6 @@ export function validateAndProtectHeroContrast(
   let fgColor: RgbColor = { r: 255, g: 255, b: 255 }; // #FFFFFF
   let textMode: "light" | "dark" = "light";
   let remedyApplied = "none";
-  let minRatio = 7.0;
 
   // Case 1: Luxury Hotel / Resort or photo background
   if (isHotel || hasPhotoBg) {

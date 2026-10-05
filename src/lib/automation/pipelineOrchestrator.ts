@@ -3,15 +3,13 @@
 
 import crypto from "crypto";
 import {
-  PipelineStage,
-  PipelineStatus,
   PipelineRun,
   PipelineRunCriteria,
-  LeadPipelineProgress,
   Phase14HandoffContract,
   assertValidStageTransition,
 } from "./pipelineTypes";
 import { PipelineQueue } from "./pipelineQueue";
+import { isPipelineSuspended, updatePipelineCompletion } from "./pipelineCompletion";
 import { FollowUpQueue } from "./followUpQueue";
 import { executeDiscoveryRun } from "@/lib/discovery/discoveryService";
 import { auditQualifiedLead } from "@/lib/audit/auditService";
@@ -25,16 +23,23 @@ import { leadRepository } from "@/lib/discovery/leadRepository";
 import { emitAgentEvent } from "@/lib/telemetry/agentTelemetry";
 import type { BusinessLead } from "@/lib/discovery/types";
 import type { OutreachChannel } from "@/lib/outreach/types";
+import { GenerationHoldError, readGenerationHold } from "@/lib/intelligence/orchestration/generationHold";
+import { readResearchResume } from "@/lib/intelligence/orchestration/researchGovernance";
+import { readResearchObservation } from "@/lib/intelligence/orchestration/researchObservation";
+import { pipelineExecutionFence, PipelineExecutionLostError } from "./pipelineExecutionLease";
 
 export class PipelineOrchestrator {
   /**
    * Initializes and executes an end-to-end autonomous pipeline run
    */
-  static async startRun(criteria: PipelineRunCriteria, userId?: string): Promise<PipelineRun> {
+  static async startRun(criteria: PipelineRunCriteria, userId?: string, tenantId?: string): Promise<PipelineRun> {
+    const owner = tenantId || userId;
+    if (!owner) throw new Error("Trusted autonomous pipeline tenant required");
     const runId = `run_pipe_${Date.now()}_${crypto.randomBytes(3).toString("hex")}`;
     const now = new Date().toISOString();
 
     const run: PipelineRun = {
+      tenantId: owner, userId,
       id: runId,
       status: "RUNNING",
       currentStage: "DISCOVERY",
@@ -69,6 +74,7 @@ export class PipelineOrchestrator {
       },
     });
 
+    return PipelineQueue.withRunExecution(run, ["RUNNING"], async () => {
     try {
       // ---------------------------------------------------------
       // STAGE 1 & 2: DISCOVERY & QUALIFICATION (Phase 8)
@@ -82,32 +88,14 @@ export class PipelineOrchestrator {
       });
 
       const candidateLimit = Math.min(Math.max((criteria.limit || 5) * 3, 6), 50);
-      let discoveryResponse = await executeDiscoveryRun(
+      const discoveryResponse = await executeDiscoveryRun(
         {
           query: criteria.industry,
           location: criteria.city,
           limit: candidateLimit,
         },
-        userId
+        userId || owner
       );
-
-      // If local deterministic provider returned 0 leads for this specific city/query in local mode, fall back to broad keyword
-      if (discoveryResponse.qualifiedLeads.length === 0) {
-        const words = criteria.industry.toLowerCase().split(/\s+/);
-        const fallbackKeyword =
-          words.find((w) =>
-            ["restaurant", "cafe", "hotel", "coffee", "bistro", "bakery", "dining"].includes(w)
-          ) || "restaurant";
-
-        discoveryResponse = await executeDiscoveryRun(
-          {
-            query: fallbackKeyword,
-            location: criteria.city || "Vadodara",
-            limit: candidateLimit,
-          },
-          userId
-        );
-      }
 
       // Slice qualified leads to requested limit
       const targetLimit = criteria.limit || 5;
@@ -168,22 +156,10 @@ export class PipelineOrchestrator {
       // PROCESS EACH QUALIFIED LEAD SEQUENTIALLY WITH ISOLATION
       // ---------------------------------------------------------
       await this.processLeadBatch(run, discoveryResponse.qualifiedLeads, userId);
+      if (isPipelineSuspended(run)) return run;
 
       // Check run status
-      const leadProgressList = Object.values(run.leads);
-      const allFailed = leadProgressList.length > 0 && leadProgressList.every((l) => l.status === "failed");
-      const someFailed = leadProgressList.some((l) => l.status === "failed");
-
-      if (allFailed) {
-        run.status = "FAILED";
-      } else if (someFailed) {
-        run.status = "PARTIAL_SUCCESS";
-      } else {
-        run.status = "COMPLETED";
-      }
-
-      run.completedAt = new Date().toISOString();
-      run.updatedAt = new Date().toISOString();
+      updatePipelineCompletion(run);
       await PipelineQueue.savePipelineRun(run);
 
       emitAgentEvent({
@@ -198,6 +174,8 @@ export class PipelineOrchestrator {
 
       return run;
     } catch (err) {
+      if (err instanceof PipelineExecutionLostError) throw err;
+      await PipelineQueue.assertExecution(run);
       const errMsg = (err as Error)?.message || String(err);
       run.status = "FAILED";
       run.error = errMsg;
@@ -214,6 +192,7 @@ export class PipelineOrchestrator {
 
       return run;
     }
+    });
   }
 
   /**
@@ -224,12 +203,14 @@ export class PipelineOrchestrator {
     leads: BusinessLead[],
     userId?: string
   ): Promise<void> {
+    userId = run.userId || run.tenantId;
+    if (!userId) throw new Error("Trusted lead batch owner required");
     const channel: OutreachChannel = (run.criteria.channel as OutreachChannel) || "email";
     const autoApprove = run.criteria.autoApproveOutreach ?? true;
 
     for (const lead of leads) {
       // Check if run was paused or cancelled mid-execution
-      const refreshedRun = await PipelineQueue.getPipelineRun(run.id);
+      const refreshedRun = await PipelineQueue.getPipelineRun(run.id, run.tenantId);
       if (refreshedRun && (refreshedRun.status === "PAUSED" || refreshedRun.status === "CANCELLED")) {
         run.status = refreshedRun.status;
         return;
@@ -239,7 +220,7 @@ export class PipelineOrchestrator {
       if (!leadProgress) continue;
 
       // Check DO_NOT_CONTACT
-      const leadState = await crmRepository.getLeadCRMState(lead.leadId);
+      const leadState = await crmRepository.getLeadCRMState(lead.leadId, userId);
       if (leadState?.status === "DO_NOT_CONTACT") {
         leadProgress.status = "skipped";
         leadProgress.timeline.push({
@@ -266,8 +247,8 @@ export class PipelineOrchestrator {
         continue; // Single-lead failure isolation: proceed to next lead
       }
 
+      if (!leadProgress.auditId) run.stats.audited += 1;
       leadProgress.auditId = auditResult.data.auditId;
-      run.stats.audited += 1;
 
       // STAGE 4: PERSONALIZED PREVIEW GENERATION (Phase 10)
       run.currentStage = "PREVIEW_GENERATION";
@@ -276,27 +257,44 @@ export class PipelineOrchestrator {
         lead.leadId,
         "PREVIEW_GENERATION",
         async () => {
-          const result = await canonicalGenerationOrchestrator.generateWebsite({
+          const tenantId = run.tenantId || run.userId;
+          if (!tenantId) throw new Error("Owned autonomous pipeline identity required");
+          const resumed = leadProgress.researchId ? await readResearchResume(leadProgress.researchId, tenantId) : null;
+          if (leadProgress.researchId && !resumed?.result) {
+            const observation = await readResearchObservation(leadProgress.researchId, { kind: "automation", tenantId });
+            if (!observation) throw new Error("Owned research record not found; resume denied");
+            if (["REJECTED", "FAILED", "QUALITY_BLOCKED"].includes(observation.status)) throw new Error(`Business research ${observation.status.toLowerCase()}; generation cannot resume`);
+            throw new GenerationHoldError({ status: "WAITING_HUMAN_APPROVAL", researchId: leadProgress.researchId,
+              correlationId: leadProgress.generationCorrelationId });
+          }
+          const result = resumed?.result || await canonicalGenerationOrchestrator.generateWebsite({
             businessName: lead.businessName,
             source: "autonomous_pipeline",
             leadId: lead.leadId,
             overrideLead: lead,
             overrideAudit: auditResult.data,
-            userId,
-          });
-          if (!result.success) throw new Error(result.error?.message || "Preview generation failed");
+            userId: run.userId,
+            tenantId,
+          }, undefined, pipelineExecutionFence(run));
+          if (!result.success) {
+            const hold = readGenerationHold(result);
+            if (hold) throw new GenerationHoldError(hold);
+            throw new Error(result.error?.message || "Preview generation failed");
+          }
           return result;
-        }
+        },
+        { maxAttempts: 1 }
       );
 
       if (!previewResult.success || !previewResult.data?.preview) {
+        if (run.status === "PAUSED") return;
         continue;
       }
 
+      if (!leadProgress.previewId) run.stats.previewsGenerated += 1;
       leadProgress.previewId = previewResult.data.preview.id;
       leadProgress.previewUrl =
         previewResult.data.preview.url || (previewResult.data.preview as any).previewUrl;
-      run.stats.previewsGenerated += 1;
 
       // STAGE 5: OUTREACH DRAFT (Phase 11)
       run.currentStage = "OUTREACH_DRAFT";
@@ -330,8 +328,8 @@ export class PipelineOrchestrator {
         continue;
       }
 
+      if (!leadProgress.outreachId) run.stats.outreachDrafted += 1;
       leadProgress.outreachId = draftResult.data.outreach.outreachId;
-      run.stats.outreachDrafted += 1;
 
       // STAGE 6: HUMAN APPROVAL / DISPATCH
       if (autoApprove) {
@@ -414,8 +412,9 @@ export class PipelineOrchestrator {
   /**
    * Pauses an active pipeline run
    */
-  static async pauseRun(runId: string): Promise<PipelineRun> {
-    const run = await PipelineQueue.getPipelineRun(runId);
+  static async pauseRun(runId: string, tenantId?: string): Promise<PipelineRun> {
+    if (!tenantId) throw new Error("Trusted pipeline tenant required");
+    const run = await PipelineQueue.getPipelineRun(runId, tenantId);
     if (!run) throw new Error(`Pipeline run '${runId}' not found`);
 
     if (run.status !== "RUNNING" && run.status !== "PENDING") {
@@ -426,8 +425,9 @@ export class PipelineOrchestrator {
 
     run.status = "PAUSED";
     run.pausedAt = new Date().toISOString();
+    run.pauseReason = "human";
     run.updatedAt = new Date().toISOString();
-    await PipelineQueue.savePipelineRun(run);
+    await PipelineQueue.suspendRun(run);
 
     emitAgentEvent({
       event: "pipeline_paused",
@@ -442,18 +442,18 @@ export class PipelineOrchestrator {
   /**
    * Resumes a paused pipeline run
    */
-  static async resumeRun(runId: string, userId?: string): Promise<PipelineRun> {
-    const run = await PipelineQueue.getPipelineRun(runId);
-    if (!run) throw new Error(`Pipeline run '${runId}' not found`);
+  static async resumeRun(runId: string, userId?: string, tenantId?: string, researchId?: string): Promise<PipelineRun> {
+    if (!tenantId && !userId) throw new Error("Trusted pipeline tenant required");
+    const owner = tenantId || userId;
+    if (!owner) throw new Error("Trusted pipeline tenant required");
+    const run = await PipelineQueue.getPipelineRun(runId, owner);
+    if (!run) throw new Error("Owned pipeline run not found");
+    if (!run.tenantId || run.tenantId !== owner) throw new Error("Pipeline ownership validation failed");
+    userId = run.userId;
 
-    if (run.status !== "PAUSED") {
-      throw new Error(`Cannot resume pipeline run in status '${run.status}'`);
-    }
-
-    run.status = "RUNNING";
-    run.pausedAt = undefined;
-    run.updatedAt = new Date().toISOString();
-    await PipelineQueue.savePipelineRun(run);
+    // RUNNING is recoverable only when its prior lease is absent/expired; the
+    // atomic claim still rejects every worker holding a live execution lease.
+    return PipelineQueue.withRunExecution(run, ["PAUSED", "RUNNING"], async () => {
 
     emitAgentEvent({
       event: "pipeline_resumed",
@@ -464,28 +464,32 @@ export class PipelineOrchestrator {
 
     // Resume any pending leads
     const pendingLeads = Object.values(run.leads).filter(
-      (l) => l.status === "pending" || l.status === "running"
+      (l) => l.status === "pending" || l.status === "running" || (l.status === "paused" && Boolean(l.researchId))
     );
 
     if (pendingLeads.length > 0) {
       const resolvedLeads: BusinessLead[] = [];
       for (const pl of pendingLeads) {
-        const found = await leadRepository.findLeadById(pl.leadId, userId);
-        if (found) resolvedLeads.push(found);
+        const found = await leadRepository.findLeadById(pl.leadId, userId || run.tenantId);
+        if (!found) throw new Error("Original owned pipeline lead unavailable; resume denied");
+        resolvedLeads.push(found);
       }
       if (resolvedLeads.length > 0) {
         await this.processLeadBatch(run, resolvedLeads, userId);
       }
     }
-
+    updatePipelineCompletion(run);
+    await PipelineQueue.savePipelineRun(run);
     return run;
+    }, researchId);
   }
 
   /**
    * Cancels a pipeline run and aborts scheduled follow-ups
    */
-  static async cancelRun(runId: string, reason = "User requested cancellation"): Promise<PipelineRun> {
-    const run = await PipelineQueue.getPipelineRun(runId);
+  static async cancelRun(runId: string, reason = "User requested cancellation", tenantId?: string): Promise<PipelineRun> {
+    if (!tenantId) throw new Error("Trusted pipeline tenant required");
+    const run = await PipelineQueue.getPipelineRun(runId, tenantId);
     if (!run) throw new Error(`Pipeline run '${runId}' not found`);
 
     if (run.status === "COMPLETED" || run.status === "CANCELLED") {
@@ -497,12 +501,14 @@ export class PipelineOrchestrator {
     run.updatedAt = new Date().toISOString();
     run.error = reason;
 
+    await PipelineQueue.suspendRun(run);
+
     // Cancel all scheduled follow-ups for leads in this run
+    const { cancelPipelineContinuations } = await import("@/lib/intelligence/orchestration/pipelineResearchContinuation");
+    await cancelPipelineContinuations(run.id, tenantId);
     for (const leadId of Object.keys(run.leads)) {
       await FollowUpQueue.cancelFollowUpsForLead(leadId, `Pipeline run ${runId} was cancelled: ${reason}`);
     }
-
-    await PipelineQueue.savePipelineRun(run);
 
     emitAgentEvent({
       event: "pipeline_cancelled",
@@ -517,12 +523,16 @@ export class PipelineOrchestrator {
   /**
    * Retries all failed jobs for a given pipeline run
    */
-  static async retryFailedJobs(runId: string, userId?: string): Promise<PipelineRun> {
-    const run = await PipelineQueue.getPipelineRun(runId);
+  static async retryFailedJobs(runId: string, userId?: string, tenantId?: string): Promise<PipelineRun> {
+    if (!tenantId && !userId) throw new Error("Trusted pipeline tenant required");
+    const run = await PipelineQueue.getPipelineRun(runId, tenantId || userId);
     if (!run) throw new Error(`Pipeline run '${runId}' not found`);
+    userId = run.userId || run.tenantId;
+
+    return PipelineQueue.withRunExecution(run, ["FAILED", "PARTIAL_SUCCESS"], async () => {
 
     // Handle discovery stage failure retry
-    if (run.status === "FAILED" && (run.currentStage === "DISCOVERY" || Object.keys(run.leads).length === 0)) {
+    if (run.currentStage === "DISCOVERY" || Object.keys(run.leads).length === 0) {
       run.status = "RUNNING";
       run.error = undefined;
       run.updatedAt = new Date().toISOString();
@@ -530,7 +540,7 @@ export class PipelineOrchestrator {
 
       try {
         const candidateLimit = Math.min(Math.max((run.criteria.limit || 5) * 3, 6), 50);
-        let discoveryResponse = await executeDiscoveryRun(
+        const discoveryResponse = await executeDiscoveryRun(
           {
             query: run.criteria.industry,
             location: run.criteria.city,
@@ -538,23 +548,6 @@ export class PipelineOrchestrator {
           },
           userId
         );
-
-        if (discoveryResponse.qualifiedLeads.length === 0) {
-          const words = run.criteria.industry.toLowerCase().split(/\s+/);
-          const fallbackKeyword =
-            words.find((w) =>
-              ["restaurant", "cafe", "hotel", "coffee", "bistro", "bakery", "dining"].includes(w)
-            ) || "restaurant";
-
-          discoveryResponse = await executeDiscoveryRun(
-            {
-              query: fallbackKeyword,
-              location: run.criteria.city || "Vadodara",
-              limit: candidateLimit,
-            },
-            userId
-          );
-        }
 
         const targetLimit = run.criteria.limit || 5;
         discoveryResponse.qualifiedLeads = discoveryResponse.qualifiedLeads.slice(0, targetLimit);
@@ -599,23 +592,14 @@ export class PipelineOrchestrator {
         }
 
         await this.processLeadBatch(run, discoveryResponse.qualifiedLeads, userId);
+        if (isPipelineSuspended(run)) return run;
 
-        const leadProgressList = Object.values(run.leads);
-        const allFailed = leadProgressList.length > 0 && leadProgressList.every((l) => l.status === "failed");
-        const someFailed = leadProgressList.some((l) => l.status === "failed");
-
-        if (allFailed) {
-          run.status = "FAILED";
-        } else if (someFailed) {
-          run.status = "PARTIAL_SUCCESS";
-        } else {
-          run.status = "COMPLETED";
-        }
-        run.completedAt = new Date().toISOString();
-        run.updatedAt = new Date().toISOString();
+        updatePipelineCompletion(run);
         await PipelineQueue.savePipelineRun(run);
         return run;
       } catch (err) {
+        if (err instanceof PipelineExecutionLostError) throw err;
+        await PipelineQueue.assertExecution(run);
         const errMsg = (err as Error)?.message || String(err);
         run.status = "FAILED";
         run.error = errMsg;
@@ -627,6 +611,8 @@ export class PipelineOrchestrator {
 
     const failedLeads = Object.values(run.leads).filter((l) => l.status === "failed");
     if (failedLeads.length === 0) {
+      updatePipelineCompletion(run);
+      await PipelineQueue.savePipelineRun(run);
       return run;
     }
 
@@ -644,14 +630,18 @@ export class PipelineOrchestrator {
     const resolvedLeads: BusinessLead[] = [];
     for (const fl of failedLeads) {
       const found = await leadRepository.findLeadById(fl.leadId, userId);
-      if (found) resolvedLeads.push(found);
+      if (!found) throw new Error("Original owned pipeline lead unavailable; retry denied");
+      resolvedLeads.push(found);
     }
 
     if (resolvedLeads.length > 0) {
       await this.processLeadBatch(run, resolvedLeads, userId);
     }
 
+    updatePipelineCompletion(run);
+    await PipelineQueue.savePipelineRun(run);
     return run;
+    });
   }
 
   /**
@@ -662,10 +652,16 @@ export class PipelineOrchestrator {
     leadId: string,
     messageText: string,
     channel: OutreachChannel = "email",
-    userId?: string
+    userId?: string,
+    tenantId?: string
   ) {
-    const run = await PipelineQueue.getPipelineRun(runId);
+    const owner = tenantId || userId;
+    if (!owner) throw new Error("Trusted pipeline tenant required");
+    const run = await PipelineQueue.getPipelineRun(runId, owner);
     if (!run) throw new Error(`Pipeline run '${runId}' not found`);
+    if (run.tenantId !== owner) throw new Error("Pipeline ownership validation failed");
+    userId = run.userId || run.tenantId;
+    if (channel === "whatsapp") throw new Error("WhatsApp outreach simulation is disabled");
 
     const lead = run.leads[leadId];
     if (!lead) throw new Error(`Lead '${leadId}' not found in pipeline run '${runId}'`);
@@ -722,8 +718,9 @@ export class PipelineOrchestrator {
   /**
    * Generates the Phase 14 Handoff Contract
    */
-  static async getHandoffContract(runId: string): Promise<Phase14HandoffContract | null> {
-    const run = await PipelineQueue.getPipelineRun(runId);
+  static async getHandoffContract(runId: string, tenantId?: string): Promise<Phase14HandoffContract | null> {
+    if (!tenantId) throw new Error("Trusted pipeline tenant required");
+    const run = await PipelineQueue.getPipelineRun(runId, tenantId);
     if (!run) return null;
 
     const leadCount = Object.keys(run.leads).length;

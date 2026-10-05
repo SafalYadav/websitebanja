@@ -16,7 +16,14 @@ import { sanitizeErrorOutput } from "@/lib/ai/router/modelConfig";
 import { generateOutreachDraft } from "@/lib/outreach/personalizationEngine";
 import type { DraftOutreachRequest, DraftOutreachResponse } from "@/lib/outreach/types";
 
-import { isAuthorized } from "@/lib/automation/auth";
+import { authorizeAutomationTenant } from "@/lib/automation/automationApiIdentity";
+import { z } from "zod";
+
+const DraftSchema = z.object({ leadId: z.string().min(1).max(200),
+  channel: z.enum(["email","whatsapp","instagram","sms"]).optional(),
+  auditId: z.string().min(1).max(200).optional(), previewId: z.string().min(1).max(160).optional(),
+  regenerate: z.boolean().optional(), recipientEmail: z.string().email().optional(),
+});
 
 const MAX_PAYLOAD_BYTES = 256 * 1024; // 256 KB
 
@@ -24,7 +31,8 @@ export async function POST(req: Request) {
   const requestId = `req_p11_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
 
   // 1. Authentication Check
-  if (!(await isAuthorized(req))) {
+  const auth = await authorizeAutomationTenant(req);
+  if (auth.response) {
     emitAgentEvent({
       event: "automation.auth_failed",
       agent: "n8n_automation",
@@ -33,17 +41,7 @@ export async function POST(req: Request) {
       metadata: { error: "Missing or invalid authorization" },
     });
 
-    return NextResponse.json(
-      {
-        success: false,
-        handoffPhase: "phase12_reply_intelligence_crm",
-        error: {
-          code: "UNAUTHORIZED",
-          message: "Request rejected: Missing or invalid automation secret.",
-        },
-      },
-      { status: 401 }
-    );
+    return auth.response;
   }
 
   // 2. Payload Size Guard
@@ -65,7 +63,9 @@ export async function POST(req: Request) {
   // 3. JSON Parsing & Input Validation
   let payload: DraftOutreachRequest;
   try {
-    payload = JSON.parse(rawBody);
+    const parsed = DraftSchema.safeParse(JSON.parse(rawBody));
+    if (!parsed.success) return NextResponse.json({ success: false, error: { code: "VALIDATION_FAILED", message: "Invalid outreach draft request" } }, { status: 400 });
+    payload = { ...parsed.data, userId: auth.identity.userId || auth.identity.tenantId };
   } catch {
     return NextResponse.json(
       {
@@ -97,6 +97,7 @@ export async function POST(req: Request) {
   // 4. Execution via PersonalizationEngine
   try {
     const result: DraftOutreachResponse = await generateOutreachDraft(payload);
+    if (result.researchId) return NextResponse.json(result, { status: 409 });
 
     if (!result.success && result.error?.code === "LEAD_NOT_FOUND") {
       return NextResponse.json(result, { status: 404 });

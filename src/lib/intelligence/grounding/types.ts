@@ -183,6 +183,8 @@ export interface BusinessIdentity {
 }
 
 export interface GroundedBusinessProfile {
+  googlePlaceTypes?: string[];
+  googlePrimaryType?: string;
   businessId: string;
   tenantId: string | null;
   identity: BusinessIdentity;

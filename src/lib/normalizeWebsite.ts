@@ -198,7 +198,8 @@ export function normalizeWebsiteData(
     };
   };
 
-  const domainDefaults = getDomainHeroDefaults();
+  const governedGeneration = Boolean((data as unknown as Record<string, unknown>).generationGate) || Array.isArray((data as unknown as Record<string, unknown>).employeeTrace);
+  const domainDefaults = governedGeneration ? { title: "", subtitle: "", button: "", trustBadges: [] } : getDomainHeroDefaults();
 
   // Intra-page image uniqueness registry
   const usedImages = new Set<string>();
@@ -213,6 +214,8 @@ export function normalizeWebsiteData(
         return clean;
       }
     }
+    // Governed generation owns asset selection. Presentation must not inject photos.
+    if (governedGeneration) return "";
     for (const img of pool) {
       const identity = img ? imageIdentity(img) : "";
       if (img && !usedImages.has(identity)) {

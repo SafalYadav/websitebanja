@@ -15,9 +15,9 @@
 import { randomUUID } from "crypto";
 import type {
   GovernanceApprovalRecord,
-  GovernanceApprovalStatus,
 } from "./governanceTypes";
 import { hashActionPayload } from "./policyEngine";
+import { requireHumanApproval } from "../pipeline/humanApprovalAuthorization";
 
 const APPROVAL_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours default
 const MAX_RECORDS = 1000;
@@ -108,6 +108,7 @@ export class GovernanceApprovalStore {
     approvalId: string;
     approvedBy: string;
     tenantId?: string | null;
+    authorization?: unknown;
   }): GovernanceApprovalRecord {
     if (isForbiddenApprover(params.approvedBy)) {
       throw new Error(
@@ -115,6 +116,8 @@ export class GovernanceApprovalStore {
           "AI, CEO, and automated identifiers cannot approve governance actions."
       );
     }
+    const authenticatedUser = requireHumanApproval(params.authorization, params.tenantId);
+    if (authenticatedUser !== params.approvedBy) throw new Error("Governance approver identity mismatch");
 
     const record = this.records.get(params.approvalId);
     if (!record) {
@@ -123,9 +126,7 @@ export class GovernanceApprovalStore {
 
     // Cross-tenant check
     if (
-      params.tenantId != null &&
-      record.tenantId != null &&
-      params.tenantId !== record.tenantId
+      !params.tenantId || !record.tenantId || params.tenantId !== record.tenantId
     ) {
       throw new Error(
         `Governance: Cross-tenant approval is forbidden. ` +
@@ -164,11 +165,16 @@ export class GovernanceApprovalStore {
     approvalId: string;
     rejectedBy: string;
     rejectionReason?: string;
+    tenantId?: string | null;
+    authorization?: unknown;
   }): GovernanceApprovalRecord {
+    const authenticatedUser = requireHumanApproval(params.authorization, params.tenantId);
+    if (authenticatedUser !== params.rejectedBy) throw new Error("Governance rejector identity mismatch");
     const record = this.records.get(params.approvalId);
     if (!record) {
       throw new Error(`Governance: Approval record '${params.approvalId}' not found.`);
     }
+    if (!record.tenantId || record.tenantId !== params.tenantId) throw new Error("Governance approval is outside the authenticated tenant");
     if (record.status !== "PENDING") {
       throw new Error(`Governance: Record '${params.approvalId}' is not in PENDING state.`);
     }
@@ -227,9 +233,7 @@ export class GovernanceApprovalStore {
 
     // Cross-tenant check
     if (
-      params.tenantId != null &&
-      record.tenantId != null &&
-      params.tenantId !== record.tenantId
+      !params.tenantId || !record.tenantId || params.tenantId !== record.tenantId
     ) {
       return {
         valid: false,
@@ -255,9 +259,11 @@ export class GovernanceApprovalStore {
    * Marks an approval as consumed after the action executes.
    * Consumed records CANNOT be reused.
    */
-  public consume(approvalId: string): void {
+  public consume(approvalId: string, tenantId?: string | null): void {
     const record = this.records.get(approvalId);
-    if (!record) return;
+    if (!tenantId || !record || record.tenantId !== tenantId || record.status !== "APPROVED" || record.consumed || this.isExpired(record)) {
+      throw new Error("Valid owned unconsumed governance approval required");
+    }
     this.records.set(approvalId, {
       ...record,
       consumed: true,
@@ -275,8 +281,10 @@ export class GovernanceApprovalStore {
   /**
    * Lists recent records (newest first, no secrets).
    */
-  public listRecords(limit = 50): GovernanceApprovalRecord[] {
+  public listRecords(limit = 50, tenantId?: string | null): GovernanceApprovalRecord[] {
+    if (!tenantId) return [];
     return Array.from(this.records.values())
+      .filter(record => record.tenantId === tenantId)
       .sort((a, b) => b.requestedAt.localeCompare(a.requestedAt))
       .slice(0, limit);
   }
@@ -284,8 +292,9 @@ export class GovernanceApprovalStore {
   /**
    * Returns pending records for admin review.
    */
-  public listPending(): GovernanceApprovalRecord[] {
-    return Array.from(this.records.values()).filter((r) => r.status === "PENDING");
+  public listPending(tenantId?: string | null): GovernanceApprovalRecord[] {
+    if (!tenantId) return [];
+    return Array.from(this.records.values()).filter((r) => r.tenantId === tenantId && r.status === "PENDING" && !this.isExpired(r));
   }
 
   private isExpired(record: GovernanceApprovalRecord): boolean {

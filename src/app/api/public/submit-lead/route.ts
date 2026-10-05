@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { randomUUID } from "node:crypto";
 import type { SiteLead } from "@/types/website";
 import { checkMemoryRateLimit } from "@/lib/rateLimit";
 import { getClientIp } from "@/lib/supabaseServer";
@@ -64,12 +65,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, message: "Website not found." }, { status: 404 });
     }
 
-    if (projectData.is_published === false) {
+    if (projectData.is_published !== true) {
       return NextResponse.json({ success: false, message: "Website is not published." }, { status: 403 });
     }
 
     const newLead: SiteLead = {
-      id: `lead_${Date.now()}`,
+      id: `lead_${randomUUID()}`,
       name: String(name).trim(),
       email: String(email).trim(),
       phone: phone ? String(phone).trim() : undefined,
@@ -86,16 +87,18 @@ export async function POST(req: NextRequest) {
     );
 
     if (updateErr) {
-      console.warn("[Submit Lead DB update warning]", updateErr);
+      return NextResponse.json({ success: false, message: "Your inquiry could not be saved. Please try again." }, { status: 503 });
     }
 
     // Also record an analytics event for telemetry
+    // Telemetry is not the delivery acknowledgment: a stored inquiry must not be
+    // reported as failed just because optional analytics is unavailable.
     await dbInsertAnalyticsEvent({
       projectId: projectData.id,
       userId: projectData.user_id,
       eventType: "lead_submit",
       metadata: { leadId: newLead.id, sourcePage: newLead.sourcePage },
-    });
+    }).catch(() => undefined);
 
     return NextResponse.json({
       success: true,

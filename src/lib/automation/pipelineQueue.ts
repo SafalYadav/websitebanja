@@ -4,32 +4,29 @@
 import fs from "fs";
 import path from "path";
 import crypto from "crypto";
+import { GenerationHoldError } from "@/lib/intelligence/orchestration/generationHold";
 import type {
   PipelineJob,
   PipelineRun,
   PipelineStage,
-  LeadPipelineProgress,
+  PipelineStatus,
 } from "./pipelineTypes";
 import { emitAgentEvent } from "@/lib/telemetry/agentTelemetry";
+import { sanitizeErrorOutput } from "@/lib/ai/router/modelConfig";
 import {
   savePipelineRunToPostgres,
   getPipelineRunFromPostgres,
   listPipelineRunsFromPostgres,
+  ensurePipelineCrmTables,
+  suspendPipelineRun,
 } from "@/lib/db/pipelineCrmPersistence";
+import { assertPipelineExecution, attachPipelineExecution, claimPipelineExecution,
+  detachPipelineExecution, PipelineExecutionLostError, releasePipelineExecution, renewPipelineExecution } from "./pipelineExecutionLease";
+import { commitPipelineStageResult, readPipelineStageResult } from "./pipelineExecutionLease";
 
 const PIPELINE_DIR = path.resolve(process.cwd(), "scratch/pipeline");
 const RUNS_FILE = path.join(PIPELINE_DIR, "runs.json");
 const JOBS_FILE = path.join(PIPELINE_DIR, "jobs.json");
-const IDEMPOTENCY_FILE = path.join(PIPELINE_DIR, "idempotency.json");
-
-interface IdempotencyRecord {
-  key: string;
-  runId: string;
-  leadId: string;
-  stage: PipelineStage;
-  timestamp: string;
-  result: unknown;
-}
 
 function ensurePipelineStorage(): void {
   if (!fs.existsSync(PIPELINE_DIR)) {
@@ -40,9 +37,6 @@ function ensurePipelineStorage(): void {
   }
   if (!fs.existsSync(JOBS_FILE)) {
     fs.writeFileSync(JOBS_FILE, JSON.stringify([], null, 2), "utf-8");
-  }
-  if (!fs.existsSync(IDEMPOTENCY_FILE)) {
-    fs.writeFileSync(IDEMPOTENCY_FILE, JSON.stringify({}, null, 2), "utf-8");
   }
 }
 
@@ -65,10 +59,67 @@ function writeJSON<T>(filePath: string, data: T): void {
 }
 
 export class PipelineQueue {
+  static async readStageResult(run: PipelineRun, leadId: string, stage: PipelineStage) { return readPipelineStageResult(run, leadId, stage); }
+  static async commitStageResult(run: PipelineRun, leadId: string, stage: PipelineStage, result: unknown): Promise<void> { await commitPipelineStageResult(run, leadId, stage, result); }
+  static async assertExecution(run: PipelineRun): Promise<void> { await assertPipelineExecution(run); }
+
+  static async suspendRun(run: PipelineRun): Promise<void> { await suspendPipelineRun(run); }
+
+  static async withRunExecution(run: PipelineRun, statuses: PipelineStatus[], work: () => Promise<PipelineRun>, researchId?: string): Promise<PipelineRun> {
+    const readiness = await ensurePipelineCrmTables();
+    if (!readiness.success) throw new Error("Pipeline persistence schema unavailable");
+    const fence = await claimPipelineExecution(run, statuses, researchId);
+    let heartbeat: Promise<void> = Promise.resolve();
+    let heartbeatFailure: unknown;
+    const timer = setInterval(() => {
+      heartbeat = heartbeat.then(async () => {
+        if (heartbeatFailure) return;
+        try { await renewPipelineExecution(fence); } catch (error) { heartbeatFailure = error; }
+      });
+    }, 30_000);
+    try {
+      const snapshot = await getPipelineRunFromPostgres(run.id, fence.tenantId);
+      if (!snapshot) throw new PipelineExecutionLostError();
+      Object.assign(run, snapshot);
+      run.pausedAt = undefined;
+      run.pauseReason = undefined;
+      run.activeResearchContinuationId = researchId;
+      run.completedAt = undefined;
+      attachPipelineExecution(run, fence);
+      await this.assertExecution(run);
+      const result = await work();
+      if (heartbeatFailure && result.status === "RUNNING") throw heartbeatFailure;
+      return result;
+    } catch (error) {
+      // Only the still-authoritative worker can record failure. A revoked worker
+      // must never overwrite the owner's pause/cancel or a successor's progress.
+      try {
+        await this.assertExecution(run);
+        run.status = "FAILED";
+        run.error = sanitizeErrorOutput(error);
+        run.updatedAt = new Date().toISOString();
+        await this.savePipelineRun(run);
+      } catch (fenceError) {
+        if (!(fenceError instanceof PipelineExecutionLostError)) throw fenceError;
+      }
+      throw error;
+    } finally {
+      clearInterval(timer);
+      await heartbeat;
+      detachPipelineExecution(run);
+      await releasePipelineExecution(fence);
+      if (run.status === "PAUSED" && run.pauseReason === "research" && run.tenantId) {
+        const { recoverPipelineContinuations } = await import("@/lib/intelligence/orchestration/pipelineResearchContinuation");
+        await recoverPipelineContinuations({ tenantId: run.tenantId, runId: run.id });
+      }
+    }
+  }
   /**
    * Saves or updates a PipelineRun record (Azure PostgreSQL primary + durable dual-write)
    */
   static async savePipelineRun(run: PipelineRun): Promise<void> {
+    // Validate the authoritative fence before updating an instance-local mirror.
+    await savePipelineRunToPostgres(run);
     ensurePipelineStorage();
     const runs = readJSON<PipelineRun[]>(RUNS_FILE, []);
     const idx = runs.findIndex((r) => r.id === run.id);
@@ -79,22 +130,16 @@ export class PipelineQueue {
     }
     writeJSON(RUNS_FILE, runs);
 
-    // Persist to Azure PostgreSQL Flexible Server
-    try {
-      await savePipelineRunToPostgres(run);
-    } catch (err) {
-      console.warn(`[PipelineQueue] Postgres write error for run ${run.id}:`, (err as Error)?.message);
-    }
   }
 
   /**
    * Retrieves a PipelineRun by ID (Azure PostgreSQL primary with local fallback)
    */
-  static async getPipelineRun(runId: string): Promise<PipelineRun | null> {
+  static async getPipelineRun(runId: string, tenantId?: string): Promise<PipelineRun | null> {
     try {
-      const pgRun = await getPipelineRunFromPostgres(runId);
-      if (pgRun) return pgRun;
-    } catch {}
+      const pgRun = await getPipelineRunFromPostgres(runId, tenantId);
+      if (tenantId || pgRun) return pgRun;
+    } catch (error) { if (tenantId) throw error; }
 
     ensurePipelineStorage();
     const runs = readJSON<PipelineRun[]>(RUNS_FILE, []);
@@ -104,11 +149,11 @@ export class PipelineQueue {
   /**
    * Lists all PipelineRuns (Azure PostgreSQL primary with local fallback)
    */
-  static async listPipelineRuns(): Promise<PipelineRun[]> {
+  static async listPipelineRuns(tenantId?: string): Promise<PipelineRun[]> {
     try {
-      const pgRuns = await listPipelineRunsFromPostgres();
-      if (pgRuns && pgRuns.length > 0) return pgRuns;
-    } catch {}
+      const pgRuns = await listPipelineRunsFromPostgres(tenantId);
+      if (tenantId || (pgRuns && pgRuns.length > 0)) return pgRuns;
+    } catch (error) { if (tenantId) throw error; }
 
     ensurePipelineStorage();
     const localRuns = readJSON<PipelineRun[]>(RUNS_FILE, []);
@@ -198,46 +243,6 @@ export class PipelineQueue {
   }
 
   /**
-   * Checks if a job has already executed for this runId + leadId + stage
-   */
-  static async checkIdempotency(
-    runId: string,
-    leadId: string,
-    stage: PipelineStage
-  ): Promise<{ executed: boolean; result?: unknown }> {
-    ensurePipelineStorage();
-    const map = readJSON<Record<string, IdempotencyRecord>>(IDEMPOTENCY_FILE, {});
-    const key = this.makeIdempotencyKey(runId, leadId, stage);
-    if (map[key]) {
-      return { executed: true, result: map[key].result };
-    }
-    return { executed: false };
-  }
-
-  /**
-   * Records successful execution into the idempotency store
-   */
-  static async recordIdempotency(
-    runId: string,
-    leadId: string,
-    stage: PipelineStage,
-    result: unknown
-  ): Promise<void> {
-    ensurePipelineStorage();
-    const map = readJSON<Record<string, IdempotencyRecord>>(IDEMPOTENCY_FILE, {});
-    const key = this.makeIdempotencyKey(runId, leadId, stage);
-    map[key] = {
-      key,
-      runId,
-      leadId,
-      stage,
-      timestamp: new Date().toISOString(),
-      result,
-    };
-    writeJSON(IDEMPOTENCY_FILE, map);
-  }
-
-  /**
    * Executes an asynchronous task with bounded retries (maxAttempts = 3 default)
    */
   static async executeWithRetry<T>(
@@ -256,6 +261,7 @@ export class PipelineQueue {
       try {
         return await fn();
       } catch (err) {
+        if (err instanceof GenerationHoldError || err instanceof PipelineExecutionLostError) throw err;
         lastError = err;
         if (attempt < maxAttempts) {
           if (options.onRetry) {
@@ -281,14 +287,16 @@ export class PipelineQueue {
     stageFn: () => Promise<T>,
     options: { maxAttempts?: number } = {}
   ): Promise<{ success: boolean; data?: T; error?: string }> {
+    await this.assertExecution(run);
     const lead = run.leads[leadId];
     if (!lead) {
       return { success: false, error: `Lead ${leadId} not found in pipeline run` };
     }
 
     // Check idempotency first
-    const idem = await this.checkIdempotency(run.id, leadId, stage);
+    const idem = await this.readStageResult(run, leadId, stage);
     if (idem.executed) {
+      await this.assertExecution(run);
       return { success: true, data: idem.result as T };
     }
 
@@ -318,7 +326,12 @@ export class PipelineQueue {
     await this.savePipelineJob(job);
 
     try {
-      const result = await this.executeWithRetry(stageFn, {
+      const result = await this.executeWithRetry(async () => {
+        await this.assertExecution(run);
+        const data = await stageFn();
+        await this.assertExecution(run);
+        return data;
+      }, {
         maxAttempts,
         onRetry: (attempt, err) => {
           job.attempt = attempt + 1;
@@ -340,11 +353,10 @@ export class PipelineQueue {
       });
 
       // Success
+      await this.commitStageResult(run, leadId, stage, result);
       job.status = "completed";
       job.updatedAt = new Date().toISOString();
       await this.savePipelineJob(job);
-
-      await this.recordIdempotency(run.id, leadId, stage, result);
 
       lead.status = "completed";
       lead.timeline.push({
@@ -355,6 +367,24 @@ export class PipelineQueue {
 
       return { success: true, data: result };
     } catch (err) {
+      if (err instanceof PipelineExecutionLostError) throw err;
+      await this.assertExecution(run);
+      if (err instanceof GenerationHoldError) {
+        job.status = "paused";
+        job.updatedAt = new Date().toISOString();
+        await this.savePipelineJob(job);
+        lead.status = "paused";
+        lead.researchId = err.hold.researchId;
+        lead.generationCorrelationId = err.hold.correlationId;
+        lead.timeline.push({ stage, status: "paused", timestamp: job.updatedAt, details: err.message });
+        run.status = "PAUSED";
+        run.completedAt = undefined;
+        run.pausedAt = job.updatedAt;
+        run.pauseReason = "research";
+        run.updatedAt = job.updatedAt;
+        await this.savePipelineRun(run);
+        return { success: false, error: err.message };
+      }
       const errMsg = (err as Error)?.message || String(err);
       job.status = "failed";
       job.error = errMsg;
@@ -403,6 +433,5 @@ export class PipelineQueue {
     ensurePipelineStorage();
     writeJSON(RUNS_FILE, []);
     writeJSON(JOBS_FILE, []);
-    writeJSON(IDEMPOTENCY_FILE, {});
   }
 }

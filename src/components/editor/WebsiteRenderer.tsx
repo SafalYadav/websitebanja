@@ -8,6 +8,7 @@ import { resolveWebsiteTheme } from "@/lib/websiteTheme";
 import { normalizeWebsiteData } from "@/lib/normalizeWebsite";
 import { cn } from "@/lib/utils";
 import { WebsiteUIContext } from "@/contexts/WebsiteUIContext";
+import { buttonActionAttributes } from "@/lib/buttonActions";
 
 // Import Section components
 import HeroSection from "./HeroSection";
@@ -23,7 +24,7 @@ import ReviewsSection from "./ReviewsSection";
 import SpatialSectionWrapper from "./SpatialSectionWrapper";
 import { isContactSection, placeContactAtEnd, resolveSectionTarget, sectionAnchorHref } from "@/lib/intelligence/planning/sectionOrder";
 
-import { MessageCircle, Globe } from "lucide-react";
+import { MessageCircle, Globe, Menu, X } from "lucide-react";
 
 import type {
   WebsiteData,
@@ -83,6 +84,7 @@ interface WebsiteRendererProps {
   category?: string | null;
   businessName?: string | null;
   isPublic?: boolean;
+  previewNavigation?: boolean;
   activePageSlug?: string;
   publicSlug?: string;
   whatsappNumber?: string | null;
@@ -100,6 +102,7 @@ export default function WebsiteRenderer({
   category,
   businessName,
   isPublic = false,
+  previewNavigation = false,
   activePageSlug,
   publicSlug,
   whatsappNumber,
@@ -131,6 +134,9 @@ export default function WebsiteRenderer({
   const setActivePage = useGeneratedWebsiteStore((state) => state.setActivePage);
   const catalogVersion = useGeneratedWebsiteStore((state) => state.catalogVersion);
   const [fetchedCatalogData, setFetchedCatalogData] = React.useState<{ projectId: string; items: CatalogItem[] } | null>(null);
+  const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
+  const [previewPageId, setPreviewPageId] = React.useState<string | null>(null);
+  const navigationPanelId = React.useId();
   const fetchedCatalog = (fetchedCatalogData && fetchedCatalogData.projectId === projectId) ? fetchedCatalogData.items : [];
 
   React.useEffect(() => {
@@ -257,6 +263,8 @@ export default function WebsiteRenderer({
   let activePage: WebsitePage = pages[0];
   if (activePageSlug !== undefined) {
     activePage = pages.find((p) => p.slug === activePageSlug) || pages[0];
+  } else if (previewNavigation && previewPageId) {
+    activePage = pages.find((p) => p.id === previewPageId) || pages[0];
   } else if (!isPublic && activePageId) {
     activePage = pages.find((p) => p.id === activePageId) || pages[0];
   }
@@ -351,9 +359,10 @@ export default function WebsiteRenderer({
   const handleSwitchPage = (slug: string) => {
     if (!setActivePage) return;
     // target can be empty string for home page
-    const targetPage = pages.find((p) => p.slug === slug || (slug === "home" && p.isHome));
+    const targetPage = pages.find((p) => p.id === slug || p.slug === slug || (slug === "home" && p.isHome));
     if (targetPage) {
-      setActivePage(targetPage.id);
+      if (previewNavigation) setPreviewPageId(targetPage.id);
+      else setActivePage(targetPage.id);
     }
   };
 
@@ -370,17 +379,25 @@ export default function WebsiteRenderer({
   const finalShadow = stratColorSystem?.shadow || "0 18px 40px -12px rgba(0,0,0,0.08)";
   const finalCardAccent = stratColorSystem?.cardAccent || finalAccent;
   const finalSectionAccent = stratColorSystem?.sectionAccent || finalSecondary;
+  const approvedTypography = (website as unknown as Record<string, unknown>).approvedTypography as
+    { headingFont?: string; bodyFont?: string } | undefined;
+  const allowedEmployeeFonts = new Set(["Georgia", "Arial", "Verdana", "Trebuchet MS"]);
+  const approvedHeadingFont = approvedTypography?.headingFont && allowedEmployeeFonts.has(approvedTypography.headingFont) ? approvedTypography.headingFont : undefined;
+  const approvedBodyFont = approvedTypography?.bodyFont && allowedEmployeeFonts.has(approvedTypography.bodyFont) ? approvedTypography.bodyFont : undefined;
 
   return (
-    <WebsiteUIContext.Provider value={{ publicSlug, onSwitchPage: !isPublic ? handleSwitchPage : undefined, isPublic }}>
+    <WebsiteUIContext.Provider value={{ publicSlug, onSwitchPage: !isPublic || previewNavigation ? handleSwitchPage : undefined, isPublic, sectionOrder: activeSectionOrder }}>
       <div
         className="wb-website-root min-h-full w-full transition-colors duration-300 relative"
+        data-wb-page-id={activePage.id}
+        data-wb-page-slug={activePage.slug}
+        data-wb-pages={JSON.stringify(pages.map(({ id, slug, isHome }) => ({ id, slug, isHome })))}
         style={{
           backgroundColor: finalBg,
           color: finalFg,
-          fontFamily: theme.fontFamily,
-          "--wb-font-heading": theme.headingFont || "inherit",
-          "--wb-font-body": theme.bodyFont || theme.fontFamily,
+          fontFamily: approvedBodyFont || theme.fontFamily,
+          "--wb-font-heading": approvedHeadingFont || theme.headingFont || "inherit",
+          "--wb-font-body": approvedBodyFont || theme.bodyFont || theme.fontFamily,
           "--wb-primary": finalPrimary,
           "--wb-secondary": finalSecondary,
           "--wb-accent": finalAccent,
@@ -546,6 +563,7 @@ export default function WebsiteRenderer({
 
       {/* Global Navigation Bar */}
       <nav
+        aria-label="Main navigation"
         className="sticky top-0 z-30 w-full backdrop-blur-xl border-b transition-colors px-4 sm:px-8 py-3 flex items-center justify-between"
         style={{
           backgroundColor: `${theme.surface}e6`,
@@ -553,7 +571,7 @@ export default function WebsiteRenderer({
         }}
       >
         <div
-          className={cn("flex items-center gap-2", isInteractiveStudio && "cursor-pointer hover:opacity-80 ring-offset-4 ring-offset-transparent hover:ring-2 ring-violet-500 rounded p-1 -ml-1")}
+          className={cn("flex min-w-0 items-center gap-2", isInteractiveStudio && "cursor-pointer hover:opacity-80 ring-offset-4 ring-offset-transparent hover:ring-2 ring-violet-500 rounded p-1 -ml-1")}
           onClick={() => {
             if (isInteractiveStudio) {
               setSelectedSection("navbar");
@@ -570,20 +588,32 @@ export default function WebsiteRenderer({
           ) : (
             <>
               <Globe className="h-4 w-4" style={{ color: theme.primary }} />
-              <span className="font-extrabold text-xs sm:text-sm tracking-tight" style={{ color: theme.fg }}>
+              <span className="truncate font-extrabold text-xs sm:text-sm tracking-tight" style={{ color: theme.fg }}>
                 {website?.navbar?.logo?.text || (website as any)?.brand?.name || resolvedBusinessName || "Website"}
               </span>
             </>
           )}
         </div>
 
-        <div className="flex items-center gap-1 sm:gap-2">
+        <button type="button" className="ml-3 shrink-0 rounded-lg border p-2 md:hidden"
+          aria-label={mobileMenuOpen ? "Close navigation menu" : "Open navigation menu"}
+          aria-controls={navigationPanelId} aria-expanded={mobileMenuOpen}
+          onClick={() => setMobileMenuOpen(open => !open)}
+          style={{ color: theme.fg, borderColor: theme.border }}>
+          {mobileMenuOpen ? <X className="h-5 w-5" aria-hidden="true" /> : <Menu className="h-5 w-5" aria-hidden="true" />}
+        </button>
+        <div id={navigationPanelId}
+          className={cn("gap-2 md:static md:flex md:w-auto md:flex-row md:items-center md:border-0 md:p-0 md:shadow-none", mobileMenuOpen ? "absolute left-0 top-full flex w-full flex-col border-b p-4 shadow-lg" : "hidden")}
+          style={{ backgroundColor: theme.surface, borderColor: theme.border }}
+          onClick={event => { if (event.target instanceof Element && event.target.closest("a,button")) setMobileMenuOpen(false); }}
+          onKeyDown={event => { if (event.key === "Escape") { setMobileMenuOpen(false); document.querySelector<HTMLButtonElement>(`button[aria-controls="${navigationPanelId}"]`)?.focus(); } }}>
           {(website?.navbar?.links && website?.navbar?.links?.length > 0 ? website?.navbar?.links : pages.map(p => ({
             id: p.id,
             label: p.title,
             action: { type: "page" as const, target: p.slug }
           }))).map((link: any) => {
-            const isPageActive = link.action.type === "page" && (link.action.target === activePage.slug || (!link.action.target && activePage.isHome));
+            const isPageActive = link.action.type === "page" && (link.action.target === activePage.id || link.action.target === activePage.slug ||
+              ((!link.action.target || link.action.target === "home") && activePage.isHome));
 
             if (link.action.type === "scroll") {
               const target = resolveScrollTarget(link.action.target);
@@ -635,7 +665,7 @@ export default function WebsiteRenderer({
               );
             }
 
-            if (isPublic && publicSlug) {
+            if (isPublic && publicSlug && !previewNavigation) {
               const href = link.action.target ? `/p/${publicSlug}/${link.action.target}` : `/p/${publicSlug}`;
                 
               return (
@@ -660,10 +690,11 @@ export default function WebsiteRenderer({
               <button
                 key={link.id}
                 type="button"
+                {...buttonActionAttributes(link.action, "contact", activeSectionOrder)}
+                disabled={isPageActive}
                 onClick={() => {
                   if (link.action.type === "page") {
-                    const targetPage = pages.find(p => p.slug === link.action.target || (p.isHome && !link.action.target));
-                    if (targetPage) setActivePage(targetPage.id);
+                    handleSwitchPage(link.action.target || "");
                   }
                 }}
                 className={cn(

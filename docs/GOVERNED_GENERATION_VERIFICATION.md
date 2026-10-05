@@ -429,6 +429,42 @@ Do not claim end-to-end success or activate the goal as complete until the outst
   - TypeScript compiler (`npx tsc --noEmit`): 0 errors.
   - Production build (`npm run build`): Completed successfully with all 36 static pages and dynamic routes compiled.
 
-- **Remaining release blockers**:
-  - Azure deployment credentials: Azure CLI access is currently blocked locally (`PermissionError: [Errno 1] Operation not permitted: '/Users/safalyadav/.azure/azureProfile.json'`). Live deployment commands and database migrations against the target Azure environment cannot be run without Azure credentials.
-  - Git changes remain uncommitted in the local tree to preserve ongoing working tree changes until explicit release authorization.
+## Continuation checkpoint — verified baseline adoption, runner modularization, TLS enforcement, commit and push
+
+- **Verified per-migration baseline adoption (`scripts/migrationRunnerCore.mjs`)**:
+  - Replaced crude `projects`/`profiles` blanket baseline adoption with granular, per-migration inspection of actual schema artifacts (`tables`, `columns`, `functions`) via `BASELINE_SCHEMA_REQUIREMENTS`.
+  - Only migrations whose exact declared objects are fully present in the database are adopted (`status === "full"`).
+  - Partially initialized or incompatible schemas throw a fatal error with actionable diagnostic details (`status === "partial"`), preventing destructive DDL replay or corrupted migration history.
+  - Refactored migration runner into an importable core module (`scripts/migrationRunnerCore.mjs`) and a thin CLI entrypoint (`scripts/run_migrations.mjs`).
+
+- **Production TLS enforcement**:
+  - Audited `.github/workflows/deploy-azure.yml` to explicitly configure `NODE_ENV=production`, `WEBSITEBANJA_RUNTIME_MODE=production`, and `DATABASE_SSL_REJECT_UNAUTHORIZED=true` for the pre-deployment database migration gate.
+  - Aligned database certificate validation with `src/lib/db/config.ts`.
+
+- **Outreach reconciliation audit & implementation (`src/lib/integrations/gmailEmailProvider.ts`)**:
+  - Implemented `GmailEmailProvider.reconcileOutreachDispatch`: tenant-scoped recovery path allowing authenticated administrators to confirm delivery using verified provider message ID evidence, reset claimed dispatches to approved after failed transmission, or mark dispatches failed with audit reasons.
+  - Preserved distinct `provider_accepted` semantics (distinguished from inbox delivery).
+
+- **Verification evidence obtained**:
+  - `tests/governed_memory_migration_regression.test.mjs`: 12/12 passing tests, including real implementation execution of rollback, checksum drift rejection, non-mutating dry-run, per-migration baseline inspection with partial-schema rejection, and dispatch reconciliation.
+  - Governed suite (`npm run test:governed`): 142/142 passing tests.
+  - Governed browser suite (`npm run test:governed:browser`): 10/10 passing Chromium fixture tests covering pixel text contrast, desktop/mobile navigation disclosures, CTA scroll execution, and contact form validation.
+  - Semantic profile suite (`node --test tests/business_semantic_profile.test.mjs`): 8/8 passing tests (Thai Spa classified as wellness, not SaaS; G-Town Wines retail unaffected by Bristol Hotel landmark).
+  - Phase 18 long-term memory suite (`NODE_ENV=test node tests/phase18_long_term_memory.test.mjs`): 25/25 passing tests.
+  - Knowledge base suite (`npm test`): 13/13 passing tests.
+  - Migration manifest validation (`node scripts/run_migrations.mjs --validate`): 18/18 migrations verified.
+  - TypeScript compiler (`npx tsc --noEmit`): 0 errors.
+  - Production build (`npm run build`): 36/36 pages compiled cleanly.
+  - ESLint (`npm run lint`): 0 errors (333 pre-existing non-blocking warnings).
+
+- **Commit and Push Evidence**:
+  - Staged only relevant implementation, migration, test, workflow, and verification ledger files, preserving all user modifications, deletions, and untracked files.
+  - Committed to `main`: `3c90f530a96d7ae8edb605f9dee24566855bbb7a` (`fix(governance): enforce durable memory, verified baseline adoption, TLS, and outreach reconciliation`).
+  - Pushed to `https://github.com/SafalYadav/websitebanja.git` on branch `main` (`ad5dd4a..3c90f53  main -> main`).
+
+- **Azure Deployment Status & Remaining Blocker**:
+  - Pushing to `main` triggered GitHub Actions workflow `Continuous Deployment to Azure Container Apps` (Run ID: `37307457481`).
+  - Job `Build & Push Docker Image` failed at step `Build and Push Docker Image (Immutable SHA + latest)` on GitHub Actions runner.
+  - Azure CLI on local workstation reports `Please run 'az login' to setup account`, preventing manual fallback deployment commands or direct Azure Container Apps inspection from the local terminal.
+  - Production container app at `https://websitebanja.com` remains online and healthy on previous deployed revision (`ad5dd4a9ebc83d778546377ff9f8cc0bf899e10c`), with database connectivity (`azure_postgresql`, latency 31ms) and security gates active.
+  - Remaining blocker for live revision promotion: Investigating GitHub Actions runner build step logs (requires repo admin credentials to view private Action logs or resolving runner Docker build dependencies) and completing `az login` locally for direct deployment monitoring.

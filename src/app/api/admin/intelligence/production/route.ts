@@ -14,6 +14,7 @@ import {
   type ProductionJobState,
 } from "@/lib/intelligence";
 import { z } from "zod";
+import { authorizeHumanApproval } from "@/lib/intelligence/pipeline/humanApprovalAuthorization";
 
 export const dynamic = "force-dynamic";
 
@@ -103,7 +104,7 @@ export async function GET(req: Request) {
     }
 
     const auth = await verifyAdminAuth(req);
-    if (!auth.isAdmin) {
+    if (!auth.isAdmin || !auth.userId) {
       return NextResponse.json(
         { success: false, message: auth.error || "Forbidden: Administrator access required." },
         { status: auth.error?.includes("Missing") ? 401 : 403 }
@@ -113,7 +114,7 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const jobId = searchParams.get("jobId");
     const state = searchParams.get("state") as ProductionJobState | null;
-    const tenantId = searchParams.get("tenantId");
+    const tenantId = auth.userId;
     const limit = searchParams.get("limit") ? parseInt(searchParams.get("limit")!, 10) : 20;
 
     if (jobId) {
@@ -161,7 +162,7 @@ export async function POST(req: Request) {
     }
 
     const auth = await verifyAdminAuth(req);
-    if (!auth.isAdmin) {
+    if (!auth.isAdmin || !auth.userId) {
       return NextResponse.json(
         { success: false, message: auth.error || "Forbidden: Administrator access required." },
         { status: auth.error?.includes("Missing") ? 401 : 403 }
@@ -178,6 +179,8 @@ export async function POST(req: Request) {
     }
 
     const cmd = parsed.data;
+    // Client-supplied scope never confers access to another tenant's production jobs.
+    cmd.tenantId = auth.userId;
 
     switch (cmd.action) {
       case "start": {
@@ -212,8 +215,9 @@ export async function POST(req: Request) {
       case "approve": {
         const job = await autonomousProductionOrchestrator.approveJob(
           cmd.jobId,
-          cmd.approver,
-          cmd.tenantId
+          auth.userId,
+          auth.userId,
+          await authorizeHumanApproval(req, auth.userId)
         );
         return NextResponse.json({ success: true, job });
       }
@@ -221,9 +225,10 @@ export async function POST(req: Request) {
       case "reject": {
         const job = await autonomousProductionOrchestrator.rejectJob(
           cmd.jobId,
-          cmd.rejector,
+          auth.userId,
           cmd.reason,
-          cmd.tenantId
+          auth.userId,
+          await authorizeHumanApproval(req, auth.userId)
         );
         return NextResponse.json({ success: true, job });
       }

@@ -65,6 +65,7 @@ export interface PersonalizedPreviewRequest {
   placesReviews?: import("@/lib/intelligence/grounding/assetTypes").RawPlacesReview[];
   semanticProfile?: BusinessSemanticProfile;
   executiveBrief?: ExecutiveGenerationBrief;
+  deferPublication?: boolean;
 }
 
 export interface PersonalizedPreviewResponse {
@@ -78,7 +79,7 @@ export interface PersonalizedPreviewResponse {
     designArchetype: string;
     sectionCount: number;
     imageManifest: ImageManifestEntry[];
-    contrastReport: HeroContrastReport;
+    contrastReport?: HeroContrastReport;
   };
   business: {
     name: string;

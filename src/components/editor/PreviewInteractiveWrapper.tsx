@@ -76,12 +76,11 @@ function PreviewInnerRenderer({
         if (activeTarget.elementPath && !activeTarget.elementPath.startsWith("media.")) {
           const parts = activeTarget.elementPath.split(".");
           let curr: any = copy;
-          let valid = true;
           for (let i = 0; i < parts.length - 1; i++) {
             if (!curr[parts[i]]) curr[parts[i]] = {};
             curr = curr[parts[i]];
           }
-          if (valid && curr) {
+          if (curr) {
             curr[parts[parts.length - 1]] = url;
           }
         }

@@ -68,8 +68,9 @@ export class GovernanceAuditLog {
   /**
    * Returns the most recent audit entries.
    */
-  public getRecent(limit = 50): GovernanceAuditEntry[] {
-    return this.entries.slice(0, Math.min(limit, MAX_ENTRIES));
+  public getRecent(limit = 50, tenantId?: string | null): GovernanceAuditEntry[] {
+    if (!tenantId) return [];
+    return this.entries.filter(entry => entry.tenantId === tenantId).slice(0, Math.min(limit, MAX_ENTRIES));
   }
 
   /**
@@ -84,7 +85,7 @@ export class GovernanceAuditLog {
   /**
    * Returns the total count of entries per decision.
    */
-  public getSummary(): {
+  public getSummary(tenantId?: string | null): {
     total: number;
     allowed: number;
     requireApproval: number;
@@ -93,12 +94,13 @@ export class GovernanceAuditLog {
     let allowed = 0;
     let requireApproval = 0;
     let blocked = 0;
-    for (const e of this.entries) {
+    const entries = tenantId ? this.entries.filter(entry => entry.tenantId === tenantId) : [];
+    for (const e of entries) {
       if (e.decision === "ALLOW") allowed++;
       else if (e.decision === "REQUIRE_APPROVAL") requireApproval++;
       else blocked++;
     }
-    return { total: this.entries.length, allowed, requireApproval, blocked };
+    return { total: entries.length, allowed, requireApproval, blocked };
   }
 
   /** Simple secret sanitizer — redacts values of sensitive keys. */

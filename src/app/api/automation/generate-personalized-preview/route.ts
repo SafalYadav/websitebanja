@@ -18,6 +18,7 @@ import type { PersonalizedPreviewRequest, PersonalizedPreviewResponse } from "@/
 
 const MAX_PAYLOAD_BYTES = 256 * 1024; // 256 KB
 import { isAuthorized } from "@/lib/automation/auth";
+import { verifyAdminAuth } from "@/lib/adminAuth";
 
 export async function POST(req: Request) {
   const requestId = `req_p10_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
@@ -121,16 +122,20 @@ export async function POST(req: Request) {
 
   // 4. Generate Personalized Preview via Canonical Generation Orchestrator
   try {
+    const admin = await verifyAdminAuth(req);
+    const tenantId = admin.isAdmin && admin.userId ? admin.userId : process.env.AUTOMATION_TENANT_ID;
+    if (!tenantId) return NextResponse.json({ success: false, error: { code: "AUTOMATION_TENANT_REQUIRED", message: "Configure a server-side automation tenant or authenticate as administrator" } }, { status: 403 });
+    const identity = { tenantId, userId: admin.isAdmin ? admin.userId : undefined };
     const canonicalRes = await canonicalGenerationOrchestrator.generateWebsite({
       businessName: parsedBody.overrideLead?.businessName || "Business",
       leadId: parsedBody.leadId,
       auditId: parsedBody.auditId,
       overrideLead: parsedBody.overrideLead as any,
       overrideAudit: parsedBody.overrideAudit as any,
-      groundedProfile: parsedBody.groundedProfile,
       placesPhotos: parsedBody.placesPhotos,
       placesReviews: parsedBody.placesReviews,
-      userId: parsedBody.userId,
+      userId: identity.userId,
+      tenantId: identity.tenantId,
       source: "api",
     });
 
@@ -138,7 +143,9 @@ export async function POST(req: Request) {
       return NextResponse.json(
         {
           success: false,
-          status: "failed",
+          status: canonicalRes.status === "RESEARCH_REQUIRED" || canonicalRes.status === "WAITING_HUMAN_APPROVAL" ? canonicalRes.status.toLowerCase() : "failed",
+          researchId: canonicalRes.researchId,
+          correlationId: canonicalRes.correlationId,
           error: {
             code: canonicalRes.error?.code || "GENERATION_FAILED",
             message: canonicalRes.error?.message || "Canonical generation failed",
@@ -153,7 +160,7 @@ export async function POST(req: Request) {
           },
           handoffPhase: "phase11_personalized_outreach",
         },
-        { status: 500 }
+        { status: canonicalRes.status === "RESEARCH_REQUIRED" || canonicalRes.status === "WAITING_HUMAN_APPROVAL" ? 409 : 500 }
       );
     }
 
@@ -164,18 +171,11 @@ export async function POST(req: Request) {
         id: canonicalRes.preview.id,
         slug: canonicalRes.preview.slug,
         url: canonicalRes.preview.url,
-        qualityScore: canonicalRes.validationReport?.overallScore || 95,
-        designArchetype: "warm_artisanal",
-        sectionCount: canonicalRes.websiteData.sectionOrder?.length || 7,
-        imageManifest: [],
-        contrastReport: {
-          headingContrast: 7.5,
-          subtitleContrast: 6.2,
-          ctaContrast: 8.1,
-          isReadable: true,
-          remedyApplied: "canonical_contrast_protection",
-          details: "Verified AA/AAA contrast conformance",
-        },
+        qualityScore: canonicalRes.validationReport?.overallScore ?? canonicalRes.previewDetails?.qualityScore ?? 0,
+        designArchetype: canonicalRes.websiteData.designStrategy?.visualArchetype || "",
+        sectionCount: canonicalRes.websiteData.sectionOrder?.length || 0,
+        imageManifest: canonicalRes.previewDetails?.imageManifest || [],
+        contrastReport: canonicalRes.previewDetails?.contrastReport,
       },
       business: {
         name: canonicalRes.businessContext.businessName,
@@ -189,7 +189,7 @@ export async function POST(req: Request) {
       handoffPhase: "phase11_personalized_outreach",
     };
 
-    return NextResponse.json(response, { status: 200 });
+    return NextResponse.json({ ...response, correlationId: canonicalRes.correlationId }, { status: 200 });
   } catch (err: unknown) {
     const safeMessage = sanitizeErrorOutput(err);
     const errorBody = {

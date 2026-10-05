@@ -10,7 +10,8 @@
 //
 // Default-deny: if no rule explicitly allows an action → BLOCK.
 
-import { createHash, randomUUID } from "crypto";
+import { randomUUID } from "crypto";
+export { hashActionPayload } from "./canonicalPayloadHash";
 import type {
   GovernanceDecision,
   GovernanceRequest,
@@ -225,14 +226,6 @@ const POLICY_RULES: PolicyRule[] = [
 ].sort((a, b) => a.priority - b.priority);
 
 // ─── Helper: hash action payload ─────────────────────────────────────────────
-
-export function hashActionPayload(payload: unknown): string {
-  const stable = JSON.stringify(
-    payload,
-    Object.keys(payload as Record<string, unknown>).sort()
-  );
-  return createHash("sha256").update(stable).digest("hex");
-}
 
 // ─── PolicyEngine ─────────────────────────────────────────────────────────────
 

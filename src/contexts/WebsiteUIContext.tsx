@@ -6,6 +6,7 @@ export interface WebsiteUIContextType {
   publicSlug?: string;
   onSwitchPage?: (pageIdOrSlug: string) => void;
   isPublic?: boolean;
+  sectionOrder?: string[];
 }
 
 export const WebsiteUIContext = createContext<WebsiteUIContextType>({});

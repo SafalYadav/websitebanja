@@ -306,7 +306,10 @@ export function DonutChart({
   const center = size / 2;
   const circumference = 2 * Math.PI * radius;
 
-  let accumulated = 0;
+  const sliceOffsets: number[] = [0];
+  for (const slice of data) {
+    sliceOffsets.push(sliceOffsets[sliceOffsets.length - 1] + slice.value / total);
+  }
 
   return (
     <div className={`p-4 rounded-2xl border border-white/10 bg-zinc-900/70 flex flex-col items-center ${className}`}>
@@ -316,8 +319,7 @@ export function DonutChart({
         <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="transform -rotate-90">
           {data.map((slice, i) => {
             const strokeDasharray = `${(slice.value / total) * circumference} ${circumference}`;
-            const strokeDashoffset = -accumulated * circumference;
-            accumulated += slice.value / total;
+            const strokeDashoffset = -sliceOffsets[i] * circumference;
 
             return (
               <motion.circle

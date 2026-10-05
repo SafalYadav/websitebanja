@@ -1,37 +1,35 @@
 import type { ButtonActionConfig } from "@/types/website";
+import { resolveSectionTarget } from "./intelligence/planning/sectionOrder";
+
+export function buttonActionAttributes(action: ButtonActionConfig | undefined, fallback: string, sectionOrder: string[] = []) {
+  const type = action?.type || "scroll";
+  return { "data-wb-action": type, "data-wb-action-target": type === "scroll"
+    ? resolveSectionTarget(action?.target || fallback, sectionOrder) : action?.target || "" };
+}
 
 /**
  * Sanitizes URLs to prevent XSS (blocks javascript:, vbscript:, data:).
  */
 export function sanitizeActionUrl(url: string): string {
   const trimmed = url.trim();
-  const lower = trimmed.toLowerCase();
+  if (!trimmed || /[\u0000-\u0020\u007f\\]/.test(trimmed)) return "#";
+  if (trimmed.startsWith("/") && !trimmed.startsWith("//")) return trimmed;
+  try {
+    const explicitScheme = /^[a-z][a-z\d+.-]*:/i.test(trimmed);
+    if (!explicitScheme && !trimmed.includes(".")) return "#";
+    const candidate = explicitScheme ? trimmed : `https://${trimmed}`;
+    const parsed = new URL(candidate);
+    if (!["https:", "http:", "tel:", "mailto:"].includes(parsed.protocol) || parsed.username || parsed.password) return "#";
+    return candidate;
+  } catch { return "#"; }
+}
 
-  if (
-    lower.startsWith("javascript:") ||
-    lower.startsWith("vbscript:") ||
-    lower.startsWith("data:text/html")
-  ) {
-    return "#";
-  }
-
-  if (
-    lower.startsWith("http://") ||
-    lower.startsWith("https://") ||
-    lower.startsWith("tel:") ||
-    lower.startsWith("mailto:") ||
-    lower.startsWith("https://wa.me/") ||
-    lower.startsWith("/")
-  ) {
-    return trimmed;
-  }
-
-  // Prepend https:// if standard domain without protocol
-  if (trimmed.includes(".") && !trimmed.startsWith("/")) {
-    return `https://${trimmed}`;
-  }
-
-  return trimmed;
+/** Cancellable observation lets private rendered QA verify real routing without external delivery. */
+function navigateExternal(url: string, mode: "new_tab" | "same_tab") {
+  const event = new CustomEvent("websitebanja:external-navigation", { cancelable: true, detail: { url, mode } });
+  if (!document.dispatchEvent(event)) return;
+  if (mode === "new_tab") window.open(url, "_blank", "noopener,noreferrer");
+  else window.location.href = url;
 }
 
 /**
@@ -46,7 +44,8 @@ export function scrollToSection(sectionKey: string): void {
 
   // 2. Try prefix match (for dynamically keyed sections like services_17823901)
   if (!targetElement) {
-    targetElement = document.querySelector(`[id^="wb-section-${cleanKey}"]`) as HTMLElement | null;
+    targetElement = Array.from(document.querySelectorAll<HTMLElement>("[id]")).find(element =>
+      element.id.startsWith(`wb-section-${cleanKey}_`) || element.id.startsWith(`wb-section-${cleanKey}-`)) || null;
   }
 
   if (!targetElement) return;
@@ -70,7 +69,7 @@ export function handleButtonActionClick(
   action: ButtonActionConfig | undefined,
   fallbackScrollTarget: string = "contact",
   e?: React.MouseEvent,
-  context?: { siteSlug?: string; onSwitchPage?: (pageIdOrSlug: string) => void }
+  context?: { siteSlug?: string; onSwitchPage?: (pageIdOrSlug: string) => void; sectionOrder?: string[] }
 ): void {
   if (e) {
     e.preventDefault();
@@ -79,7 +78,7 @@ export function handleButtonActionClick(
 
   // If no action defined at all, fall back to default scroll
   if (!action) {
-    scrollToSection(fallbackScrollTarget);
+    scrollToSection(resolveSectionTarget(fallbackScrollTarget, context?.sectionOrder || []));
     return;
   }
 
@@ -90,7 +89,7 @@ export function handleButtonActionClick(
 
   switch (action.type) {
     case "scroll": {
-      const target = action.target || fallbackScrollTarget;
+      const target = resolveSectionTarget(action.target || fallbackScrollTarget, context?.sectionOrder || []);
       scrollToSection(target);
       break;
     }
@@ -100,7 +99,7 @@ export function handleButtonActionClick(
         context.onSwitchPage(targetPage);
       } else if (context?.siteSlug) {
         const dest = targetPage === "home" || !targetPage ? `/p/${context.siteSlug}` : `/p/${context.siteSlug}/${targetPage}`;
-        window.location.href = dest;
+        navigateExternal(dest, "same_tab");
       }
       break;
     }
@@ -109,7 +108,7 @@ export function handleButtonActionClick(
       if (rawTarget) {
         const safeUrl = sanitizeActionUrl(rawTarget);
         if (safeUrl && safeUrl !== "#") {
-          window.open(safeUrl, "_blank", "noopener,noreferrer");
+          navigateExternal(safeUrl, "new_tab");
         }
       }
       break;
@@ -118,21 +117,21 @@ export function handleButtonActionClick(
       const cleanPhone = (action.target || "").replace(/[^0-9]/g, "");
       if (cleanPhone) {
         const msg = encodeURIComponent("Hello! I would like to inquire about your services.");
-        window.open(`https://wa.me/${cleanPhone}?text=${msg}`, "_blank", "noopener,noreferrer");
+        navigateExternal(`https://wa.me/${cleanPhone}?text=${msg}`, "new_tab");
       }
       break;
     }
     case "call": {
       const cleanPhone = (action.target || "").replace(/[^0-9+]/g, "");
       if (cleanPhone) {
-        window.location.href = `tel:${cleanPhone}`;
+        navigateExternal(`tel:${cleanPhone}`, "same_tab");
       }
       break;
     }
     case "email": {
       const cleanEmail = (action.target || "").trim();
       if (cleanEmail) {
-        window.location.href = `mailto:${cleanEmail}`;
+        navigateExternal(`mailto:${cleanEmail}`, "same_tab");
       }
       break;
     }

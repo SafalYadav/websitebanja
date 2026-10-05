@@ -3,7 +3,8 @@
 // src/app/admin/analytics/page.tsx
 // Phase 14 — Autonomous Lead Pipeline Analytics, Cost & Optimization Intelligence Dashboard
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useCallback } from "react";
+import { useAsyncResource } from "@/hooks/useAsyncResource";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import type {
@@ -20,10 +21,6 @@ export interface AdminAnalyticsCenterProps {
 
 export default function AdminAnalyticsCenter({ sessionToken, onNavigateTab }: AdminAnalyticsCenterProps = {}) {
   const [timeFilter, setTimeFilter] = useState<TimeFilter>("all");
-  const [data, setData] = useState<PipelineAnalyticsDashboard | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"overview" | "funnel" | "performance" | "cost" | "optimization">("overview");
 
   // Helper to obtain fresh Bearer token
@@ -44,31 +41,15 @@ export default function AdminAnalyticsCenter({ sessionToken, onNavigateTab }: Ad
     return headers;
   }, [sessionToken]);
 
-  const fetchAnalytics = useCallback(async (filter: TimeFilter, isManual = false) => {
-    if (isManual) setRefreshing(true);
-    else setLoading(true);
-    setErrorMessage(null);
-
-    try {
-      const headers = await getAuthHeaders();
-      const res = await fetch(`/api/automation/analytics?timeRange=${filter}`, { headers });
-      const json = await res.json();
-      if (json.success && json.data) {
-        setData(json.data);
-      } else {
-        setErrorMessage(json.error || "Failed to load analytics");
-      }
-    } catch (err) {
-      setErrorMessage("Network error fetching analytics data");
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, [getAuthHeaders]);
-
-  useEffect(() => {
-    fetchAnalytics(timeFilter);
-  }, [timeFilter, fetchAnalytics]);
+  const loadAnalytics = useCallback(async (): Promise<PipelineAnalyticsDashboard> => {
+    const headers = await getAuthHeaders();
+    const response = await fetch(`/api/automation/analytics?timeRange=${timeFilter}`, { headers });
+    const json = await response.json();
+    if (!response.ok || !json.success || !json.data) throw new Error(json.error || "Failed to load analytics");
+    return json.data;
+  }, [getAuthHeaders, timeFilter]);
+  const { data, loading, error: errorMessage, refresh, dismissError } = useAsyncResource(timeFilter, loadAnalytics);
+  const refreshing = loading && !!data;
 
   const getHealthBadge = (score: number) => {
     if (score >= 85) return { label: "OPTIMAL", color: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30" };
@@ -140,7 +121,7 @@ export default function AdminAnalyticsCenter({ sessionToken, onNavigateTab }: Ad
             </div>
 
             <button
-              onClick={() => fetchAnalytics(timeFilter, true)}
+              onClick={refresh}
               disabled={refreshing || loading}
               className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium border border-slate-700 transition flex items-center space-x-1.5 disabled:opacity-50"
             >
@@ -191,7 +172,7 @@ export default function AdminAnalyticsCenter({ sessionToken, onNavigateTab }: Ad
           <div className="p-4 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-sm flex items-center justify-between">
             <span>⚠️ {errorMessage}</span>
             <button
-              onClick={() => setErrorMessage(null)}
+              onClick={dismissError}
               className="text-xs px-2 py-1 rounded bg-rose-500/20 hover:bg-rose-500/40"
             >
               Dismiss

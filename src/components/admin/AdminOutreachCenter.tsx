@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useState, useCallback } from "react";
+import { useAsyncResource } from "@/hooks/useAsyncResource";
 import Link from "next/link";
 import {
   Mail,
@@ -18,7 +19,6 @@ import {
   ShieldAlert,
   AlertTriangle,
   Edit3,
-  Clock,
   Check,
 } from "lucide-react";
 import type { OutreachRecord, OutreachChannel, OutreachStatus } from "@/lib/outreach/types";
@@ -42,9 +42,7 @@ export interface AdminOutreachCenterProps {
 }
 
 export default function AdminOutreachCenter({ sessionToken, onNavigateTab }: AdminOutreachCenterProps = {}) {
-  const [records, setRecords] = useState<OutreachRecord[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [actionError, setError] = useState<string | null>(null);
 
   // Helper to obtain fresh Bearer token
   const getAuthHeaders = useCallback(async (): Promise<Record<string, string>> => {
@@ -82,30 +80,22 @@ export default function AdminOutreachCenter({ sessionToken, onNavigateTab }: Adm
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
   const [sendingLive, setSendingLive] = useState(false);
 
-  const fetchRecords = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
+  const loadRecords = useCallback(async (): Promise<OutreachRecord[]> => {
       const params = new URLSearchParams();
       if (statusFilter !== "all") params.set("status", statusFilter);
       if (channelFilter !== "all") params.set("channel", channelFilter);
       if (searchQuery.trim()) params.set("search", searchQuery.trim());
 
       const headers = await getAuthHeaders();
-      const res = await fetch(`/api/automation/outreach?${params.toString()}`, { headers });
+      const res = await fetch(`/api/automation/outreach?${params.toString()}`, { headers, cache: "no-store" });
       if (!res.ok) throw new Error(`HTTP ${res.status}: Failed to load outreach records`);
       const data = await res.json();
-      setRecords(data.records || []);
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Failed to load outreach records");
-    } finally {
-      setLoading(false);
-    }
+      if (!Array.isArray(data.records)) throw new Error("Outreach response is missing records");
+      return data.records;
   }, [statusFilter, channelFilter, searchQuery, getAuthHeaders]);
-
-  useEffect(() => {
-    fetchRecords();
-  }, [fetchRecords]);
+  const { data: loadedRecords, loading, error: loadError, refresh: fetchRecords } = useAsyncResource("outreach-records", loadRecords);
+  const records = loadedRecords ?? [];
+  const error = actionError ?? loadError;
 
   const handleGenerateDraft = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -144,12 +134,20 @@ export default function AdminOutreachCenter({ sessionToken, onNavigateTab }: Adm
   const handleUpdateStatus = async (outreachId: string, status: OutreachStatus) => {
     setActionSuccess(null);
     setError(null);
+    const reviewed = selectedRecord?.outreachId === outreachId ? selectedRecord : undefined;
+    if (status === "approved" && (!reviewed?.business.email || editMessage !== reviewed.message || editSubject !== (reviewed.subject || "") || editRecipientEmail !== reviewed.business.email)) {
+      setError("Open the draft, verify its recipient and save any edits before approving.");
+      return;
+    }
     try {
       const headers = await getAuthHeaders();
       const res = await fetch("/api/automation/outreach", {
         method: "PATCH",
         headers,
-        body: JSON.stringify({ outreachId, status }),
+        body: JSON.stringify({ outreachId, status, ...(status === "approved" && reviewed ? {
+          expectedReviewedMessage: reviewed.message, expectedReviewedSubject: reviewed.subject || "",
+          expectedReviewedRecipient: reviewed.business.email,
+        } : {}) }),
       });
 
       const data = await res.json();
@@ -190,9 +188,10 @@ export default function AdminOutreachCenter({ sessionToken, onNavigateTab }: Adm
         throw new Error(data.error?.message || data.error || "Failed to dispatch email via Gmail API");
       }
 
-      setActionSuccess(`Email dispatched via Gmail API! Message ID: ${data.messageId || "Delivered"}`);
+      if (!data.isSimulated && !data.messageId) throw new Error("Missing verified delivery ID. Reload before attempting another send.");
+      setActionSuccess(data.isSimulated ? "Simulation completed — no email was delivered." : `Email dispatched via Gmail API! Message ID: ${data.messageId}`);
       if (selectedRecord && selectedRecord.outreachId === outreachId) {
-        setSelectedRecord({ ...selectedRecord, status: "sent" as any, externalMessageId: data.messageId });
+        setSelectedRecord({ ...selectedRecord, status: data.isSimulated ? "simulated_sent" : "sent", externalMessageId: data.messageId });
       }
       fetchRecords();
     } catch (err: unknown) {
@@ -211,7 +210,7 @@ export default function AdminOutreachCenter({ sessionToken, onNavigateTab }: Adm
         headers,
         body: JSON.stringify({
           outreachId: selectedRecord.outreachId,
-          status: selectedRecord.status,
+          status: "review",
           editedSubject: editSubject,
           editedMessage: editMessage,
           recipientEmail: editRecipientEmail,
@@ -517,12 +516,12 @@ export default function AdminOutreachCenter({ sessionToken, onNavigateTab }: Adm
                             <Eye className="w-3.5 h-3.5" />
                           </button>
 
-                          {r.status !== "approved" && r.status !== "simulated_sent" && (
+                          {["draft", "review"].includes(r.status) && (
                             <button
-                              onClick={() => handleUpdateStatus(r.outreachId, "approved")}
+                              onClick={() => openModal(r)}
                               className="px-2 py-1 rounded bg-blue-900/60 hover:bg-blue-800/80 text-blue-200 text-[11px] font-medium border border-blue-700"
                             >
-                              Approve
+                              Review to Approve
                             </button>
                           )}
 
@@ -678,7 +677,7 @@ export default function AdminOutreachCenter({ sessionToken, onNavigateTab }: Adm
                 </div>
 
                 <div className="flex gap-2">
-                  {selectedRecord.status !== "approved" && selectedRecord.status !== "simulated_sent" && (
+                  {["draft", "review"].includes(selectedRecord.status) && (
                     <button
                       onClick={() => handleUpdateStatus(selectedRecord.outreachId, "approved")}
                       className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium"

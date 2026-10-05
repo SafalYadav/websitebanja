@@ -2,26 +2,20 @@
 // Phase 13 — Autonomous Lead Pipeline API: Advance Simulation Clock
 
 import { NextResponse } from "next/server";
-import { isAuthorized } from "@/lib/automation/auth";
+import { authorizeAutomationTenant } from "@/lib/automation/automationApiIdentity";
+import { z } from "zod";
 import { FollowUpQueue } from "@/lib/automation/followUpQueue";
 import { sanitizeErrorOutput } from "@/lib/ai/router/modelConfig";
 
 export async function POST(req: Request) {
-  if (!(await isAuthorized(req))) {
-    return NextResponse.json(
-      {
-        success: false,
-        error: { code: "UNAUTHORIZED", message: "Unauthorized: Missing or invalid automation secret." },
-      },
-      { status: 401 }
-    );
-  }
+  const auth = await authorizeAutomationTenant(req);
+  if (auth.response) return auth.response;
 
   try {
-    const body = await req.json();
-    const days = typeof body?.days === "number" ? body.days : 3;
+    const body = z.object({ days: z.number().int().min(1).max(30).default(3) }).safeParse(await req.json().catch(() => null));
+    if (!body.success) return NextResponse.json({ success: false, error: { code: "INVALID_CLOCK_ADVANCE", message: "days must be an integer from 1 to 30" } }, { status: 400 });
 
-    const result = await FollowUpQueue.advanceSimulationClock(days);
+    const result = await FollowUpQueue.advanceSimulationClock(body.data.days, auth.identity.tenantId);
     return NextResponse.json({
       success: true,
       ...result,

@@ -10,8 +10,20 @@ import { policyEngine } from "@/lib/intelligence/policies/policyEngine";
 import { governanceAuditLog } from "@/lib/intelligence/policies/governanceAuditLog";
 import { governanceApprovalStore } from "@/lib/intelligence/policies/governanceApprovalStore";
 import { sanitizeErrorOutput } from "@/lib/ai/router/modelConfig";
+import { authorizeHumanApproval } from "@/lib/intelligence/pipeline/humanApprovalAuthorization";
+import { z } from "zod";
 
 export const dynamic = "force-dynamic";
+
+const identifier = z.string().trim().min(1).max(200);
+const GovernanceAction = z.discriminatedUnion("action", [
+  z.object({ action: z.literal("approve"), approvalId: identifier }),
+  z.object({ action: z.literal("reject"), approvalId: identifier, rejectionReason: z.string().trim().max(2000).optional() }),
+  z.object({ action: z.literal("create_approval"), tool: identifier, taskId: identifier.optional(), actionPayload: z.unknown() }),
+  z.object({ action: z.literal("evaluate_action"), tool: identifier,
+    authorityLevel: z.enum(["READ", "ANALYZE", "PLAN", "WRITE_INTERNAL", "WRITE_EXTERNAL", "HIGH_RISK_ACTION"]),
+    riskLevel: z.enum(["low", "medium", "high", "critical"]).optional(), taskId: identifier.optional() }),
+]);
 
 /**
  * GET /api/admin/intelligence/governance
@@ -29,7 +41,7 @@ export async function GET(req: Request) {
     }
 
     const auth = await verifyAdminAuth(req);
-    if (!auth.isAdmin) {
+    if (!auth.isAdmin || !auth.userId) {
       return NextResponse.json(
         { success: false, message: auth.error || "Forbidden: Administrator access required." },
         { status: auth.error?.includes("Missing") ? 401 : 403 }
@@ -37,15 +49,16 @@ export async function GET(req: Request) {
     }
 
     const rules = policyEngine.listRules();
-    const auditSummary = governanceAuditLog.getSummary();
-    const recentDecisions = governanceAuditLog.getRecent(20);
-    const pendingApprovals = governanceApprovalStore.listPending();
-    const recentRecords = governanceApprovalStore.listRecords(20);
+    const auditSummary = governanceAuditLog.getSummary(auth.userId);
+    const recentDecisions = governanceAuditLog.getRecent(20, auth.userId);
+    const pendingApprovals = governanceApprovalStore.listPending(auth.userId);
+    const recentRecords = governanceApprovalStore.listRecords(20, auth.userId);
 
     return NextResponse.json({
       success: true,
       governance: {
         mode: "ACTIVE",
+        persistence: "process_local",
         defaultDeny: true,
         securityInvariants: {
           whatsappStatus: "PERMANENTLY_DISABLED",
@@ -111,10 +124,7 @@ export async function GET(req: Request) {
  *
  * Body schemas:
  *
- * { action: "approve", approvalId: string, approvedBy: string, tenantId?: string }
- * { action: "reject", approvalId: string, rejectedBy: string, rejectionReason?: string }
- * { action: "create_approval", tool: string, requestedBy: string, tenantId?: string, taskId?: string, actionPayload: unknown }
- * { action: "evaluate_action", tool: string, authorityLevel: string, riskLevel?: string, tenantId?: string, requestingAgent?: string }
+ * Identity and tenant always come from verified authentication; payload identity fields confer no authority.
  */
 export async function POST(req: Request) {
   try {
@@ -128,53 +138,45 @@ export async function POST(req: Request) {
     }
 
     const auth = await verifyAdminAuth(req);
-    if (!auth.isAdmin) {
+    if (!auth.isAdmin || !auth.userId) {
       return NextResponse.json(
         { success: false, message: auth.error || "Forbidden: Administrator access required." },
         { status: auth.error?.includes("Missing") ? 401 : 403 }
       );
     }
 
-    const body = await req.json();
+    const parsed = GovernanceAction.safeParse(await req.json().catch(() => null));
+    if (!parsed.success) return NextResponse.json({ success: false, message: "Invalid governance action payload" }, { status: 400 });
+    const body = parsed.data;
     const { action } = body;
 
-    if (action === "approve") {
-      const { approvalId, approvedBy, tenantId } = body;
-      if (!approvalId || !approvedBy) {
-        return NextResponse.json(
-          { success: false, message: "approvalId and approvedBy are required." },
-          { status: 400 }
-        );
+    if (action === "approve" || action === "reject") {
+      const owned = governanceApprovalStore.getRecord(body.approvalId);
+      if (!owned || owned.tenantId !== auth.userId) {
+        return NextResponse.json({ success: false, message: "Approval not found" }, { status: 404 });
       }
-      const record = governanceApprovalStore.approve({ approvalId, approvedBy, tenantId });
+    }
+
+    if (action === "approve") {
+      const authorization = await authorizeHumanApproval(req, auth.userId);
+      const record = governanceApprovalStore.approve({ approvalId: body.approvalId, approvedBy: auth.userId, tenantId: auth.userId, authorization });
       return NextResponse.json({ success: true, record });
     }
 
     if (action === "reject") {
-      const { approvalId, rejectedBy, rejectionReason } = body;
-      if (!approvalId) {
-        return NextResponse.json(
-          { success: false, message: "approvalId is required." },
-          { status: 400 }
-        );
-      }
-      const record = governanceApprovalStore.reject({ approvalId, rejectedBy, rejectionReason });
+      const authorization = await authorizeHumanApproval(req, auth.userId);
+      const record = governanceApprovalStore.reject({ approvalId: body.approvalId, rejectedBy: auth.userId,
+        rejectionReason: body.rejectionReason, tenantId: auth.userId, authorization });
       return NextResponse.json({ success: true, record });
     }
 
     if (action === "create_approval") {
-      const { tool, requestedBy, tenantId, taskId, actionPayload } = body;
-      if (!tool || !requestedBy) {
-        return NextResponse.json(
-          { success: false, message: "tool and requestedBy are required." },
-          { status: 400 }
-        );
-      }
+      const { tool, taskId, actionPayload } = body;
       const record = governanceApprovalStore.createApproval({
         action: tool,
         tool,
-        requestedBy,
-        tenantId,
+        requestedBy: auth.userId,
+        tenantId: auth.userId,
         taskId,
         actionPayload: actionPayload ?? {},
       });
@@ -182,20 +184,14 @@ export async function POST(req: Request) {
     }
 
     if (action === "evaluate_action") {
-      const { tool, authorityLevel, riskLevel, tenantId, requestingAgent, taskId } = body;
-      if (!tool || !authorityLevel) {
-        return NextResponse.json(
-          { success: false, message: "tool and authorityLevel are required." },
-          { status: 400 }
-        );
-      }
+      const { tool, authorityLevel, riskLevel, taskId } = body;
       const decision = policyEngine.evaluateAction({
         action: tool,
         tool,
-        requestingAgent: requestingAgent || "admin_ui",
+        requestingAgent: auth.userId,
         authorityLevel,
         riskLevel: riskLevel || "medium",
-        tenantId,
+        tenantId: auth.userId,
         taskId,
       });
       return NextResponse.json({ success: true, decision });

@@ -46,6 +46,8 @@ interface GooglePlaceItem {
     latitude: number;
     longitude: number;
   };
+  photos?: any[];
+  reviews?: any[];
 }
 
 interface GooglePlacesSearchResponse {
@@ -122,6 +124,8 @@ export class GooglePlacesDiscoveryProvider implements BusinessDiscoveryProvider 
       "places.primaryType",
       "places.types",
       "places.location",
+      "places.photos",
+      "places.reviews",
     ].join(",");
 
     let lastError: Error | null = null;
@@ -329,6 +333,8 @@ export class GooglePlacesDiscoveryProvider implements BusinessDiscoveryProvider 
         googlePlaceId: place.id,
         businessStatus: place.businessStatus,
         types: place.types,
+        photos: place.photos,
+        reviews: place.reviews,
       },
     };
   }

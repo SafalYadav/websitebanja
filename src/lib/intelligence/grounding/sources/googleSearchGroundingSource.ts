@@ -40,6 +40,7 @@ export class GoogleSearchGroundingSource {
   public async groundQuery(params: {
     businessName: string;
     location?: string;
+    category?: string;
   }): Promise<GoogleSearchGroundedData> {
     if (!this.isConfigured()) {
       return {
@@ -52,9 +53,10 @@ export class GoogleSearchGroundingSource {
       };
     }
 
-    const query = params.location
+    const identityQuery = params.location
       ? `Verify business services, address, and presence for ${params.businessName} in ${params.location}`
       : `Verify business services and presence for ${params.businessName}`;
+    const query = `${identityQuery}. ${params.category ? `Grounded category: ${params.category}. Research this business model, customer intent, visual subjects and relevant legal constraints using official business and reputable category sources.` : ""}`;
 
     const apiKey = process.env.GEMINI_API_KEY!.trim();
 
@@ -79,7 +81,7 @@ export class GoogleSearchGroundingSource {
           config: {
             temperature: 0.1,
             // Google Search tool enables search grounding in Google GenAI SDK
-            tools: [{ googleSearch: {} } as any],
+            tools: [{ googleSearch: {} }],
           },
         }),
         new Promise<never>((_, reject) => {
@@ -101,23 +103,23 @@ export class GoogleSearchGroundingSource {
       }
 
       // Extract search grounding metadata if provided by Gemini
-      const metadata = (response as any).candidates?.[0]?.groundingMetadata;
+      const metadata = response.candidates?.[0]?.groundingMetadata;
       const webSearchQueries: string[] = metadata?.webSearchQueries || [query];
       const searchChunks: Array<{ web?: { uri?: string; title?: string } }> =
         metadata?.groundingChunks || [];
 
       const citations = searchChunks
         .map((c) => c.web?.uri)
-        .filter((uri): uri is string => Boolean(uri));
+        .filter((uri): uri is string => Boolean(uri?.startsWith("https://")));
 
       const evidence: EvidenceItem[] = [];
-      const cleanSummary = text.slice(0, 400).trim();
+      const cleanSummary = citations.length ? text.slice(0, 6000).trim() : "";
 
       if (cleanSummary) {
         evidence.push(
           createEvidenceItem({
             source: "google_search",
-            reference: citations[0] || `search:${query}`,
+            reference: citations[0],
             observation: cleanSummary,
             supports: "services",
             baseConfidence: 0.75,

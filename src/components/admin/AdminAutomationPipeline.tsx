@@ -3,7 +3,8 @@
 // src/app/admin/automation/page.tsx
 // Phase 13 — Autonomous Lead Pipeline Dashboard & Control Center
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useCallback } from "react";
+import { useAsyncResource } from "@/hooks/useAsyncResource";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import type {
@@ -19,15 +20,13 @@ export interface AdminAutomationPipelineProps {
 }
 
 export default function AdminAutomationPipeline({ sessionToken, onNavigateTab }: AdminAutomationPipelineProps = {}) {
-  const [runs, setRuns] = useState<PipelineRun[]>([]);
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [actionError, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   // Helper to obtain fresh Bearer token
-  const getAuthHeaders = async (): Promise<Record<string, string>> => {
+  const getAuthHeaders = useCallback(async (): Promise<Record<string, string>> => {
     let token = sessionToken;
     if (!token) {
       try {
@@ -42,7 +41,7 @@ export default function AdminAutomationPipeline({ sessionToken, onNavigateTab }:
       headers["Authorization"] = `Bearer ${token}`;
     }
     return headers;
-  };
+  }, [sessionToken]);
 
   // Run creation modal state
   const [showRunModal, setShowRunModal] = useState(false);
@@ -60,31 +59,17 @@ export default function AdminAutomationPipeline({ sessionToken, onNavigateTab }:
   // Clock advancement state
   const [clockDays, setClockDays] = useState(3);
 
-  const fetchRuns = async () => {
-    setLoading(true);
-    setErrorMessage(null);
-    try {
-      const headers = await getAuthHeaders();
-      const res = await fetch("/api/automation/pipeline", { headers });
-      const data = await res.json();
-      if (data.success) {
-        setRuns(data.runs || []);
-        if (data.runs && data.runs.length > 0 && !selectedRunId) {
-          setSelectedRunId(data.runs[0].id);
-        }
-      } else {
-        setErrorMessage(data.error?.message || "Failed to load runs");
-      }
-    } catch (err) {
-      setErrorMessage("Network error fetching pipeline runs");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchRuns();
-  }, []);
+  const loadRuns = useCallback(async (): Promise<PipelineRun[]> => {
+    const headers = await getAuthHeaders();
+    const res = await fetch("/api/automation/pipeline", { headers, cache: "no-store" });
+    const data = await res.json();
+    if (!res.ok || !data.success) throw new Error(data.error?.message || "Failed to load runs");
+    if (!Array.isArray(data.runs)) throw new Error("Pipeline response is missing runs");
+    return data.runs;
+  }, [getAuthHeaders]);
+  const { data: loadedRuns, loading, error: loadError, refresh: fetchRuns, dismissError } = useAsyncResource("pipeline-runs", loadRuns);
+  const runs = loadedRuns ?? [];
+  const errorMessage = actionError ?? loadError;
 
   const selectedRun = runs.find((r) => r.id === selectedRunId) || (runs.length > 0 ? runs[0] : null);
 
@@ -419,7 +404,7 @@ export default function AdminAutomationPipeline({ sessionToken, onNavigateTab }:
         {errorMessage && (
           <div className="mb-4 p-3 text-sm bg-rose-50 border border-rose-200 text-rose-700 rounded-lg flex items-center justify-between">
             <span>{errorMessage}</span>
-            <button onClick={() => setErrorMessage(null)} className="text-rose-400 hover:text-rose-600 text-base">&times;</button>
+            <button onClick={() => { setErrorMessage(null); dismissError(); }} className="text-rose-400 hover:text-rose-600 text-base">&times;</button>
           </div>
         )}
         {successMessage && (

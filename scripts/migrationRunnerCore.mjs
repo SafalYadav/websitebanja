@@ -91,6 +91,7 @@ export const BASELINE_SCHEMA_REQUIREMENTS = {
       "project_knowledge_revisions",
     ],
     columns: [],
+    indexes: ["idx_projects_user_id", "idx_published_versions_slug"],
     functions: [
       "publish_project_atomic",
       "get_published_project_by_slug",
@@ -101,16 +102,19 @@ export const BASELINE_SCHEMA_REQUIREMENTS = {
   "02_leads_schema": {
     tables: ["business_leads"],
     columns: [],
+    indexes: ["idx_leads_place_id", "idx_leads_status"],
     functions: [],
   },
   "03_lead_audits_schema": {
     tables: ["lead_audits"],
     columns: [],
+    indexes: ["idx_lead_audits_lead_id"],
     functions: [],
   },
   "04_growth_retention_maintenance": {
     tables: [],
     columns: [],
+    indexes: [],
     functions: [
       "purge_expired_preview_links",
       "prune_project_knowledge_revisions",
@@ -126,16 +130,19 @@ export const BASELINE_SCHEMA_REQUIREMENTS = {
       "agent_recommendations",
     ],
     columns: [],
+    indexes: ["idx_agent_runs_created_at"],
     functions: [],
   },
   "06_uniqueness_verification": {
     tables: [],
     columns: [{ table: "projects", column: "design_fingerprint" }],
+    indexes: [],
     functions: [],
   },
   "07_admin_access_control_audit": {
     tables: ["admin_audit_logs"],
     columns: [],
+    indexes: ["idx_admin_audit_logs_created_at"],
     functions: [],
   },
   "08_agent_memory_learning_baseline": {
@@ -153,6 +160,7 @@ export const BASELINE_SCHEMA_REQUIREMENTS = {
       { table: "agent_runs", column: "objective" },
       { table: "agent_runs", column: "domain" },
     ],
+    indexes: ["idx_agent_lessons_strategy", "idx_agent_events_tenant_id"],
     functions: [],
   },
   "09_crm_outreach_pipeline_schema": {
@@ -165,6 +173,7 @@ export const BASELINE_SCHEMA_REQUIREMENTS = {
       "approval_records",
     ],
     columns: [],
+    indexes: ["idx_crm_leads_tenant_status", "idx_outreach_records_lead_id"],
     functions: [],
   },
 };
@@ -183,7 +192,7 @@ export async function inspectMigrationArtifacts(client, migrationId) {
   const found = [];
 
   // 1. Check Tables
-  if (reqs.tables.length > 0) {
+  if (reqs.tables && reqs.tables.length > 0) {
     const tableRes = await client.query(
       `SELECT table_name FROM information_schema.tables 
        WHERE table_schema = 'public' AND table_name = ANY($1)`,
@@ -200,7 +209,7 @@ export async function inspectMigrationArtifacts(client, migrationId) {
   }
 
   // 2. Check Columns
-  if (reqs.columns.length > 0) {
+  if (reqs.columns && reqs.columns.length > 0) {
     for (const c of reqs.columns) {
       const colRes = await client.query(
         `SELECT column_name FROM information_schema.columns 
@@ -215,8 +224,25 @@ export async function inspectMigrationArtifacts(client, migrationId) {
     }
   }
 
-  // 3. Check Functions
-  if (reqs.functions.length > 0) {
+  // 3. Check Indexes
+  if (reqs.indexes && reqs.indexes.length > 0) {
+    const indexRes = await client.query(
+      `SELECT indexname FROM pg_indexes 
+       WHERE schemaname = 'public' AND indexname = ANY($1)`,
+      [reqs.indexes]
+    );
+    const existingIndexes = new Set(indexRes.rows.map((r) => r.indexname));
+    for (const idx of reqs.indexes) {
+      if (existingIndexes.has(idx)) {
+        found.push(`index:${idx}`);
+      } else {
+        missing.push(`index:${idx}`);
+      }
+    }
+  }
+
+  // 4. Check Functions
+  if (reqs.functions && reqs.functions.length > 0) {
     const fnRes = await client.query(
       `SELECT routine_name FROM information_schema.routines 
        WHERE routine_schema = 'public' AND routine_type = 'FUNCTION' AND routine_name = ANY($1)`,

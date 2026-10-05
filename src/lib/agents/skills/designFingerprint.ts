@@ -1,120 +1,49 @@
-// src/lib/agents/skills/designFingerprint.ts
 import type { WebsiteData } from "@/types/website";
 import type { DesignFingerprint } from "./types";
 import { getPool } from "@/lib/db/queries";
 
-/**
- * Extracts a lightweight, deterministic DesignFingerprint from any website AST.
- * Compact representation (< 250 bytes) used for anti-repetition without dumping full websites.
- */
-export function extractDesignFingerprint(data: Partial<WebsiteData> | Record<string, any>): DesignFingerprint {
-  const hero = data.hero || {};
-  const navbar = data.navbar || {};
-  const style = data.style || "modern";
-  const brand = data.brand || {};
+function record(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+function text(...values: unknown[]): string {
+  for (const value of values) if (typeof value === "string" && value.trim()) return value.trim();
+  return "unknown";
+}
 
-  // Extract section order
-  const sectionOrder: string[] = Array.isArray(data.sectionOrder) && data.sectionOrder.length > 0
-    ? data.sectionOrder
-    : Object.keys(data).filter((k) =>
-        ["hero", "services", "about", "products", "features", "testimonials", "gallery", "menu", "contact", "faq", "footer"].includes(k)
-      );
-
-  const primary = brand.primaryColor || data.theme?.primaryColor || data.primaryColor || data.colorDirection;
-
+/** Record observed design fields; missing fields are unknown, not fabricated defaults. */
+export function extractDesignFingerprint(input: Partial<WebsiteData> | Record<string, unknown>): DesignFingerprint {
+  const data = record(input), hero = record(data.hero), navbar = record(data.navbar);
+  const brand = record(data.brand), theme = record(data.theme), typography = record(data.typography);
+  const strategy = record(data.designStrategy), colors = record(strategy.colorSystem);
+  const sectionOrder = Array.isArray(data.sectionOrder) ? data.sectionOrder.filter((key): key is string => typeof key === "string" && !!key.trim())
+    : Array.isArray(strategy.sectionSequence) ? strategy.sectionSequence.filter((key): key is string => typeof key === "string" && !!key.trim())
+    : Object.keys(data).filter(key => ["hero","services","about","products","features","testimonials","gallery","menu","contact","faq","footer"].includes(key));
   return {
-    heroType: hero.layoutVariant || hero.layoutType || hero.heroType || "split_showcase",
-    navigationType: navbar.style || "floating",
-    layoutType: data.layoutType || (sectionOrder.includes("products") ? "catalog_grid" : "editorial_flow"),
-    sectionOrder: sectionOrder.slice(0, 8),
-    visualArchetype: String(style).toLowerCase(),
-    typographyStyle: data.typography?.headingFont || data.theme?.fontFamily || "modern_sans",
-    colorDirection: primary ? String(primary) : "default_palette",
-    cardStyle: data.cardFamily || "tactile_bento",
-    animationStyle: data.animationStyle || "subtle_reveal",
+    heroType: text(hero.layoutVariant, hero.layoutType, hero.heroType, strategy.heroType, data.heroType),
+    navigationType: text(navbar.style, data.navigationType),
+    layoutType: text(data.layoutType),
+    sectionOrder,
+    visualArchetype: text(strategy.visualArchetype, data.visualArchetype, data.style).toLowerCase(),
+    typographyStyle: text(typography.headingFont, strategy.typographyStyle, data.typographyStyle, theme.fontFamily),
+    colorDirection: text(colors.primary, brand.primaryColor, theme.primaryColor, data.primaryColor, data.colorDirection),
+    cardStyle: text(strategy.cardTreatment, data.cardFamily, data.cardStyle),
+    animationStyle: text(strategy.motionStrategy, data.animationStyle),
   };
 }
 
-/**
- * Safely fetches recent design fingerprints for a given category from Azure PostgreSQL.
- * Keeps query compact: only fetches last N projects and parses minimal fields.
- */
-export async function getRecentDesignFingerprints(
-  category?: string,
-  limit: number = 3
-): Promise<DesignFingerprint[]> {
-  try {
-    const pool = getPool();
-    let query: string;
-    let params: unknown[];
-
-    if (category && category.trim()) {
-      query = `
-        SELECT json_data
-        FROM public.projects
-        WHERE category ILIKE $1 AND json_data IS NOT NULL
-        ORDER BY updated_at DESC
-        LIMIT $2
-      `;
-      params = [`%${category.trim()}%`, limit];
-    } else {
-      query = `
-        SELECT json_data
-        FROM public.projects
-        WHERE json_data IS NOT NULL
-        ORDER BY updated_at DESC
-        LIMIT $1
-      `;
-      params = [limit];
-    }
-
-    const res = await pool.query(query, params);
-    const fingerprints: DesignFingerprint[] = [];
-
-    for (const row of res.rows) {
-      if (row.json_data && typeof row.json_data === "object") {
-        fingerprints.push(extractDesignFingerprint(row.json_data));
-      }
-    }
-
-    if (fingerprints.length > 0) {
-      return fingerprints;
-    }
-
-    // Dev/offline fallback: retrieve from in-memory local candidate cache
-    try {
-      const { getLocalCandidates } = require("../uniqueness/candidateSelector");
-      const local = getLocalCandidates();
-      return local
-        .filter((c: any) => !category || c.category.toLowerCase().includes(category.toLowerCase()))
-        .slice(0, limit)
-        .map((c: any) => ({
-          sectionOrder: c.sectionOrder || [],
-          layoutType: c.layoutType || "split_showcase",
-          colorDirection: c.primaryColor || "",
-          typographyStyle: c.fingerprint?.typographyStyle || "",
-          cardStyle: c.cardStyle || "",
-        }));
-    } catch {
-      return [];
-    }
-  } catch {
-    // Non-blocking: If database is unreachable, fallback to local candidate cache
-    try {
-      const { getLocalCandidates } = require("../uniqueness/candidateSelector");
-      const local = getLocalCandidates();
-      return local
-        .filter((c: any) => !category || c.category.toLowerCase().includes(category.toLowerCase()))
-        .slice(0, limit)
-        .map((c: any) => ({
-          sectionOrder: c.sectionOrder || [],
-          layoutType: c.layoutType || "split_showcase",
-          colorDirection: c.primaryColor || "",
-          typographyStyle: c.fingerprint?.typographyStyle || "",
-          cardStyle: c.cardStyle || "",
-        }));
-    } catch {
-      return [];
-    }
-  }
+/** Owned evidence only: database failure never substitutes a global scratch candidate cache. */
+export async function getRecentDesignFingerprints(category?: string, limit = 3, userId?: string): Promise<DesignFingerprint[]> {
+  if (!userId?.trim()) throw new Error("Trusted owner required for design comparisons");
+  if (!Number.isInteger(limit) || limit < 1 || limit > 20) throw new Error("Design comparison limit must be 1–20");
+  const result = await getPool().query<{ json_data: unknown }>(`
+    SELECT json_data FROM public.projects
+    WHERE user_id=$1 AND json_data IS NOT NULL AND ($2::text IS NULL OR LOWER(category)=LOWER($2))
+    ORDER BY updated_at DESC LIMIT $3
+  `, [userId, category?.trim() || null, limit]);
+  return result.rows.flatMap(row => {
+    const data = record(row.json_data);
+    if (!Object.keys(data).length) return [];
+    const fingerprint = extractDesignFingerprint(data);
+    return fingerprint.sectionOrder.length && fingerprint.heroType !== "unknown" && fingerprint.visualArchetype !== "unknown" ? [fingerprint] : [];
+  });
 }

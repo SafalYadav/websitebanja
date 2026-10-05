@@ -42,6 +42,26 @@ test("substring lookalikes never classify as AI", () => {
   }
 });
 
+test("unknown explicit business types require research despite hotel landmarks", () => {
+  const profile = businessSemanticReasoner.analyzeBusiness({
+    businessName: "G-Town Wines",
+    category: "liquor_store",
+    location: "adjacent to Bristol Hotel, Gurugram",
+    description: "A local shop adjacent to Bristol Hotel",
+  });
+  assert.equal(profile.domain, "general_commercial");
+  assert.ok(profile.confidence < 0.7);
+  assert.notEqual(profile.primaryCta.label, "Reserve a Room");
+});
+
+test("location never changes business classification", () => {
+  const base = { businessName: "Lotus Spa", category: "spa" };
+  const expected = businessSemanticReasoner.analyzeBusiness(base);
+  const besideHotel = businessSemanticReasoner.analyzeBusiness({ ...base, location: "Hotel Resort Inn Road" });
+  assert.equal(besideHotel.domain, expected.domain);
+  assert.equal(besideHotel.subdomain, expected.subdomain);
+});
+
 test("spa image sourcing stays in the wellness registry", () => {
   assert.equal(normalizeCategoryKey("spa_and_massage", "Thai Spa Jaipur", "wellness_personal_care"), "wellness_spa");
   const image = resolveSemanticImage({

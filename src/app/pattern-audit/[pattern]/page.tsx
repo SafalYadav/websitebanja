@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState, useEffect, use } from "react";
+import React, { use } from "react";
+import { referenceAudit } from "@/lib/skills/referenceAudit";
 import BentoGrid21st from "@/components/21st/BentoGrid21st";
 import NavbarSection from "@/components/editor/NavbarSection";
 import GsapStagger from "@/components/motion/GsapStagger";
@@ -18,7 +19,6 @@ import {
   PhysicsGravityContainer,
 } from "@/components/patterns";
 import {
-  BentoCard,
   ExpandableCard,
   StackedCard,
   SpotlightCard,
@@ -37,29 +37,15 @@ import {
   CardHeader,
   CardBody,
 } from "@/components/cards";
-import { LayoutGrid, Sparkles, CheckCircle2 } from "lucide-react";
+import { LayoutGrid } from "lucide-react";
 import AdSenseBanner from "@/components/ads/AdSenseBanner";
 
 export default function PatternAuditPage({ params }: { params: Promise<{ pattern: string }> }) {
   const resolvedParams = use(params);
   const pattern = resolvedParams.pattern;
 
-  const [patternStatus, setPatternStatus] = useState<{
-    status: "PASS" | "PARTIAL" | "FAIL";
-    implemented: boolean;
-    verdict: string;
-    domFeatures: string[];
-  }>({
-    status: "PASS",
-    implemented: true,
-    verdict: "Active working implementation verified",
-    domFeatures: [],
-  });
-
-  useEffect(() => {
-    // Set diagnostic markers for each pattern
+  const patternStatus = (() => {
     const features: string[] = [];
-    let verdict = `Pattern "${pattern}" is 100% implemented with dedicated DOM primitives and interactive states.`;
 
     switch (pattern) {
       case "bento-grid":
@@ -120,16 +106,17 @@ export default function PatternAuditPage({ params }: { params: Promise<{ pattern
         features.push("CommandPalette", "Cmd+K modal shortcut", "Search filter", "Escape close");
         break;
       default:
-        features.push("Card Architecture Primitive", "Distinct structural variant");
+        break;
     }
 
-    setPatternStatus({
-      status: "PASS",
-      implemented: true,
-      verdict,
+    const audit = referenceAudit(pattern, features.length ? [pattern] : []);
+    return {
+      status: audit.status,
+      implemented: false,
+      verdict: audit.reasons.join(" "),
       domFeatures: features,
-    });
-  }, [pattern]);
+    };
+  })();
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 p-6 font-sans">
@@ -144,7 +131,7 @@ export default function PatternAuditPage({ params }: { params: Promise<{ pattern
           </div>
           <span 
             id="pattern-status-badge"
-            className="px-3 py-1 rounded-full text-xs font-bold uppercase border bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
+            className="px-3 py-1 rounded-full text-xs font-bold uppercase border bg-amber-500/10 text-amber-400 border-amber-500/30"
           >
             {patternStatus.status}
           </span>
@@ -154,7 +141,7 @@ export default function PatternAuditPage({ params }: { params: Promise<{ pattern
           id="pattern-diagnostics"
           data-pattern={pattern}
           data-status={patternStatus.status}
-          data-implemented="true"
+          data-implemented={patternStatus.implemented}
           className="mt-4 pt-4 border-t border-zinc-800 text-xs font-mono grid grid-cols-1 md:grid-cols-2 gap-4"
         >
           <div>

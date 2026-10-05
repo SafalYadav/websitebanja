@@ -28,7 +28,10 @@ export interface AutomationPreviewRequest {
 
 export interface AutomationPreviewResponse {
   success: boolean;
-  status: "preview";
+  status: "preview" | "research_required" | "waiting_human_approval" | "quality_blocked" | "rejected" | "failed";
+  researchId?: string;
+  correlationId?: string;
+  error?: { code: string; message: string };
   cached?: boolean;
   business: {
     name: string;

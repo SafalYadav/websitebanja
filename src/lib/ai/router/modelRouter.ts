@@ -65,6 +65,8 @@ export class ModelRouter {
       ],
       maxRetries: customPolicy?.maxRetries ?? 1,
       timeoutMs: customPolicy?.timeoutMs ?? req.timeoutMs ?? MODEL_CONFIG.timeouts.standard,
+      maxTotalAttempts: customPolicy?.maxTotalAttempts,
+      stopOnNonTransient: customPolicy?.stopOnNonTransient,
     };
 
     // Construct execution pipeline: [Primary, ...Fallbacks]
@@ -75,14 +77,21 @@ export class ModelRouter {
 
     let lastErrorResponse: ModelResponse<T> | null = null;
     const errorsEncountered: string[] = [];
+    let totalAttempts = 0;
+    let lastProviderIndex = 0;
+    const totalAttemptLimit = policy.maxTotalAttempts === undefined ? Infinity :
+      Number.isInteger(policy.maxTotalAttempts) && policy.maxTotalAttempts > 0 ? policy.maxTotalAttempts : 0;
 
     const agentName = (req.metadata?.agent as string) || "mitra";
     const requestId = (req.metadata?.requestId as string) || (req.metadata?.runId as string);
     const projectId = req.metadata?.projectId as string;
     const userId = req.metadata?.userId as string;
 
-    for (let i = 0; i < pipeline.length; i++) {
+    providerLoop: for (let i = 0; i < pipeline.length; i++) {
+      if (totalAttempts >= totalAttemptLimit) break;
       const target = pipeline[i];
+      // Never silently discard pixel evidence by falling back to a text adapter.
+      if (req.images?.length && target.provider !== "gemini") continue;
       const adapter = this.adapters.get(target.provider);
 
       if (!adapter) {
@@ -118,7 +127,10 @@ export class ModelRouter {
       const maxAttempts = 1 + (policy.maxRetries || 0);
 
       while (attempt < maxAttempts) {
+        if (totalAttempts >= totalAttemptLimit) break providerLoop;
         attempt++;
+        totalAttempts++;
+        lastProviderIndex = i;
         const providerCallStart = performance.now();
         try {
           const response = await adapter.generate<T>(effectiveReq);
@@ -140,6 +152,7 @@ export class ModelRouter {
             return {
               ...response,
               fallbackCount: i,
+              attemptCount: totalAttempts,
               latencyMs: Math.round(performance.now() - totalStart),
             };
           }
@@ -166,8 +179,12 @@ export class ModelRouter {
             },
           });
 
-          // If error is retryable and we have attempts remaining, back off briefly
-          if (response.error?.retryable && attempt < maxAttempts) {
+          const transient = response.error?.retryable === true &&
+            ["TIMEOUT", "RATE_LIMIT", "PROVIDER_UNAVAILABLE"].includes(errorType);
+          if (policy.stopOnNonTransient && !transient) break providerLoop;
+          if (totalAttempts >= totalAttemptLimit) break providerLoop;
+          // Governed retries require normalized transient evidence, not a generic retryable flag.
+          if ((policy.stopOnNonTransient ? transient : response.error?.retryable) && attempt < maxAttempts) {
             const backoffDelay = Math.min(attempt * 400, 1200);
             await new Promise((r) => setTimeout(r, backoffDelay));
             continue;
@@ -202,6 +219,7 @@ export class ModelRouter {
             unhandledErr instanceof Error ? unhandledErr.message : String(unhandledErr)
           );
           errorsEncountered.push(`[${target.provider}] Unhandled: ${safeMsg}`);
+          if (policy.stopOnNonTransient) break providerLoop;
 
           emitAgentEvent({
             event: "agent.provider_error",
@@ -269,7 +287,8 @@ export class ModelRouter {
       provider: lastErrorResponse?.provider || policy.primaryProvider,
       model: lastErrorResponse?.model || "unknown",
       latencyMs: totalLatency,
-      fallbackCount: pipeline.length > 0 ? pipeline.length - 1 : 0,
+      fallbackCount: lastProviderIndex,
+      attemptCount: totalAttempts,
       error: {
         type: "PROVIDER_UNAVAILABLE",
         message: combinedMessage,

@@ -98,6 +98,7 @@ export interface ExecutiveTaskRequest {
   context?: Record<string, unknown>;
   constraints?: string[];
   userId?: string | null;
+  tenantId?: string | null;
   projectId?: string | null;
   sessionId?: string | null;
   allowExternalWrite?: boolean;
@@ -193,6 +194,7 @@ export interface ExecutiveContext {
   objective: string;
   priority: ExecutivePriority;
   userId?: string | null;
+  tenantId?: string | null;
   projectId?: string | null;
   sessionId?: string | null;
   allowExternalWrite: boolean;

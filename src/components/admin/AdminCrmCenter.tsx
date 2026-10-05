@@ -1,7 +1,8 @@
 // src/app/admin/crm/page.tsx
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useState, useCallback } from "react";
+import { useAsyncResource } from "@/hooks/useAsyncResource";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -10,30 +11,16 @@ import {
   Search,
   MessageSquare,
   Sparkles,
-  Send,
   AlertTriangle,
-  CheckCircle2,
   Clock,
-  User,
   Building,
-  Mail,
-  Smartphone,
-  Phone,
   Calendar,
   ExternalLink,
-  ChevronRight,
   TrendingUp,
-  XCircle,
-  AlertCircle,
-  Eye,
 } from "lucide-react";
 import type {
   LeadCRMState,
   CRMLeadStatus,
-  ReplyAnalysis,
-  NextAction,
-  CRMMessage,
-  CRMEvent,
 } from "@/lib/crm/types";
 import type { OutreachChannel } from "@/lib/outreach/types";
 import { supabase } from "@/lib/supabase";
@@ -100,11 +87,8 @@ export interface AdminCrmCenterProps {
 }
 
 export default function AdminCrmCenter({ sessionToken, onNavigateTab }: AdminCrmCenterProps = {}) {
-  const [leads, setLeads] = useState<LeadCRMState[]>([]);
-  const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
-  const [activeLead, setActiveLead] = useState<LeadCRMState | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [chosenLeadId, setSelectedLeadId] = useState<string | null>(null);
+  const [actionError, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
 
@@ -134,58 +118,37 @@ export default function AdminCrmCenter({ sessionToken, onNavigateTab }: AdminCrm
   const [simSuccess, setSimSuccess] = useState<string | null>(null);
 
   // Status update
-  const [newStatus, setNewStatus] = useState<CRMLeadStatus>("INTERESTED");
+  const [statusEdit, setStatusEdit] = useState<{ leadId: string; status: CRMLeadStatus } | null>(null);
   const [statusReason, setStatusReason] = useState("");
   const [updatingStatus, setUpdatingStatus] = useState(false);
 
   // Fetch list of leads
-  const fetchLeads = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
+  const loadLeads = useCallback(async (): Promise<LeadCRMState[]> => {
       const headers = await getAuthHeaders();
       const res = await fetch("/api/automation/crm", { headers });
       if (!res.ok) throw new Error(`HTTP ${res.status}: Failed to fetch CRM leads`);
       const data = await res.json();
-      const list: LeadCRMState[] = data.leads || [];
-      setLeads(list);
-
-      // Auto-select first lead if none selected
-      if (!selectedLeadId && list.length > 0) {
-        setSelectedLeadId(list[0].leadId);
-      }
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Failed to load CRM data");
-    } finally {
-      setLoading(false);
-    }
-  }, [selectedLeadId, getAuthHeaders]);
-
-  useEffect(() => {
-    fetchLeads();
-  }, [fetchLeads]);
+      if (!Array.isArray(data.leads)) throw new Error("CRM response is missing leads");
+      return data.leads;
+  }, [getAuthHeaders]);
+  const { data: loadedLeads, loading, error: listError, refresh: fetchLeads } = useAsyncResource("crm-leads", loadLeads);
+  const leads = loadedLeads ?? [];
+  const selectedLeadId = leads.find(lead => lead.leadId === chosenLeadId)?.leadId ?? leads[0]?.leadId ?? null;
 
   // Fetch active lead details
-  const fetchActiveLead = useCallback(async (leadId: string) => {
-    try {
+  const loadActiveLead = useCallback(async (): Promise<LeadCRMState | null> => {
+      if (!selectedLeadId) return null;
       const headers = await getAuthHeaders();
-      const res = await fetch(`/api/automation/crm/${leadId}`, { headers });
+      const res = await fetch(`/api/automation/crm/${encodeURIComponent(selectedLeadId)}`, { headers, cache: "no-store" });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
-      setActiveLead(data.leadState);
-      if (data.leadState) {
-        setNewStatus(data.leadState.status);
-      }
-    } catch (err: unknown) {
-      console.error("Error loading active lead details:", err);
-    }
-  }, [getAuthHeaders]);
-
-  useEffect(() => {
-    if (selectedLeadId) {
-      fetchActiveLead(selectedLeadId);
-    }
-  }, [selectedLeadId, fetchActiveLead]);
+      if (!data.leadState || data.leadState.leadId !== selectedLeadId) throw new Error("CRM detail identity mismatch");
+      return data.leadState;
+  }, [selectedLeadId, getAuthHeaders]);
+  const { data: activeLead, error: detailError, refresh: refreshActiveLead } = useAsyncResource(selectedLeadId ?? "no-lead", loadActiveLead);
+  const fetchActiveLead = () => { setStatusEdit(null); refreshActiveLead(); };
+  const newStatus = statusEdit?.leadId === selectedLeadId ? statusEdit.status : activeLead?.status ?? "INTERESTED";
+  const error = actionError ?? listError ?? detailError;
 
   // Handle Simulate Reply
   const handleSimulateReply = async (e: React.FormEvent) => {
@@ -217,7 +180,7 @@ export default function AdminCrmCenter({ sessionToken, onNavigateTab }: AdminCrm
       setIsSimModalOpen(false);
 
       // Refresh lead details and list
-      await fetchActiveLead(selectedLeadId);
+      fetchActiveLead();
       await fetchLeads();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Simulation failed");
@@ -250,7 +213,7 @@ export default function AdminCrmCenter({ sessionToken, onNavigateTab }: AdminCrm
       }
 
       setStatusReason("");
-      await fetchActiveLead(selectedLeadId);
+      fetchActiveLead();
       await fetchLeads();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Failed to update status");
@@ -595,7 +558,7 @@ export default function AdminCrmCenter({ sessionToken, onNavigateTab }: AdminCrm
                   <span className="text-xs text-neutral-400 whitespace-nowrap">Transition:</span>
                   <select
                     value={newStatus}
-                    onChange={(e) => setNewStatus(e.target.value as CRMLeadStatus)}
+                    onChange={(e) => { if (selectedLeadId) setStatusEdit({ leadId: selectedLeadId, status: e.target.value as CRMLeadStatus }); }}
                     className="bg-neutral-950 border border-neutral-800 rounded px-2.5 py-1 text-xs text-neutral-200"
                   >
                     {STATUS_OPTIONS.map((st) => (

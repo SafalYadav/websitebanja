@@ -4,8 +4,10 @@ import type {
   LeadApprovalStatus,
   TelegramApprovalRequest,
 } from "./pipelineTypes";
-import { outreachRepository } from "@/lib/outreach/outreachRepository";
+import { outreachRepository, hasCurrentHumanApproval } from "@/lib/outreach/outreachRepository";
+import type { OutreachRecord } from "@/lib/outreach/types";
 import { emitAgentEvent } from "@/lib/telemetry/agentTelemetry";
+import { requireHumanApproval, type HumanApprovalAuthorization } from "./humanApprovalAuthorization";
 
 export interface StoredApprovalRecord {
   approvalId: string;
@@ -16,6 +18,7 @@ export interface StoredApprovalRecord {
   recipientEmail: string;
   subject: string;
   bodyPreview: string;
+  reviewedBody: string;
   previewUrl?: string;
   qualificationScore?: number;
   auditHighlights: string[];
@@ -29,11 +32,13 @@ export interface StoredApprovalRecord {
   gmailMessageId?: string;
   tenantId?: string | null;
   userId?: string;
+  persistenceBlocked?: boolean;
 }
 
 export class ApprovalGate {
   private static instance: ApprovalGate;
   private approvals: Map<string, StoredApprovalRecord> = new Map();
+  private reviewing = new Set<string>();
 
   private constructor() {}
 
@@ -62,6 +67,23 @@ export class ApprovalGate {
     tenantId?: string | null;
     userId?: string;
   }): Promise<StoredApprovalRecord> {
+    const tenant = data.userId || data.tenantId;
+    if (!tenant) throw new Error("Trusted approval queue owner required");
+    const draft = await outreachRepository.findOutreachById(data.outreachId, tenant);
+    if (!draft || draft.leadId !== data.leadId || draft.message !== data.body ||
+      (draft.subject || "") !== data.subject || (draft.business.email || "") !== data.recipientEmail) {
+      throw new Error("Approval queue must reference the exact owned outreach draft");
+    }
+    if (draft.approvalRequest) {
+      const existing = draft.approvalRequest;
+      if (existing.pipelineRunId !== data.pipelineRunId || existing.leadId !== data.leadId || existing.tenantId !== tenant ||
+        existing.reviewedBody !== data.body || existing.subject !== data.subject || existing.recipientEmail !== data.recipientEmail) {
+        throw new Error("Approval queue identity/snapshot conflict");
+      }
+      const restored = this.restoreApproval(draft, tenant);
+      if (!restored) throw new Error("Durable approval recovery failed");
+      return restored;
+    }
     const approvalId = `appr_${Date.now()}_${randomUUID().slice(0, 8)}`;
     const now = new Date().toISOString();
 
@@ -74,15 +96,17 @@ export class ApprovalGate {
       recipientEmail: data.recipientEmail,
       subject: data.subject,
       bodyPreview: data.body.slice(0, 300) + (data.body.length > 300 ? "..." : ""),
+      reviewedBody: data.body,
       previewUrl: data.previewUrl,
       qualificationScore: data.qualificationScore,
       auditHighlights: data.auditHighlights || [],
       status: "PENDING_HUMAN_APPROVAL",
       requestedAt: now,
-      tenantId: data.tenantId,
-      userId: data.userId,
+      tenantId: tenant,
+      userId: tenant,
     };
-
+    draft.approvalRequest = record;
+    await outreachRepository.saveOutreachRecord(draft);
     this.approvals.set(data.outreachId, record);
     this.approvals.set(approvalId, record);
 
@@ -107,39 +131,38 @@ export class ApprovalGate {
    */
   public async approveDraft(
     outreachIdOrApprovalId: string,
-    approvedBy: string,
+    authorization: HumanApprovalAuthorization,
     notes?: string
   ): Promise<StoredApprovalRecord> {
-    if (!approvedBy || approvedBy.trim().toLowerCase() === "system" || approvedBy.trim().toLowerCase() === "ai") {
-      throw new Error("Safety Invariant Violation: External email approval requires explicit human clearance. System/AI cannot self-approve.");
-    }
-
     const record = this.approvals.get(outreachIdOrApprovalId);
     if (!record) {
       throw new Error(`Approval record for '${outreachIdOrApprovalId}' not found.`);
     }
+    const approvedBy = requireHumanApproval(authorization, record.tenantId);
+    if (this.reviewing.has(record.outreachId)) throw new Error("Approval review already in progress");
 
     if (record.status !== "PENDING_HUMAN_APPROVAL" && record.status !== "DRAFT_CREATED") {
       throw new Error(`Cannot approve draft in state '${record.status}'. Only pending drafts can be approved.`);
     }
 
-    const now = new Date().toISOString();
-    record.status = "READY_TO_SEND";
-    record.reviewedAt = now;
-    record.reviewedBy = approvedBy;
-    record.notes = notes;
-
-    // Update in outreach repository so pre-flight checks pass
+    this.reviewing.add(record.outreachId);
     try {
-      await outreachRepository.updateOutreachStatus({
+      const persisted = await outreachRepository.updateOutreachStatus({
         outreachId: record.outreachId,
         status: "approved",
         userId: record.userId || record.tenantId || undefined,
         notes: `Approved by human reviewer: ${approvedBy}`,
-      });
-    } catch {
-      // Safe fallback for test environments without DB
-    }
+        expectedReviewedMessage: record.reviewedBody,
+        expectedReviewedSubject: record.subject,
+        expectedReviewedRecipient: record.recipientEmail,
+      }, authorization);
+      if (!persisted || persisted.outreachId !== record.outreachId || persisted.status !== "approved" || persisted.userId !== (record.userId || record.tenantId)) throw new Error("Approval persistence failed");
+      record.status = "READY_TO_SEND";
+      record.reviewedAt = new Date().toISOString();
+      record.reviewedBy = approvedBy;
+      record.notes = notes;
+      record.persistenceBlocked = false;
+    } finally { this.reviewing.delete(record.outreachId); }
 
     emitAgentEvent({
       agent: "executive",
@@ -161,30 +184,33 @@ export class ApprovalGate {
    */
   public async rejectDraft(
     outreachIdOrApprovalId: string,
-    rejectedBy: string,
+    authorization: HumanApprovalAuthorization,
     reason: string
   ): Promise<StoredApprovalRecord> {
     const record = this.approvals.get(outreachIdOrApprovalId);
     if (!record) {
       throw new Error(`Approval record for '${outreachIdOrApprovalId}' not found.`);
     }
-
-    const now = new Date().toISOString();
-    record.status = "REJECTED";
-    record.reviewedAt = now;
-    record.reviewedBy = rejectedBy;
-    record.rejectedReason = reason;
-
+    const rejectedBy = requireHumanApproval(authorization, record.tenantId);
+    if (this.reviewing.has(record.outreachId)) throw new Error("Approval review already in progress");
+    if (!["PENDING_HUMAN_APPROVAL", "DRAFT_CREATED", "READY_TO_SEND", "APPROVED"].includes(record.status)) throw new Error("Approval cannot be rejected in its current state");
+    this.reviewing.add(record.outreachId);
+    // A requested revocation must block dispatch even if its storage write fails.
+    record.persistenceBlocked = true;
     try {
-      await outreachRepository.updateOutreachStatus({
+      const persisted = await outreachRepository.updateOutreachStatus({
         outreachId: record.outreachId,
         status: "rejected",
-        userId: record.tenantId || undefined,
+        userId: record.userId || record.tenantId || undefined,
         notes: `Rejected by ${rejectedBy}: ${reason}`,
       });
-    } catch {
-      // Safe fallback
-    }
+      if (!persisted || persisted.outreachId !== record.outreachId || persisted.status !== "rejected" || persisted.userId !== (record.userId || record.tenantId)) throw new Error("Rejection persistence failed");
+      record.status = "REJECTED";
+      record.reviewedAt = new Date().toISOString();
+      record.reviewedBy = rejectedBy;
+      record.rejectedReason = reason;
+      record.persistenceBlocked = false;
+    } finally { this.reviewing.delete(record.outreachId); }
 
     return record;
   }
@@ -213,7 +239,7 @@ export class ApprovalGate {
    */
   public canSend(outreachId: string): boolean {
     const record = this.approvals.get(outreachId);
-    return record?.status === "READY_TO_SEND" || record?.status === "APPROVED";
+    return Boolean(record && !record.persistenceBlocked && !this.reviewing.has(record.outreachId) && (record.status === "READY_TO_SEND" || record.status === "APPROVED"));
   }
 
   /**
@@ -221,6 +247,45 @@ export class ApprovalGate {
    */
   public getApprovalRecord(id: string): StoredApprovalRecord | undefined {
     return this.approvals.get(id);
+  }
+  private restoreApproval(draft: OutreachRecord, tenant: string): StoredApprovalRecord | undefined {
+    const original = draft.approvalRequest;
+    if (!original) return undefined;
+    if (draft.userId !== tenant || original.tenantId !== tenant || original.userId !== tenant ||
+      original.outreachId !== draft.outreachId || original.leadId !== draft.leadId || !original.approvalId || !original.pipelineRunId) {
+      throw new Error("Durable approval identity mismatch");
+    }
+    const snapshotMatches = original.reviewedBody === draft.message && original.subject === (draft.subject || "") &&
+      original.recipientEmail === (draft.business.email || "");
+    const record = { ...original, persistenceBlocked: false };
+    if (!snapshotMatches) {
+      record.status = "REJECTED"; record.persistenceBlocked = true;
+      record.rejectedReason = "Reviewed snapshot changed; a new human review is required";
+    } else if (["draft", "review"].includes(draft.status)) {
+      record.status = "PENDING_HUMAN_APPROVAL";
+    } else if (["approved", "queued", "sent"].includes(draft.status) && hasCurrentHumanApproval(draft)) {
+      record.status = draft.status === "sent" ? "SENT" : "READY_TO_SEND";
+      record.persistenceBlocked = draft.status === "queued";
+      record.reviewedBy = draft.approvedBy; record.reviewedAt = draft.approvedAt;
+      record.sentAt = draft.sentAt; record.gmailMessageId = draft.externalMessageId;
+    } else {
+      record.status = "REJECTED"; record.persistenceBlocked = true;
+    }
+    this.approvals.set(record.outreachId, record); this.approvals.set(record.approvalId, record);
+    return record;
+  }
+
+  public async getStoredApprovalRecord(id: string, tenant: string): Promise<StoredApprovalRecord | undefined> {
+    if (!tenant?.trim()) throw new Error("Trusted approval owner required");
+    const draft = await outreachRepository.findOutreachById(id, tenant) || await outreachRepository.findOutreachByApprovalId(id, tenant);
+    return draft ? this.restoreApproval(draft, tenant) : undefined;
+  }
+
+  public async getStoredPendingApprovals(tenant: string): Promise<StoredApprovalRecord[]> {
+    if (!tenant?.trim()) throw new Error("Trusted approval owner required");
+    const drafts = await outreachRepository.listOutreachRecords({ userId: tenant });
+    return drafts.map(draft => this.restoreApproval(draft, tenant)).filter((record): record is StoredApprovalRecord =>
+      !!record && record.status === "PENDING_HUMAN_APPROVAL" && !record.persistenceBlocked);
   }
 
   /**
@@ -230,7 +295,7 @@ export class ApprovalGate {
     const unique = new Map<string, StoredApprovalRecord>();
     for (const record of this.approvals.values()) {
       if (record.status === "PENDING_HUMAN_APPROVAL") {
-        if (tenantId && record.tenantId && record.tenantId !== tenantId) {
+        if (tenantId && record.tenantId !== tenantId) {
           continue;
         }
         unique.set(record.outreachId, record);
@@ -271,6 +336,7 @@ export class ApprovalGate {
    */
   public clear(): void {
     this.approvals.clear();
+    this.reviewing.clear();
   }
 }
 

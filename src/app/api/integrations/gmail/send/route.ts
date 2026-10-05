@@ -11,36 +11,43 @@ export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
 import { GmailEmailProvider } from "@/lib/integrations/gmailEmailProvider";
-import { isAuthorized } from "@/lib/automation/auth";
+import { authorizeAutomationTenant } from "@/lib/automation/automationApiIdentity";
+import { verifyAdminAuth } from "@/lib/adminAuth";
+import { z } from "zod";
+
+const SendSchema = z.object({ outreachId: z.string().trim().min(1).max(200), forceSend: z.boolean().optional() });
 
 export async function POST(req: Request) {
-  if (!(await isAuthorized(req))) {
-    return NextResponse.json(
-      { error: "Unauthorized. Valid automation secret or admin session required." },
-      { status: 401 }
-    );
-  }
+  const auth = await authorizeAutomationTenant(req);
+  if (auth.response) return auth.response;
 
-  let body: any = {};
+  let body: z.infer<typeof SendSchema>;
   try {
-    const text = await req.text();
-    if (text) body = JSON.parse(text);
+    const parsed = SendSchema.safeParse(await req.json());
+    if (!parsed.success) return NextResponse.json({ error: "Invalid send request." }, { status: 400 });
+    body = parsed.data;
   } catch {
     return NextResponse.json({ error: "Malformed JSON payload." }, { status: 400 });
   }
 
-  if (!body.outreachId || typeof body.outreachId !== "string") {
-    return NextResponse.json({ error: "Parameter 'outreachId' is required." }, { status: 400 });
+  if (body.forceSend) {
+    const admin = await verifyAdminAuth(req);
+    if (!admin.isAdmin || admin.userId !== auth.identity.tenantId) {
+      return NextResponse.json({ error: "Only the authenticated human owner may override automatic-send configuration." }, { status: 403 });
+    }
   }
 
-  const result = await GmailEmailProvider.sendOutreachEmail(body.outreachId, {
-    forceSend: Boolean(body.forceSend),
-    userId: body.userId,
-  });
+  try {
+    const result = await GmailEmailProvider.sendOutreachEmail(body.outreachId, {
+      forceSend: Boolean(body.forceSend),
+      userId: auth.identity.userId || auth.identity.tenantId,
+    });
 
-  if (!result.success) {
-    return NextResponse.json(result, { status: 422 });
+    if (!result.success) return NextResponse.json(result, { status: 422 });
+
+    return NextResponse.json(result, { status: 200 });
+  } catch {
+    return NextResponse.json({ success: false, error: { code: "DISPATCH_UNAVAILABLE",
+      message: "Dispatch verification is unavailable. Reload the original outreach; do not retry an uncertain delivery automatically." } }, { status: 503 });
   }
-
-  return NextResponse.json(result, { status: 200 });
 }

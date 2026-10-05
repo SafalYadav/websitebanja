@@ -29,6 +29,16 @@ export interface ExecutiveGenerationBrief {
 }
 
 export interface CanonicalGenerationRequest {
+  /** Server-derived parent identity; never accepted from public request payloads. */
+  pipelineRunId?: string;
+  requirements?: {
+    description?: string;
+    targetAudience?: string;
+    style?: string;
+    primaryColor?: string;
+    secondaryColor?: string;
+    threeDPreference?: "yes" | "no";
+  };
   businessName: string;
   category?: string;
   location?: string;
@@ -56,8 +66,9 @@ export interface CanonicalGenerationRequest {
 }
 
 export interface CanonicalGenerationResponse {
+  correlationId?: string;
   success: boolean;
-  status: "READY" | "REPAIRED" | "FAILED";
+  status: "READY" | "REPAIRED" | "FAILED" | "RESEARCH_REQUIRED" | "WAITING_HUMAN_APPROVAL" | "QUALITY_BLOCKED" | "REJECTED";
   websiteData: WebsiteData;
   preview: {
     id: string;
@@ -65,6 +76,7 @@ export interface CanonicalGenerationResponse {
     slug: string;
   };
   previewDetails?: PersonalizedPreviewResponse["preview"];
+  researchId?: string;
   businessContext: {
     businessName: string;
     domain: string;

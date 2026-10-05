@@ -12,6 +12,11 @@ const PIPELINE_DIR = path.resolve(process.cwd(), "scratch/pipeline");
 const FOLLOWUPS_FILE = path.join(PIPELINE_DIR, "followups.json");
 const CLOCK_FILE = path.join(PIPELINE_DIR, "simulated_clock.json");
 
+function clockFile(tenantId?: string): string {
+  if (tenantId !== undefined && !tenantId.trim()) throw new Error("Trusted simulation tenant required");
+  return tenantId === undefined ? CLOCK_FILE : path.join(PIPELINE_DIR, `clock_${crypto.createHash("sha256").update(tenantId).digest("hex")}.json`);
+}
+
 export interface FollowUpJob {
   id: string;
   runId: string;
@@ -44,6 +49,7 @@ function ensureFollowUpStorage(): void {
 function readJSON<T>(filePath: string, fallback: T): T {
   ensureFollowUpStorage();
   try {
+    if (!fs.existsSync(filePath)) return fallback;
     const raw = fs.readFileSync(filePath, "utf-8");
     return JSON.parse(raw) as T;
   } catch (err) {
@@ -63,19 +69,19 @@ export class FollowUpQueue {
   /**
    * Returns current simulated clock time
    */
-  static getSimulatedClock(): Date {
+  static getSimulatedClock(tenantId?: string): Date {
     ensureFollowUpStorage();
-    const data = readJSON<{ currentTime: string }>(CLOCK_FILE, { currentTime: new Date().toISOString() });
+    const data = readJSON<{ currentTime: string }>(clockFile(tenantId), { currentTime: new Date().toISOString() });
     return new Date(data.currentTime);
   }
 
   /**
    * Sets or advances the simulated clock
    */
-  static setSimulatedClock(time: Date | string): Date {
+  static setSimulatedClock(time: Date | string, tenantId?: string): Date {
     ensureFollowUpStorage();
     const d = new Date(time);
-    writeJSON(CLOCK_FILE, { currentTime: d.toISOString() });
+    writeJSON(clockFile(tenantId), { currentTime: d.toISOString() });
     return d;
   }
 
@@ -89,16 +95,17 @@ export class FollowUpQueue {
   /**
    * Advances simulated clock by specified number of days
    */
-  static async advanceSimulationClock(days: number): Promise<{
+  static async advanceSimulationClock(days: number, tenantId?: string): Promise<{
     previousTime: string;
     newTime: string;
     processed: { executed: FollowUpJob[]; exhausted: FollowUpJob[]; cancelled: FollowUpJob[] };
   }> {
-    const prev = this.getSimulatedClock();
+    if (!Number.isInteger(days) || days < 1 || days > 30) throw new Error("Simulation advance must be 1–30 days");
+    const prev = this.getSimulatedClock(tenantId);
     const next = new Date(prev.getTime() + days * 24 * 60 * 60 * 1000);
-    this.setSimulatedClock(next);
+    this.setSimulatedClock(next, tenantId);
 
-    const processed = await this.processDueFollowUps(next);
+    const processed = await this.processDueFollowUps(next, tenantId);
 
     return {
       previousTime: prev.toISOString(),
@@ -174,7 +181,9 @@ export class FollowUpQueue {
       return alreadyScheduled;
     }
 
-    const clockTime = this.getSimulatedClock();
+    const { PipelineQueue } = await import("./pipelineQueue");
+    const parent = await PipelineQueue.getPipelineRun(data.runId);
+    const clockTime = this.getSimulatedClock(parent?.tenantId);
     const delayDays = data.delayDays ?? (targetFollowUpNumber === 1 ? 3 : 5);
     const dueTime = new Date(clockTime.getTime() + delayDays * 24 * 60 * 60 * 1000);
 
@@ -249,10 +258,11 @@ export class FollowUpQueue {
    * Evaluates and executes due follow-ups based on the reference time
    */
   static async processDueFollowUps(
-    referenceTime?: Date | string
+    referenceTime?: Date | string,
+    tenantId?: string
   ): Promise<{ executed: FollowUpJob[]; exhausted: FollowUpJob[]; cancelled: FollowUpJob[] }> {
     ensureFollowUpStorage();
-    const checkTime = referenceTime ? new Date(referenceTime) : this.getSimulatedClock();
+    const checkTime = referenceTime ? new Date(referenceTime) : this.getSimulatedClock(tenantId);
     const allJobs = readJSON<FollowUpJob[]>(FOLLOWUPS_FILE, []);
 
     const executed: FollowUpJob[] = [];
@@ -261,6 +271,12 @@ export class FollowUpQueue {
 
     for (const job of allJobs) {
       if (job.status !== "scheduled") continue;
+      if (tenantId !== undefined) {
+        const { PipelineQueue } = await import("./pipelineQueue");
+        const parent = await PipelineQueue.getPipelineRun(job.runId, tenantId);
+        if (!parent || parent.tenantId !== tenantId || !parent.leads[job.leadId] ||
+          !["RUNNING", "COMPLETED", "PARTIAL_SUCCESS"].includes(parent.status)) continue;
+      }
 
       // Check if lead opted out or has DO_NOT_CONTACT
       const leadState = await crmRepository.getLeadCRMState(job.leadId);

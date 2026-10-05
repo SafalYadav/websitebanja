@@ -366,6 +366,9 @@ describe("Migration Integrity & Checksum Verification Suite (Exercising Real Imp
         if (s.includes("information_schema.tables")) {
           return { rows: [{ table_name: "business_leads" }] };
         }
+        if (s.includes("pg_indexes")) {
+          return { rows: [{ indexname: "idx_leads_place_id" }, { indexname: "idx_leads_status" }] };
+        }
         return { rows: [] };
       },
     };

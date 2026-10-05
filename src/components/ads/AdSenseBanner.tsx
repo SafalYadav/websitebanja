@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { usePathname } from "next/navigation";
 import { isAdSenseAllowedOnRoute } from "./AdSenseScript";
 
@@ -28,7 +28,6 @@ export default function AdSenseBanner({
   label = "ADVERTISEMENT",
 }: AdSenseBannerProps) {
   const pathname = usePathname();
-  const [isLoaded, setIsLoaded] = useState(false);
   const adRef = useRef<HTMLModElement | null>(null);
   const isAllowed = isAdSenseAllowedOnRoute(pathname);
 
@@ -37,10 +36,8 @@ export default function AdSenseBanner({
 
     try {
       if (typeof window !== "undefined") {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const adsbygoogle = (window as any).adsbygoogle || [];
         adsbygoogle.push({});
-        setIsLoaded(true);
       }
     } catch {
       // Ad blocker or script not loaded yet — fail silently without disrupting user flow

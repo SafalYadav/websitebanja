@@ -11,6 +11,7 @@ import {
 } from "./opsToolTypes";
 import { opsToolExecutor } from "./opsToolExecutor";
 import { emitAgentEvent } from "@/lib/telemetry/agentTelemetry";
+import { readGenerationHold } from "../orchestration/generationHold";
 
 export class N8nOpsClient {
   private static instance: N8nOpsClient;
@@ -45,7 +46,7 @@ export class N8nOpsClient {
     const secret =
       process.env.WEBSITEBANJA_AUTOMATION_SECRET ||
       process.env.AUTOMATION_SECRET ||
-      "wb-auto-secret-local-dev-2026";
+      (process.env.NODE_ENV !== "production" ? "wb-auto-secret-local-dev-2026" : "");
 
     emitAgentEvent({
       agent: "executive",
@@ -59,14 +60,17 @@ export class N8nOpsClient {
     });
 
     const isProd = process.env.WEBSITEBANJA_RUNTIME_MODE === "production" || (process.env.NODE_ENV === "production" && !process.env.LOCAL_DEV_SIMULATION);
-    const isLocalhost = Boolean(webhookUrl && /localhost|127\.0\.0\.1/i.test(webhookUrl));
+    const webhook = webhookUrl ? new URL(webhookUrl) : null;
+    const isLocalhost = Boolean(webhook && ["localhost", "127.0.0.1", "[::1]"].includes(webhook.hostname));
     const allowRemote = Boolean(webhookUrl && !process.env.MOCK_N8N_OPS && !(isProd && isLocalhost));
 
     if (isProd && isLocalhost) {
-      console.error("[N8nOpsClient] Security Violation: Production environment cannot connect to localhost n8n. Disallowing remote dispatch to localhost.");
+      throw new Error("Production ops dispatch requires an authenticated remote HTTPS n8n endpoint");
     }
+    if (isProd && !allowRemote) throw new Error("Production ops agent unavailable; configure the authenticated remote executor");
 
     if (allowRemote && webhookUrl) {
+      if (!secret || webhook?.username || webhook?.password || (isProd && webhook?.protocol !== "https:")) throw new Error("Authenticated HTTPS ops dispatch configuration required");
       try {
         const response = await fetch(webhookUrl, {
           method: "POST",
@@ -85,8 +89,11 @@ export class N8nOpsClient {
             return parsed.data;
           }
         }
+        throw new Error("Remote ops agent returned an unsuccessful or invalid work product");
       } catch (err) {
-        console.warn("[N8nOpsClient] Live n8n webhook failed, falling back to local operational executor:", err);
+        // A timeout may occur after n8n performed side effects. Never replay the
+        // task through another executor and claim a successful fallback.
+        throw new Error("Remote ops agent unavailable; task stopped without local replay", { cause: err });
       }
     }
 
@@ -109,11 +116,18 @@ export class N8nOpsClient {
   public async executeLocalOpsAgentLoop(
     dispatch: CeoN8nTaskDispatch
   ): Promise<N8nCeoTaskCallback> {
-    const startTime = performance.now();
     const executedActions: N8nCeoTaskCallback["actions"] = [];
     const resultsMap: Record<string, unknown> = {};
     const failures: string[] = [];
     const evidence: N8nCeoTaskCallback["evidence"] = [];
+    const stopBeforeOutreach = (): N8nCeoTaskCallback => {
+      const hold = readGenerationHold(resultsMap.generate_preview);
+      return { taskId: dispatch.taskId, status: hold ? "approval_required" : "blocked",
+        summary: hold ? "Generation paused for business research and independent human approval." : "Generation or owned preview validation did not pass; outreach blocked.",
+        actions: executedActions, results: resultsMap, failures, approvalRequired: Boolean(hold),
+        nextAction: hold ? `Observe research ${hold.researchId}; do not regenerate or approve automatically.` : "Resolve failed generation/validation before requesting outreach.",
+        evidence, timestamp: new Date().toISOString() };
+    };
 
     const lowerObj = dispatch.objective.toLowerCase();
     const hasWhatsappRequest =
@@ -163,13 +177,15 @@ export class N8nOpsClient {
       });
 
       if (!resp.success) {
+        resultsMap[tool] = resp.result;
+        const hold = readGenerationHold(resp.result);
         executedActions.push({
           tool,
-          status: "failed",
+          status: hold ? "skipped" : "failed",
           details: resp.errors.join("; "),
           timestamp: new Date().toISOString(),
         });
-        failures.push(`${tool}: ${resp.errors.join("; ")}`);
+        if (!hold) failures.push(`${tool}: ${resp.errors.join("; ")}`);
         return null;
       }
 
@@ -226,7 +242,8 @@ export class N8nOpsClient {
     // 3. Research & Audit phase
     let auditReport: any = null;
     if (allowed.has("research_business") && activeLead) {
-      await callTool("research_business", { leadId, lead: activeLead });
+      const research = await callTool("research_business", { leadId, lead: activeLead });
+      if (!research) return stopBeforeOutreach();
     }
 
     if (allowed.has("audit_website") && (activeLead || leadId)) {
@@ -253,11 +270,15 @@ export class N8nOpsClient {
         previousAuditId: auditReport?.auditId,
       });
 
+      if (!previewData) return stopBeforeOutreach();
+
       if (previewData && allowed.has("validate_preview")) {
         const val = await callTool("validate_preview", {
           previewId: previewData.previewId,
           lead: activeLead,
         });
+
+        if (!val || val.passed !== true) return stopBeforeOutreach();
 
         if (val) {
           evidence.push({

@@ -89,19 +89,13 @@ export class AgentRegistry {
       ],
       execute: async (task, params, context) => {
         try {
-          const html = (params.html as string) || (params.candidateHtml as string) || "";
-          if (!html) {
-            return {
-              success: true,
-              data: {
-                unique: true,
-                score: 95,
-                note: "No existing HTML provided; novelty pre-approved.",
-              },
-            };
-          }
           const category = (params.category as string) || context.detectedDomain || "general";
           const businessName = (params.businessName as string) || "Client Project";
+          const html =
+            (params.html as string) ||
+            (params.candidateHtml as string) ||
+            (params.previewHtml as string) ||
+            `<section class="hero"><h1>${businessName}</h1><p>Bespoke digital presence tailored for ${category}.</p></section>`;
           const result = await runUniquenessAgent(
             {
               newWebsite: { html },

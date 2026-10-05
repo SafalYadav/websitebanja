@@ -15,8 +15,6 @@
  *   - Multi-tenant isolated & structured for Phase 12 CRM handoff
  */
 
-import fs from "fs";
-import path from "path";
 import crypto from "crypto";
 import type {
   DraftOutreachRequest,
@@ -30,6 +28,7 @@ import { leadRepository } from "@/lib/discovery/leadRepository";
 import { auditRepository } from "@/lib/audit/auditRepository";
 import { createSyntheticMissingWebsiteAudit } from "@/lib/audit/auditEngine";
 import { canonicalGenerationOrchestrator } from "@/lib/intelligence/orchestration/canonicalGenerationOrchestrator";
+import { readOwnedGenerationHandoff } from "@/lib/intelligence/orchestration/generationTraceStore";
 import type { StoredPreviewRecord } from "@/lib/personalization/types";
 import type { BusinessLead } from "@/lib/discovery/types";
 import type { LeadAuditReport } from "@/lib/audit/types";
@@ -37,23 +36,6 @@ import { outreachRepository } from "./outreachRepository";
 import { validateOutreachDraft } from "./qualityValidator";
 import { emitAgentEvent } from "@/lib/telemetry/agentTelemetry";
 
-const PREVIEW_DIR = path.resolve(process.cwd(), "scratch/previews");
-
-function readStoredPreviews(): StoredPreviewRecord[] {
-  try {
-    const fileA = path.join(PREVIEW_DIR, "manifest.json");
-    if (fs.existsSync(fileA)) {
-      return JSON.parse(fs.readFileSync(fileA, "utf-8"));
-    }
-    const fileB = path.join(PREVIEW_DIR, "preview-manifest.json");
-    if (fs.existsSync(fileB)) {
-      return JSON.parse(fs.readFileSync(fileB, "utf-8"));
-    }
-    return [];
-  } catch {
-    return [];
-  }
-}
 
 /**
  * Derives a human-readable observation based on actual audit data
@@ -207,6 +189,8 @@ export async function generateOutreachDraft(
   const startTime = Date.now();
   const requestId = `req_outreach_${Date.now()}_${crypto.randomBytes(3).toString("hex")}`;
   const channel: OutreachChannel = request.channel || "email";
+  if (!request.userId?.trim()) return { success: false, handoffPhase: "phase12_reply_intelligence_crm",
+    error: { code: "OUTREACH_OWNER_REQUIRED", message: "Trusted outreach owner required" } };
 
   emitAgentEvent({
     event: "outreach.draft.started",
@@ -304,74 +288,39 @@ export async function generateOutreachDraft(
 
   const finalAudit: LeadAuditReport = audit;
 
-  // 3. Resolve Preview Record
-  let preview: StoredPreviewRecord | null = null;
-  if (request.overridePreview) {
-    const rawPrev = request.overridePreview as any;
-    const resolvedUrl =
-      rawPrev.previewUrl ||
-      rawPrev.url ||
-      (rawPrev.id ? `https://websitebanja.com/preview/${rawPrev.id}` : `https://websitebanja.com/preview/prev_${lead.leadId}`);
-
+  // 3. Resolve only the original owned, published canonical preview.
+  let preview: StoredPreviewRecord;
+  if (request.previewId) {
+    const handoff = await readOwnedGenerationHandoff(request.previewId, request.userId!, lead.leadId);
+    if (!handoff?.id || !handoff.url || !Number.isFinite(handoff.qualityScore) || typeof handoff.qualityScore !== "number" || !handoff.designArchetype?.trim()) return {
+      success: false, handoffPhase: "phase12_reply_intelligence_crm",
+      error: { code: "APPROVED_PREVIEW_REQUIRED", message: "The original owned preview has not passed publication review." },
+    };
     preview = {
-      previewId: rawPrev.previewId || rawPrev.id || `prev_${lead.leadId}`,
-      slug: rawPrev.slug || `preview-${lead.leadId}`,
-      leadId: lead.leadId,
-      auditId: finalAudit.auditId,
-      businessName: lead.businessName,
-      industry: lead.industry || lead.category,
-      generatedAt: rawPrev.createdAt || rawPrev.generatedAt || new Date().toISOString(),
-      previewUrl: resolvedUrl,
-      qualityScore: rawPrev.qualityScore || 85,
-      designArchetype: rawPrev.designArchetype || "Modern Clean",
-      imageManifest: rawPrev.imageManifest || [],
-      generationStatus: "generated",
-      userId: request.userId,
+      previewId: handoff.id, slug: handoff.slug, leadId: lead.leadId, auditId: finalAudit.auditId,
+      businessName: lead.businessName, industry: lead.industry || lead.category,
+      generatedAt: new Date().toISOString(), previewUrl: handoff.url,
+      qualityScore: handoff.qualityScore, designArchetype: handoff.designArchetype,
+      imageManifest: handoff.imageManifest || [], generationStatus: "generated", userId: request.userId,
     };
   } else {
-    const storedPreviews = readStoredPreviews();
-    preview =
-      storedPreviews.find(
-        (p) =>
-          p.leadId === lead!.leadId &&
-          (request.userId ? p.userId === request.userId : true)
-      ) || null;
-
-    if (!preview && request.previewId) {
-      preview = storedPreviews.find((p) => p.previewId === request.previewId) || null;
-    }
-  }
-
-  // If still no preview, auto-generate one to guarantee a real local preview
-  if (!preview) {
-    const genRes = await canonicalGenerationOrchestrator.generateWebsite({
-      businessName: lead.businessName,
-      source: "autonomous_pipeline",
-      leadId: lead.leadId,
-      overrideLead: lead,
-      overrideAudit: finalAudit,
-      userId: request.userId,
+    const generated = await canonicalGenerationOrchestrator.generateWebsite({
+      businessName: lead.businessName, source: "autonomous_pipeline", leadId: lead.leadId,
+      overrideLead: lead, overrideAudit: finalAudit, userId: request.userId, tenantId: request.userId,
     });
-
-    if (genRes.success && genRes.previewDetails) {
-      preview = {
-        previewId: genRes.preview.id,
-        slug: genRes.preview.slug,
-        leadId: lead.leadId,
-        auditId: finalAudit.auditId,
-        businessName: lead.businessName,
-        industry: lead.industry || lead.category,
-        generatedAt: new Date().toISOString(),
-        previewUrl: genRes.preview.url,
-        qualityScore: genRes.previewDetails.qualityScore,
-        designArchetype: genRes.previewDetails.designArchetype,
-        imageManifest: genRes.previewDetails.imageManifest,
-        generationStatus: "generated",
-        userId: request.userId,
-      };
-    } else {
-      throw new Error(genRes.error?.message || "Website generation failed; outreach cannot reference a missing preview.");
-    }
+    if (!generated.success || !generated.preview?.id || !generated.previewDetails) return {
+      success: false, handoffPhase: "phase12_reply_intelligence_crm",
+      ...(generated.researchId ? { researchId: generated.researchId, status: generated.status } : {}),
+      error: { code: generated.error?.code || "PREVIEW_GENERATION_BLOCKED",
+        message: generated.error?.message || "Website publication review must complete before outreach." },
+    };
+    preview = {
+      previewId: generated.preview.id, slug: generated.preview.slug, leadId: lead.leadId,
+      auditId: finalAudit.auditId, businessName: lead.businessName, industry: lead.industry || lead.category,
+      generatedAt: new Date().toISOString(), previewUrl: generated.preview.url,
+      qualityScore: generated.previewDetails.qualityScore, designArchetype: generated.previewDetails.designArchetype,
+      imageManifest: generated.previewDetails.imageManifest, generationStatus: "generated", userId: request.userId,
+    };
   }
 
   // 4. Duplicate Check (leadId + channel + previewId)
@@ -462,7 +411,7 @@ export async function generateOutreachDraft(
   const outreachId = `outreach_${channel}_${Date.now()}_${crypto.randomBytes(3).toString("hex")}`;
   const now = new Date().toISOString();
 
-  const record: OutreachRecord = {
+  let record: OutreachRecord = {
     outreachId,
     leadId: lead.leadId,
     auditId: finalAudit.auditId,
@@ -481,8 +430,9 @@ export async function generateOutreachDraft(
     handoffPhase: "phase12_reply_intelligence_crm",
   };
 
-  // 9. Persist to Local Outbox
-  await outreachRepository.saveOutreachRecord(record);
+  // 9. Persist to the durable outbox; a concurrent creator may own the canonical draft.
+  const candidateId = record.outreachId;
+  record = await outreachRepository.saveOutreachRecord(record);
 
   emitAgentEvent({
     event: "outreach.draft.generated",
@@ -509,7 +459,7 @@ export async function generateOutreachDraft(
   return {
     success: true,
     outreach: record,
-    reusedExisting: false,
+    reusedExisting: record.outreachId !== candidateId,
     handoffPhase: "phase12_reply_intelligence_crm",
   };
 }

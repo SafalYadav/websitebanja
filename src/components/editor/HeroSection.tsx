@@ -6,7 +6,7 @@ import { Sparkles, ArrowRight, Zap, ShieldCheck, Clock, PhoneCall, CheckCircle2 
 import ImageWithFallback from "@/components/ui/ImageWithFallback";
 import EditableElement from "@/components/editor/EditableElement";
 import SpatialSectionWrapper from "@/components/editor/SpatialSectionWrapper";
-import { handleButtonActionClick } from "@/lib/buttonActions";
+import { handleButtonActionClick, buttonActionAttributes } from "@/lib/buttonActions";
 import { useWebsiteUI } from "@/contexts/WebsiteUIContext";
 import MagneticButton from "@/components/patterns/MagneticButton";
 import type { Hero, ButtonActionConfig, BackgroundStyleConfig, Spatial3dConfig, ImageIntentConfig, HeroBackgroundConfig } from "@/types/website";
@@ -214,8 +214,8 @@ export default function HeroSection({
 }: HeroSectionProps) {
   const effectiveLayoutVariant = normalizeHeroVariant(layoutVariant || layoutType || heroType);
   const shouldReduceMotion = useReducedMotion();
-  const { publicSlug, onSwitchPage } = useWebsiteUI();
-  const context = { siteSlug: publicSlug, onSwitchPage };
+  const { publicSlug, onSwitchPage, sectionOrder } = useWebsiteUI();
+  const context = { siteSlug: publicSlug, onSwitchPage, sectionOrder };
 
   const safeTitle = typeof title === "string" && title.trim() ? title : "Crafting Excellence For Modern Clients";
   const safeSubtitle =
@@ -297,6 +297,7 @@ export default function HeroSection({
               <EditableElement sectionKey={sectionKey} elementPath={sectionKey + ".button"} elementType="button" label="Primary Button" value={safeButton}>
                 <MagneticButton
                   type="button"
+                  {...buttonActionAttributes(buttonAction, "contact", sectionOrder)}
                   onClick={(e) => handleButtonActionClick(buttonAction, "contact", e, context)}
                   className="group relative inline-flex items-center gap-2 rounded-full px-8 py-4 text-sm font-bold text-white shadow-2xl transition-all duration-200 hover:scale-105 active:scale-95 bg-white/20 backdrop-blur-lg border border-white/40 hover:bg-white hover:text-black cursor-pointer"
                 >
@@ -307,6 +308,7 @@ export default function HeroSection({
 
               <button
                 type="button"
+                {...buttonActionAttributes({ type: "scroll", target: "about" }, "about", sectionOrder)}
                 onClick={(e) => handleButtonActionClick({ type: "scroll", target: "about" }, "about", e, context)}
                 className="inline-flex items-center gap-2 rounded-full px-6 py-4 text-sm font-medium text-zinc-300 hover:text-white transition-colors cursor-pointer"
               >
@@ -363,6 +365,7 @@ export default function HeroSection({
             <EditableElement sectionKey={sectionKey} elementPath={sectionKey + ".button"} elementType="button" label="Primary Button" value={safeButton}>
               <MagneticButton
                 type="button"
+                {...buttonActionAttributes(buttonAction, "services", sectionOrder)}
                 onClick={(e) => handleButtonActionClick(buttonAction, "services", e, context)}
                 className="inline-flex items-center gap-2 rounded-full px-8 py-4 text-xs font-bold uppercase tracking-wider text-white shadow-lg transition hover:opacity-95 active:scale-98 cursor-pointer"
                 style={{ backgroundColor: "var(--wb-primary)", boxShadow: "0 10px 25px -5px var(--wb-glow-primary)" }}
@@ -422,6 +425,7 @@ export default function HeroSection({
               <EditableElement sectionKey={sectionKey} elementPath={sectionKey + ".button"} elementType="button" label="Primary Button" value={safeButton}>
                 <MagneticButton
                   type="button"
+                  {...buttonActionAttributes(buttonAction, "contact", sectionOrder)}
                   onClick={(e) => handleButtonActionClick(buttonAction, "contact", e, context)}
                   className="inline-flex items-center gap-2.5 rounded-xl px-8 py-4 text-base font-bold text-white shadow-xl transition-all hover:scale-102 active:scale-98 cursor-pointer"
                   style={{ backgroundColor: "var(--wb-primary)", boxShadow: "0 10px 25px -5px var(--wb-glow-primary)" }}
@@ -433,6 +437,7 @@ export default function HeroSection({
 
               <button
                 type="button"
+                {...buttonActionAttributes({ type: "scroll", target: "services" }, "services", sectionOrder)}
                 onClick={(e) => handleButtonActionClick({ type: "scroll", target: "services" }, "services", e, context)}
                 className="inline-flex items-center gap-2 rounded-xl px-7 py-4 text-sm font-semibold border backdrop-blur-md cursor-pointer"
                 style={{ backgroundColor: "var(--wb-surface)", borderColor: "var(--wb-border)", color: "var(--wb-fg)" }}
@@ -681,6 +686,7 @@ export default function HeroSection({
               >
                 <MagneticButton
                   type="button"
+                  {...buttonActionAttributes(buttonAction, "services", sectionOrder)}
                   onClick={(e) => handleButtonActionClick(buttonAction, "services", e, context)}
                   className="group relative inline-flex items-center gap-2 rounded-2xl px-8 py-4 text-sm font-bold text-white shadow-xl transition-all duration-200 hover:scale-[1.03] active:scale-[0.98] cursor-pointer"
                   style={{
@@ -695,6 +701,7 @@ export default function HeroSection({
 
               <button
                 type="button"
+                {...buttonActionAttributes({ type: "scroll", target: "contact" }, "contact", sectionOrder)}
                 onClick={(e) => handleButtonActionClick({ type: "scroll", target: "contact" }, "contact", e, context)}
                 className="inline-flex items-center gap-2 rounded-2xl px-7 py-4 text-sm font-semibold transition border backdrop-blur-md hover:bg-black/5 dark:hover:bg-white/10 shadow-sm cursor-pointer"
                 style={{

@@ -495,7 +495,7 @@ export function TestimonialStackCard({
           <Star key={i} className="w-4 h-4 fill-current" />
         ))}
       </div>
-      <p className="text-lg italic text-[var(--wb-fg)] mb-6 leading-relaxed">"{review.text}"</p>
+      <p className="text-lg italic text-[var(--wb-fg)] mb-6 leading-relaxed">&ldquo;{review.text}&rdquo;</p>
       <div className="flex items-center justify-between border-t border-[var(--wb-border)] pt-4">
         <div>
           <h4 className="text-sm font-bold text-[var(--wb-fg)]">{review.author}</h4>

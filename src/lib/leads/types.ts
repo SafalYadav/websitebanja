@@ -184,9 +184,10 @@ export interface LeadDetailView {
   outreach: {
     outreachId?: string;
     channel?: OutreachChannel;
-    status: "none" | "drafted" | "review" | "approved" | "rejected" | "simulated_sent" | "sent";
+    status: OutreachStatus | "none" | "drafted";
     subject?: string;
     message?: string;
+    recipientEmail?: string;
     personalizationFieldsUsed?: string[];
     approvedAt?: string;
     simulatedAt?: string;

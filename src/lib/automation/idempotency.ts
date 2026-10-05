@@ -15,19 +15,11 @@ interface CachedEntry {
 const IDEMPOTENCY_TTL_MS = 15 * 60 * 1000; // 15 minutes
 const idempotencyStore = new Map<string, CachedEntry>();
 
-export function computeIdempotencyKey(key?: string, payload?: Record<string, unknown>): string {
-  if (key && key.trim().length > 0) {
-    return key.trim();
-  }
-  const serialized = JSON.stringify({
-    name: payload?.businessName,
-    placeId: payload?.placeId,
-    ind: payload?.industry,
-    desc: payload?.description,
-    serv: payload?.services,
-    loc: payload?.location,
-  });
-  return crypto.createHash("sha256").update(serialized).digest("hex").slice(0, 32);
+export function computeIdempotencyKey(key: string | undefined, payload: Record<string, unknown> | undefined, tenantId: string): string {
+  if (!tenantId.trim()) throw new Error("Trusted tenant required for automation idempotency");
+  // Explicit keys are scoped too: another tenant must never receive a cached site.
+  const serialized = JSON.stringify({ tenantId, key: key?.trim() || null, payload });
+  return crypto.createHash("sha256").update(serialized).digest("hex");
 }
 
 export function getIdempotentResult(key: string): AutomationPreviewResponse | null {

@@ -170,7 +170,7 @@ export class ConflictResolver {
 
     // 3. Consult Phase 18 Active Strategic Lessons (if applicable)
     try {
-      const activeStrategy = await StrategyManager.getInstance().getActiveStrategy("design");
+      const activeStrategy = await StrategyManager.getInstance().getActiveStrategy("design", input.tenantId);
       if (activeStrategy && activeStrategy.status === "ACTIVE") {
         resolvedDirectives.push(`Enforce Strategic Rule: ${activeStrategy.name}`);
         if (Array.isArray(activeStrategy.directives)) {

@@ -582,9 +582,10 @@ export class LeadCommandCenterService {
       outreach: {
         outreachId: outreach?.outreachId,
         channel: outreach?.channel,
-        status: (outreach?.status as any) || "none",
+        status: outreach?.status || "none",
         subject: outreach?.subject,
         message: outreach?.message,
+        recipientEmail: outreach?.business.email,
         personalizationFieldsUsed: [
           ...(outreach?.personalization?.websiteProblems || []),
           ...(outreach?.personalization?.improvements || []),

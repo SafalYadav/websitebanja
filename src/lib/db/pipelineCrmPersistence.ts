@@ -8,6 +8,7 @@
 
 import { getPool } from "./queries";
 import type { PipelineRun } from "@/lib/automation/pipelineTypes";
+import { pipelineExecutionFence } from "@/lib/automation/pipelineExecutionLease";
 import type { LeadCRMState, CRMConversation, CRMMessage } from "@/lib/crm/types";
 
 let tablesInitialized = false;
@@ -38,6 +39,19 @@ export async function ensurePipelineCrmTables(): Promise<{ success: boolean; tab
 
       CREATE INDEX IF NOT EXISTS idx_pipeline_runs_status ON public.autonomous_pipeline_runs(status);
       CREATE INDEX IF NOT EXISTS idx_pipeline_runs_created ON public.autonomous_pipeline_runs(created_at DESC);
+      ALTER TABLE public.autonomous_pipeline_runs ADD COLUMN IF NOT EXISTS tenant_id TEXT;
+      ALTER TABLE public.autonomous_pipeline_runs ADD COLUMN IF NOT EXISTS user_id TEXT;
+      ALTER TABLE public.autonomous_pipeline_runs ADD COLUMN IF NOT EXISTS run_data JSONB;
+      ALTER TABLE public.autonomous_pipeline_runs ADD COLUMN IF NOT EXISTS execution_lease_token TEXT;
+      ALTER TABLE public.autonomous_pipeline_runs ADD COLUMN IF NOT EXISTS execution_lease_until TIMESTAMPTZ;
+      CREATE INDEX IF NOT EXISTS idx_pipeline_runs_tenant_created ON public.autonomous_pipeline_runs(tenant_id,created_at DESC);
+      CREATE TABLE IF NOT EXISTS public.autonomous_pipeline_stage_results (
+        pipeline_run_id TEXT NOT NULL REFERENCES public.autonomous_pipeline_runs(pipeline_run_id) ON DELETE CASCADE,
+        tenant_id TEXT NOT NULL,lead_id TEXT NOT NULL,stage TEXT NOT NULL,result JSONB NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        PRIMARY KEY(pipeline_run_id,lead_id,stage)
+      );
+      REVOKE ALL ON TABLE public.autonomous_pipeline_stage_results FROM PUBLIC;
 
       CREATE TABLE IF NOT EXISTS public.crm_leads_state (
         lead_id TEXT PRIMARY KEY,
@@ -109,12 +123,17 @@ export async function ensurePipelineCrmTables(): Promise<{ success: boolean; tab
 
 export async function savePipelineRunToPostgres(run: PipelineRun): Promise<boolean> {
   try {
-    await ensurePipelineCrmTables();
+    const readiness = await ensurePipelineCrmTables();
+    if (!readiness.success) throw new Error("Pipeline persistence schema unavailable");
     const pool = getPool();
     const query = `
       INSERT INTO public.autonomous_pipeline_runs (
-        pipeline_run_id, status, current_stage, criteria, stats, leads, errors, created_at, updated_at, completed_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        pipeline_run_id, status, current_stage, criteria, stats, leads, errors, created_at, updated_at, completed_at,tenant_id,user_id,run_data
+      ) SELECT $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,$11,$12,$13
+      WHERE $14::text IS NULL OR EXISTS (
+        SELECT 1 FROM public.autonomous_pipeline_runs
+        WHERE pipeline_run_id=$1 AND tenant_id=$11 AND execution_lease_token=$14 AND execution_lease_until>NOW()
+      )
       ON CONFLICT (pipeline_run_id) DO UPDATE SET
         status = EXCLUDED.status,
         current_stage = EXCLUDED.current_stage,
@@ -123,10 +142,17 @@ export async function savePipelineRunToPostgres(run: PipelineRun): Promise<boole
         leads = EXCLUDED.leads,
         errors = EXCLUDED.errors,
         updated_at = EXCLUDED.updated_at,
-        completed_at = EXCLUDED.completed_at;
+        completed_at = EXCLUDED.completed_at,
+        user_id = EXCLUDED.user_id,
+        run_data = EXCLUDED.run_data
+      WHERE autonomous_pipeline_runs.tenant_id IS NOT DISTINCT FROM EXCLUDED.tenant_id
+        AND ((autonomous_pipeline_runs.execution_lease_token IS NULL AND $14::text IS NULL)
+          OR (autonomous_pipeline_runs.execution_lease_token=$14
+            AND autonomous_pipeline_runs.execution_lease_until>NOW()))
+      RETURNING pipeline_run_id;
     `;
 
-    await pool.query(query, [
+    const saved = await pool.query(query, [
       run.id,
       run.status,
       run.currentStage,
@@ -137,28 +163,37 @@ export async function savePipelineRunToPostgres(run: PipelineRun): Promise<boole
       run.createdAt ? new Date(run.createdAt) : new Date(),
       run.updatedAt ? new Date(run.updatedAt) : new Date(),
       run.completedAt ? new Date(run.completedAt) : null,
+      run.tenantId || null,
+      run.userId || null,
+      JSON.stringify(run),
+      pipelineExecutionFence(run)?.token || null,
     ]);
-
+    if (!saved.rowCount) throw new Error("Pipeline ownership or execution fence validation failed during persistence");
     return true;
   } catch (err) {
+    if (run.tenantId) throw err;
     console.warn(`[PostgreSQL Persistence] Failed to save PipelineRun ${run.id} to Azure PostgreSQL (falling back to durable file):`, (err as Error)?.message);
     return false;
   }
 }
 
-export async function getPipelineRunFromPostgres(runId: string): Promise<PipelineRun | null> {
+export async function getPipelineRunFromPostgres(runId: string, tenantId?: string): Promise<PipelineRun | null> {
   try {
-    await ensurePipelineCrmTables();
+    const readiness = await ensurePipelineCrmTables();
+    if (!readiness.success) throw new Error("Pipeline persistence schema unavailable");
     const pool = getPool();
     const res = await pool.query(
-      `SELECT * FROM public.autonomous_pipeline_runs WHERE pipeline_run_id = $1`,
-      [runId]
+      `SELECT * FROM public.autonomous_pipeline_runs WHERE pipeline_run_id = $1 AND ($2::text IS NULL OR tenant_id=$2)`,
+      [runId, tenantId || null]
     );
 
     if (res.rows.length === 0) return null;
     const row = res.rows[0];
 
     return {
+      ...(typeof row.run_data === "string" ? JSON.parse(row.run_data) : row.run_data || {}),
+      tenantId: row.tenant_id || undefined,
+      userId: row.user_id || undefined,
       id: row.pipeline_run_id,
       status: row.status,
       currentStage: row.current_stage,
@@ -171,20 +206,37 @@ export async function getPipelineRunFromPostgres(runId: string): Promise<Pipelin
       completedAt: row.completed_at ? new Date(row.completed_at).toISOString() : undefined,
     } as PipelineRun;
   } catch (err) {
+    if (tenantId) throw err;
     console.warn(`[PostgreSQL Persistence] Failed to query PipelineRun ${runId} from Azure PostgreSQL:`, (err as Error)?.message);
     return null;
   }
 }
 
-export async function listPipelineRunsFromPostgres(): Promise<PipelineRun[]> {
+/** Manual pause/cancellation invalidates the capability in the same DB mutation. */
+export async function suspendPipelineRun(run: PipelineRun): Promise<void> {
+  if (!run.tenantId || !["PAUSED", "CANCELLED"].includes(run.status)) throw new Error("Owned pipeline suspension required");
+  const changed = await getPool().query(`UPDATE public.autonomous_pipeline_runs
+    SET status=$3,run_data=COALESCE(run_data,'{}'::jsonb)||$4::jsonb,updated_at=NOW(),completed_at=NULL,
+        execution_lease_token=NULL,execution_lease_until=NULL
+    WHERE pipeline_run_id=$1 AND tenant_id=$2 AND status IN ('RUNNING','PENDING','PAUSED','FAILED','PARTIAL_SUCCESS')
+    RETURNING pipeline_run_id`, [run.id, run.tenantId, run.status, JSON.stringify({ status: run.status,
+      ...(run.status === "PAUSED" ? { pausedAt: run.pausedAt, pauseReason: "human" } : { cancelledAt: run.cancelledAt, error: run.error }) })]);
+  if (changed.rowCount !== 1) throw new Error("Pipeline suspension denied: owner or status changed");
+}
+
+export async function listPipelineRunsFromPostgres(tenantId?: string): Promise<PipelineRun[]> {
   try {
-    await ensurePipelineCrmTables();
+    const readiness = await ensurePipelineCrmTables();
+    if (!readiness.success) throw new Error("Pipeline persistence schema unavailable");
     const pool = getPool();
     const res = await pool.query(
-      `SELECT * FROM public.autonomous_pipeline_runs ORDER BY created_at DESC LIMIT 100`
+      `SELECT * FROM public.autonomous_pipeline_runs WHERE ($1::text IS NULL OR tenant_id=$1) ORDER BY created_at DESC LIMIT 100`, [tenantId || null]
     );
 
     return res.rows.map((row) => ({
+      ...(typeof row.run_data === "string" ? JSON.parse(row.run_data) : row.run_data || {}),
+      tenantId: row.tenant_id || undefined,
+      userId: row.user_id || undefined,
       id: row.pipeline_run_id,
       status: row.status,
       currentStage: row.current_stage,
@@ -197,6 +249,7 @@ export async function listPipelineRunsFromPostgres(): Promise<PipelineRun[]> {
       completedAt: row.completed_at ? new Date(row.completed_at).toISOString() : undefined,
     })) as PipelineRun[];
   } catch (err) {
+    if (tenantId) throw err;
     console.warn("[PostgreSQL Persistence] Failed to list PipelineRuns from Azure PostgreSQL:", (err as Error)?.message);
     return [];
   }

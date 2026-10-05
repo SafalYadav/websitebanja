@@ -34,11 +34,19 @@ import { ValidationOrchestrator } from "../validation/validationOrchestrator";
 import { RepairCoordinator } from "../validation/repairCoordinator";
 import { applyGroundedAssetsToWebsite } from "../grounding/groundedWebsiteGenerator";
 import { generatePersonalizedPreview } from "@/lib/personalization/previewGenerator";
+import { auditRenderedWebsite } from "./renderedWebsiteAudit";
+import { reviewRenderedCandidate, renderedRepairRequirements } from "./renderedPublishReview";
+import { selectOwnedComparisonWebsites } from "@/lib/agents/uniqueness/candidateSelector";
 import { auditQualifiedLead } from "@/lib/audit/auditService";
 import { emitAgentEvent } from "@/lib/telemetry/agentTelemetry";
 import { leadRepository } from "@/lib/discovery/leadRepository";
-import { delegationManager } from "../delegation/delegationManager";
+import { runGenerationEmployees } from "./generationEmployees";
 import type { ExecutiveGenerationBrief } from "./types";
+import { researchUnknownBusiness, readResearchResume, researchKey, applyApprovedDossier } from "./researchGovernance";
+import { findApprovedKnowledge } from "./semanticKnowledge";
+import { beginGenerationTrace, appendGenerationEvidence, finishGenerationTrace } from "./generationTraceStore";
+import { sanitizeErrorOutput } from "@/lib/ai/router/modelConfig";
+import { KnowledgeApprovalInvalidError, type ApprovedKnowledgeBinding } from "./approvedKnowledgeBinding";
 
 const PREVIEW_DIR = path.join(process.cwd(), "scratch", "previews");
 
@@ -135,10 +143,49 @@ export class CanonicalGenerationOrchestrator {
    * Universal generation entry point.
    */
   public async generateWebsite(
-    request: CanonicalGenerationRequest
+    request: CanonicalGenerationRequest,
+    internalResume?: { researchId: string; leaseToken: string },
+    pipelineFence?: import("@/lib/automation/pipelineExecutionLease").PipelineExecutionFence,
+  ): Promise<CanonicalGenerationResponse> {
+    const id = `cgen_${Date.now()}_${crypto.randomBytes(6).toString("hex")}`;
+    const started = Date.now();
+    const knowledgeBindings: ApprovedKnowledgeBinding[] = [];
+    try {
+      if (pipelineFence) {
+        if (pipelineFence.tenantId !== (request.tenantId || request.userId) || request.source !== "autonomous_pipeline") throw new Error("Pipeline generation owner/source mismatch");
+        request = { ...request, pipelineRunId: pipelineFence.runId };
+      } else if (request.pipelineRunId && !internalResume) throw new Error("Parent pipeline identity requires a server-owned execution fence");
+      await beginGenerationTrace(id, request);
+      const result = await this.executeGeneration(request, internalResume, id, pipelineFence, knowledgeBindings);
+      result.correlationId = id;
+      if (result.success) {
+        if (!/^prev_[a-z0-9_-]+$/.test(result.preview.id) || !/^[a-z0-9_-]+$/.test(result.preview.slug)) throw new Error("Invalid reviewed preview identifiers");
+        (result.websiteData as unknown as Record<string, unknown>).generationGate = "READY";
+        (result.websiteData as unknown as Record<string, unknown>).correlationId = id;
+      }
+      await finishGenerationTrace(id, result, internalResume ? { ...internalResume, request } : undefined, pipelineFence, knowledgeBindings);
+      // Approved previews are served from durable trace results, not ephemeral instance files.
+      return result;
+    } catch (error) {
+      const code = error instanceof KnowledgeApprovalInvalidError ? error.code : error instanceof Error && "code" in error && typeof error.code === "string"
+        && ["PIPELINE_PARENT_PAUSED", "PIPELINE_PARENT_CANCELLED", "PIPELINE_PARENT_INVALID"].includes(error.code) ? error.code : "DURABLE_GENERATION_STORAGE_FAILED";
+      return { success: false, status: code === "PIPELINE_PARENT_PAUSED" ? "WAITING_HUMAN_APPROVAL" : code === "PIPELINE_PARENT_CANCELLED" ? "REJECTED" : "FAILED", correlationId: id,
+        researchId: internalResume?.researchId,
+        websiteData: {} as WebsiteData, preview: { id: "", url: "", slug: "" },
+        businessContext: { businessName: request.businessName, domain: "unknown", location: request.location || "" },
+        repairCount: 0, durationMs: Date.now() - started,
+        error: { code, message: sanitizeErrorOutput(error) } };
+    }
+  }
+
+  private async executeGeneration(
+    request: CanonicalGenerationRequest,
+    internalResume: { researchId: string; leaseToken: string } | undefined,
+    correlationId: string,
+    pipelineFence?: import("@/lib/automation/pipelineExecutionLease").PipelineExecutionFence,
+    knowledgeBindings: ApprovedKnowledgeBinding[] = [],
   ): Promise<CanonicalGenerationResponse> {
     const startTime = Date.now();
-    const correlationId = `cgen_${Date.now()}_${crypto.randomBytes(3).toString("hex")}`;
 
     emitAgentEvent({
       event: "automation.website_generation_started",
@@ -178,7 +225,7 @@ export class CanonicalGenerationOrchestrator {
 
       // 2. Retrieve Active Learning Strategy (Phase 27)
       const activeStrategy = await this.strategyManager
-        .getActiveStrategy("generation")
+        .getActiveStrategy("generation", request.tenantId)
         .catch(() => null);
 
       // 3. Grounded Business Intelligence Resolution
@@ -204,19 +251,100 @@ export class CanonicalGenerationOrchestrator {
       if (profile.tenantId !== (request.tenantId ?? null)) {
         throw new Error("Grounded profile belongs to a different workspace.");
       }
+      await appendGenerationEvidence(correlationId, { stage: "GROUNDING", profile });
 
       // Reconcile semantics after grounding. Google evidence and observed services
       // are authoritative over a guess made from the business name alone.
       semanticAnalysis = this.semanticReasoner.analyzeBusiness({
         businessName: profile.identity.canonicalName || request.businessName,
-        category: [request.category, profile.archetype, profile.industryFamily]
-          .filter(Boolean)
-          .join(" "),
-        types: profile.services.map((service) => service.name),
-        description: profile.evidence.map((item) => item.observation).join(" ").slice(0, 4000),
-        location: profile.location.formattedAddress || request.location,
+        category: profile.googlePrimaryType || request.category,
+        types: profile.googlePlaceTypes || [],
+        description: profile.evidence.filter(item => !item.supports.startsWith("location")).map((item) => item.observation).join(" ").slice(0, 4000),
+        location: profile.location.city || request.location,
         phone: profile.identity.phone || request.phone,
       });
+
+      // Unknown domains cannot enter synthesis. Research must establish an
+      // approved business model before content, imagery, or CTAs are selected.
+      const categoryUnderstanding = this.semanticReasoner.analyzeBusiness({
+        businessName: profile.identity.canonicalName || request.businessName,
+        category: profile.googlePrimaryType || request.category,
+        types: profile.googlePlaceTypes || [],
+      });
+      const unknownDomain = categoryUnderstanding.domain === "general_commercial" || categoryUnderstanding.confidence < 0.7;
+      const pendingResearchId = internalResume?.researchId || researchKey(request);
+      if (internalResume?.researchId !== pendingResearchId && (request.tenantId || request.userId)) {
+        const originalResume = await readResearchResume(pendingResearchId, request.tenantId || request.userId || "");
+        if (originalResume?.result) return originalResume.result;
+        if (originalResume) return {
+          success: false, status: "WAITING_HUMAN_APPROVAL", researchId: pendingResearchId,
+          websiteData: {} as WebsiteData, preview: { id: "", url: "", slug: "" },
+          businessContext: { businessName: request.businessName, domain: categoryUnderstanding.domain, location: request.location || "" },
+          repairCount: 0, durationMs: Date.now() - startTime,
+          error: { code: "APPROVED_GENERATION_QUEUED", message: "Research approved. Original generation is queued or running." },
+        };
+      }
+      // Resume consumes the original reviewed company dossier, not only reusable category learning.
+      const approvedKnowledgeResult = unknownDomain && !internalResume && (request.tenantId || request.userId)
+        ? await findApprovedKnowledge(request.tenantId || request.userId || "", profile.googlePrimaryType || request.category || "") : null;
+      const approvedKnowledge = approvedKnowledgeResult?.concept;
+      if (approvedKnowledge && approvedKnowledgeResult) {
+        knowledgeBindings.push(approvedKnowledgeResult.binding);
+        await appendGenerationEvidence(correlationId, { stage: "APPROVED_KNOWLEDGE", binding: approvedKnowledgeResult.binding });
+        semanticAnalysis = { ...categoryUnderstanding,
+          domain: approvedKnowledge.domain, subdomain: approvedKnowledge.subdomain,
+          confidence: .85, confidenceLevel: "HIGH",
+          primaryObjects: approvedKnowledge.preferredSubjects, forbiddenObjects: approvedKnowledge.forbiddenSubjects,
+          preferredImageryThemes: approvedKnowledge.preferredSubjects, forbiddenImageryThemes: approvedKnowledge.forbiddenSubjects,
+          customerIntent: approvedKnowledge.businessModel,
+          primaryCta: { label: approvedKnowledge.primaryCta.label, secondaryLabel: "Contact Us", intent: approvedKnowledge.primaryCta.intent },
+          forbiddenClaims: approvedKnowledge.regulatoryConstraints,
+          // Reusable knowledge never carries another company's service claims.
+          recommendedServices: [], offerings: [],
+        };
+      }
+      if ((unknownDomain && !approvedKnowledge) || internalResume) {
+        const research = await researchUnknownBusiness(request, profile, internalResume?.researchId, pipelineFence);
+        if (research.status === "APPROVED" && internalResume?.researchId !== research.id) {
+          const resume = await readResearchResume(research.id, request.tenantId || request.userId || "");
+          if (resume?.result) return resume.result;
+          if (resume) return {
+            success: false, status: "WAITING_HUMAN_APPROVAL", researchId: research.id,
+            websiteData: {} as WebsiteData, preview: { id: "", url: "", slug: "" },
+            businessContext: { businessName: request.businessName, domain: "unknown", location: request.location || "" },
+            repairCount: 0, durationMs: Date.now() - startTime,
+            error: { code: "APPROVED_GENERATION_QUEUED", message: "Research approved. The original generation is queued or running." },
+          };
+        }
+        if (research.status === "APPROVED" && research.dossier) {
+          if (!("knowledgeBinding" in research) || !research.knowledgeBinding) throw new KnowledgeApprovalInvalidError();
+          knowledgeBindings.push(research.knowledgeBinding);
+          await appendGenerationEvidence(correlationId, { stage: "APPROVED_KNOWLEDGE", binding: research.knowledgeBinding });
+          const dossier = research.dossier;
+          semanticAnalysis = applyApprovedDossier(categoryUnderstanding, dossier);
+        } else {
+        return {
+          success: false,
+          status: research.status === "WAITING_HUMAN_APPROVAL" ? "WAITING_HUMAN_APPROVAL" : research.status === "REJECTED" ? "REJECTED" : "RESEARCH_REQUIRED",
+          researchId: research.id,
+          websiteData: {} as WebsiteData,
+          preview: { id: "", url: "", slug: "" },
+          businessContext: {
+            businessName: request.businessName,
+            domain: "unknown",
+            location: profile.location.city || request.location || "",
+            semanticProfile: categoryUnderstanding,
+          },
+          groundedProfile: profile,
+          repairCount: 0,
+          durationMs: Date.now() - startTime,
+          error: {
+            code: "RESEARCH_REQUIRED",
+            message: "Research required for this business. Its business model must be verified and approved before website generation.",
+          },
+        };
+        }
+      }
 
       // 3B. Automatic Existing Website Crawl & Audit (Rule 2)
       let auditReport = request.overrideAudit;
@@ -284,63 +412,44 @@ export class CanonicalGenerationOrchestrator {
         ],
       };
 
-      let executiveBrief = deterministicExecutiveBrief;
+      let employees: Awaited<ReturnType<typeof runGenerationEmployees>>;
       try {
-        const delegated = await delegationManager.executeCeoDelegation({
-          objective: `Create a semantically faithful, differentiated website strategy for ${request.businessName}`,
-          input: {
-            businessName: request.businessName,
-            category: semanticAnalysis.subdomain,
-            description: semanticAnalysis.factualTagline,
-            targetAudience: semanticAnalysis.customerIntent,
-            requestedFeatures: semanticAnalysis.offerings,
-            semanticProfile: semanticAnalysis,
-          },
-          constraints: [
-            `Approved domain is ${semanticAnalysis.domain}/${semanticAnalysis.subdomain}`,
-            "Do not introduce offerings or imagery from another business domain",
-            "Use verified evidence and avoid unsupported claims",
-          ],
-          tenantId: request.tenantId || null,
-          projectId: request.leadId || null,
-          createdBy: request.userId || "canonical_orchestrator",
-          correlationId,
-          riskLevel: "low",
-          budget: { maxToolCalls: 8, maxModelCalls: 2, maxRetries: 1, maxDurationMs: 20_000 },
-        });
-
-        if (delegated.result.status === "completed" && delegated.result.confidence >= 0.5) {
-          const delegatedData = delegated.result.data as {
-            skills?: { designDirection?: { visualStyle?: string } };
-            resolvedDirectives?: string[];
-          } | null;
-          executiveBrief = {
-            ...deterministicExecutiveBrief,
-            designDirection:
-              delegatedData?.skills?.designDirection?.visualStyle || deterministicExecutiveBrief.designDirection,
-            uniquenessDirectives: [
-              ...(delegatedData?.resolvedDirectives || []),
-              ...delegated.result.recommendations,
-            ],
-            confidence: Math.min(semanticAnalysis.confidence, delegated.result.confidence),
-            evidence: [
-              ...deterministicExecutiveBrief.evidence,
-              ...delegated.result.evidence.map((item) => item.description),
-            ],
-            delegationTaskId: delegated.result.taskId,
+        employees = await runGenerationEmployees(semanticAnalysis, profile, correlationId, request.requirements, product => appendGenerationEvidence(correlationId, product));
+      } catch (employeeError) {
+        if (!(employeeError instanceof Error) || !employeeError.message.startsWith("RESEARCH_REQUIRED")) throw employeeError;
+        const research = await researchUnknownBusiness(request, profile, internalResume?.researchId, pipelineFence);
+        if (research.status !== "APPROVED" || !research.dossier) {
+          return {
+            success: false, status: research.status === "WAITING_HUMAN_APPROVAL" ? "WAITING_HUMAN_APPROVAL" : research.status === "REJECTED" ? "REJECTED" : "RESEARCH_REQUIRED",
+            researchId: research.id, websiteData: {} as WebsiteData, preview: { id: "", url: "", slug: "" },
+            groundedProfile: profile,
+            businessContext: { businessName: request.businessName, domain: semanticAnalysis.domain, location: request.location || "" },
+            repairCount: 0, durationMs: Date.now() - startTime,
+            error: { code: "SEMANTIC_RESEARCH_REQUIRED", message: "CEO/Boss semantic disagreement requires research and human approval. " + employeeError.message },
           };
         }
-      } catch (delegationError: unknown) {
-        emitAgentEvent({
-          event: "agent.thinking",
-          agent: "canonical_orchestrator",
-          requestId: correlationId,
-          metadata: {
-            reason: delegationError instanceof Error ? delegationError.message : String(delegationError),
-            approvedDomain: semanticAnalysis.domain,
-          },
-        });
+        // One controlled re-evaluation against human-approved evidence; never a silent template fallback.
+        if (!("knowledgeBinding" in research) || !research.knowledgeBinding) throw new KnowledgeApprovalInvalidError();
+        knowledgeBindings.push(research.knowledgeBinding);
+        await appendGenerationEvidence(correlationId, { stage: "APPROVED_KNOWLEDGE", binding: research.knowledgeBinding });
+        semanticAnalysis = applyApprovedDossier(semanticAnalysis, research.dossier);
+        try {
+          employees = await runGenerationEmployees(semanticAnalysis, profile, correlationId, request.requirements, product => appendGenerationEvidence(correlationId, product));
+        } catch {
+          throw new Error("QUALITY_BLOCKED: approved research did not resolve CEO/Boss semantic disagreement");
+        }
       }
+      semanticAnalysis = employees.profile;
+      const executiveBrief: ExecutiveGenerationBrief = { ...deterministicExecutiveBrief,
+        approvedDomain: semanticAnalysis.domain,
+        approvedSubdomain: semanticAnalysis.subdomain,
+        offeringConstraints: semanticAnalysis.forbiddenClaims,
+        preferredImageSubjects: semanticAnalysis.primaryObjects,
+        forbiddenImageSubjects: semanticAnalysis.forbiddenObjects,
+        primaryCta: { label: semanticAnalysis.primaryCta.label, intent: semanticAnalysis.primaryCta.intent },
+        confidence: semanticAnalysis.confidence,
+        evidence: [...semanticAnalysis.evidenceSummary.factsObserved, ...semanticAnalysis.evidenceSummary.inferencesDeducted],
+        designDirection: employees.design.direction, sectionOrder: employees.design.sectionOrder };
 
       // 4B. Executive CEO/Boss Directives (Rule 5)
       const executiveDirectives = this.synthesizeExecutiveDirectives({
@@ -353,6 +462,7 @@ export class CanonicalGenerationOrchestrator {
 
       // 5. Generate Base Website Data via Core Generator Pipeline
       const basePreview = await generatePersonalizedPreview({
+        deferPublication: true,
         leadId: request.leadId || `lead_${crypto.randomBytes(4).toString("hex")}`,
         overrideLead: request.overrideLead || {
           leadId: request.leadId || `lead_${crypto.randomBytes(4).toString("hex")}`,
@@ -378,6 +488,7 @@ export class CanonicalGenerationOrchestrator {
       if (!basePreview.preview?.id) {
         throw new Error(basePreview.error?.message || "Underlying preview generation failed to initialize preview ID");
       }
+      const generatedPreviewId = basePreview.preview.id;
 
       // Load generated website data
       ensurePreviewStorage();
@@ -406,6 +517,30 @@ export class CanonicalGenerationOrchestrator {
         websiteData = applyGroundedAssetsToWebsite(websiteData, assetSelection, profile);
       }
 
+      // Approved employee content is authoritative after legacy generation/grounding.
+      const applyEmployeeOutput = () => {
+        websiteData.hero.title = employees.content.title;
+        websiteData.hero.subtitle = employees.content.subtitle;
+        websiteData.hero.button = employees.content.cta;
+        websiteData.hero.buttonAction = { type: "scroll", target: "contact", label: employees.content.cta };
+        websiteData.hero.layoutVariant = employees.design.heroLayout;
+        websiteData.about.title = employees.content.aboutTitle;
+        websiteData.about.content = employees.content.aboutContent;
+        websiteData.services = employees.content.services.map(({ title, description }) => ({ title, description }));
+        websiteData.features = employees.content.features.map(({ title, description }) => ({ title, description }));
+        websiteData.sectionOrder = employees.design.sectionOrder;
+        for (const page of websiteData.pages || []) if (page.isHome) page.sectionOrder = employees.design.sectionOrder;
+        if (websiteData.designStrategy) websiteData.designStrategy.colorSystem = employees.design.colors;
+        if (websiteData.brand) websiteData.brand.industry = semanticAnalysis.domain;
+        const metadata = websiteData as unknown as Record<string, unknown>;
+        metadata.category = semanticAnalysis.domain;
+        metadata.employeeTrace = employees.trace;
+        metadata.approvedTypography = {
+          headingFont: employees.design.headingFont, bodyFont: employees.design.bodyFont,
+        };
+      };
+      applyEmployeeOutput();
+
       // 6. 7-Stage Deterministic Validation (Quality Gate)
       const validationContext = {
         runId: correlationId,
@@ -425,6 +560,25 @@ export class CanonicalGenerationOrchestrator {
       let valReport = await this.validator.validateWebsite(validationContext);
       let repairCount = 0;
       let currentStatus: CanonicalGenerationResponse["status"] = "READY";
+      let regenerated = false;
+      const regenerateWithEmployees = async (stage: "validation" | "rendered", failures: string[]) => {
+        if (regenerated || !failures.length) throw new Error("QUALITY_BLOCKED: controlled regeneration already exhausted or missing diagnostics");
+        regenerated = true;
+        const approvedProfile = structuredClone(semanticAnalysis);
+        const repairedEmployees = await runGenerationEmployees(approvedProfile, profile, correlationId, request.requirements,
+          product => appendGenerationEvidence(correlationId, product), {
+            attempt: 1, stage, failures: failures.slice(0, 12).map(item => item.slice(0, 2000)),
+            previousOutput: { design: employees.design, content: employees.content },
+          });
+        if (JSON.stringify(repairedEmployees.profile) !== JSON.stringify(approvedProfile)) {
+          throw new Error("QUALITY_BLOCKED: regeneration changed the approved business profile");
+        }
+        employees = repairedEmployees;
+        applyEmployeeOutput();
+        await appendGenerationEvidence(correlationId, { stage: "SPECIALIST_REGENERATION", report: {
+          attempt: 1, sourceStage: stage, failures: failures.slice(0, 12), approvedDomain: approvedProfile.domain,
+        } });
+      };
 
       // 7. Bounded Self-Correction Repair Loop (Requirement #15)
       while (valReport.decision !== "READY" && repairCount < 1) {
@@ -447,6 +601,11 @@ export class CanonicalGenerationOrchestrator {
           },
           valReport
         );
+        await appendGenerationEvidence(correlationId, { stage: "REPAIR", report: {
+          attempt: repairCount, failureFingerprint: valReport.failureFingerprint,
+          appliedPatches: repairRes.appliedPatches, success: repairRes.success,
+          error: repairRes.error || null,
+        } });
 
         if (repairRes.success && repairRes.repairedData) {
           websiteData = repairRes.repairedData as unknown as WebsiteData;
@@ -455,10 +614,16 @@ export class CanonicalGenerationOrchestrator {
             ...validationContext,
             websiteData: websiteData as unknown as Record<string, unknown>,
             retryCount: repairCount,
+            previousFingerprints: [valReport.failureFingerprint],
           });
           currentStatus = "REPAIRED";
         } else {
-          break;
+          await regenerateWithEmployees("validation", valReport.blockingFailures.map(item => `${item.ruleCode || item.stage}: ${item.failure}`));
+          valReport = await this.validator.validateWebsite({ ...validationContext,
+            websiteData: websiteData as unknown as Record<string, unknown>, retryCount: repairCount,
+            previousFingerprints: [valReport.failureFingerprint],
+          });
+          currentStatus = "REPAIRED";
         }
       }
 
@@ -466,6 +631,53 @@ export class CanonicalGenerationOrchestrator {
       if (valReport.decision !== "READY") {
         throw new Error("Website quality validation failed after bounded repairs; preview is not ready.");
       }
+      (websiteData as unknown as Record<string, unknown>).generationGate = "PENDING";
+      (websiteData as unknown as Record<string, unknown>).generationOwnerId = request.userId || null;
+      fs.writeFileSync(previewFilePath, JSON.stringify(websiteData, null, 2), "utf-8");
+      let renderedAudit = await auditRenderedWebsite(basePreview.preview.id);
+      await appendGenerationEvidence(correlationId, { stage: "RENDERED_QA", report: renderedAudit });
+      const renderRegeneratedCandidate = async () => {
+        valReport = await this.validator.validateWebsite({ ...validationContext,
+          websiteData: websiteData as unknown as Record<string, unknown>, retryCount: repairCount,
+        });
+        if (valReport.decision !== "READY") throw new Error("QUALITY_BLOCKED: specialist render repair failed deterministic validation");
+        fs.writeFileSync(previewFilePath, JSON.stringify(websiteData, null, 2), "utf-8");
+        renderedAudit = await auditRenderedWebsite(generatedPreviewId);
+        await appendGenerationEvidence(correlationId, { stage: "RENDERED_QA_REPAIR", report: renderedAudit });
+        (websiteData as unknown as Record<string, unknown>).renderedAudit = renderedAudit;
+        currentStatus = "REPAIRED";
+      };
+      if (renderedAudit.status === "rejected" && repairCount === 0) {
+        repairCount = 1;
+        await regenerateWithEmployees("rendered", [...renderedAudit.errors, ...renderedAudit.viewports.flatMap(view => view.issues)]);
+        await renderRegeneratedCandidate();
+      }
+      (websiteData as unknown as Record<string, unknown>).renderedAudit = renderedAudit;
+      if (renderedAudit.status !== "completed") {
+        throw new Error(`Rendered verification ${renderedAudit.status}: ${[...renderedAudit.errors, ...renderedAudit.viewports.flatMap(view => view.issues)].slice(0, 12).join("; ")}`);
+      }
+      const candidateMetadata = websiteData as unknown as Record<string, unknown>;
+      const comparisons = await selectOwnedComparisonWebsites(request.userId);
+      const reviewCurrentCandidate = () => reviewRenderedCandidate({ correlationId, profile: semanticAnalysis,
+        website: websiteData, audit: renderedAudit, employeeTrace: employees.trace, skillDocuments: employees.skillDocuments,
+        comparisons });
+      let publishReview = await reviewCurrentCandidate();
+      await appendGenerationEvidence(correlationId, { stage: "PUBLISH_REVIEW", report: publishReview });
+      const redesign = renderedRepairRequirements(publishReview);
+      if (!publishReview.approved && repairCount === 0 && redesign.length) {
+        repairCount = 1;
+        await regenerateWithEmployees("rendered", redesign);
+        await renderRegeneratedCandidate();
+        if (renderedAudit.status !== "completed") throw new Error("QUALITY_BLOCKED: final specialist repair failed rendered QA");
+        publishReview = await reviewCurrentCandidate();
+        await appendGenerationEvidence(correlationId, { stage: "PUBLISH_REVIEW_REPAIR", report: publishReview });
+      }
+      candidateMetadata.publishReview = publishReview;
+      fs.writeFileSync(previewFilePath, JSON.stringify(websiteData, null, 2), "utf-8");
+      if (!publishReview.approved) {
+        throw new Error("QUALITY_BLOCKED: independent rendered specialist/executive review rejected or unavailable");
+      }
+      candidateMetadata.generationGate = "PENDING";
       fs.writeFileSync(previewFilePath, JSON.stringify(websiteData, null, 2), "utf-8");
       if (basePreview.preview.slug) {
         const slugFilePath = path.join(PREVIEW_DIR, `${basePreview.preview.slug}.json`);
@@ -524,7 +736,7 @@ export class CanonicalGenerationOrchestrator {
 
       return {
         success: false,
-        status: "FAILED",
+        status: err instanceof KnowledgeApprovalInvalidError ? "RESEARCH_REQUIRED" : errMsg.startsWith("QUALITY_BLOCKED") || errMsg.startsWith("Rendered verification") ? "QUALITY_BLOCKED" : errMsg.startsWith("RESEARCH_REQUIRED") ? "RESEARCH_REQUIRED" : "FAILED",
         websiteData: {} as WebsiteData,
         preview: { id: "", url: "", slug: "" },
         businessContext: {
@@ -535,7 +747,7 @@ export class CanonicalGenerationOrchestrator {
         repairCount: 0,
         durationMs: Date.now() - startTime,
         error: {
-          code: "GENERATION_PIPELINE_ERROR",
+          code: err instanceof KnowledgeApprovalInvalidError ? err.code : errMsg.startsWith("QUALITY_BLOCKED") || errMsg.startsWith("Rendered verification") ? "QUALITY_BLOCKED" : errMsg.startsWith("RESEARCH_REQUIRED") ? "RESEARCH_REQUIRED" : "GENERATION_PIPELINE_ERROR",
           message: errMsg,
         },
       };

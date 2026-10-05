@@ -2,28 +2,27 @@
 import { randomUUID } from "crypto";
 import type {
   AutonomousPipelineRun,
-  AutonomousPipelineStage,
   PipelineCriteria,
   LeadExecutionRecord,
   PipelineRunStats,
 } from "./pipelineTypes";
-import {
-  PipelineCriteriaSchema,
-  ApproveDraftRequestSchema,
-} from "./pipelineTypes";
+import { PipelineCriteriaSchema } from "./pipelineTypes";
 import { approvalGate } from "./approvalGate";
 import { opsToolExecutor } from "../ops/opsToolExecutor";
-import { MemoryStore } from "../memory/memoryStore";
 import { GmailEmailProvider } from "@/lib/integrations/gmailEmailProvider";
 import { crmRepository } from "@/lib/crm/crmRepository";
-import { leadRepository } from "@/lib/discovery/leadRepository";
 import { emitAgentEvent } from "@/lib/telemetry/agentTelemetry";
+import { readGenerationHold } from "../orchestration/generationHold";
+import { registerAutonomousRun, checkpointAutonomousRun, readAutonomousRun, listAutonomousRuns,
+  claimAutonomousResearch, assertAutonomousResearchLease, releaseAutonomousResearchLease } from "./autonomousRunStore";
 
 export class AutonomousPipeline {
   private static instance: AutonomousPipeline;
   private runs: Map<string, AutonomousPipelineRun> = new Map();
   private processedReplyIds: Set<string> = new Set();
-  private idempotencyCache: Map<string, AutonomousPipelineRun> = new Map();
+  private researchResumes: Map<string, Promise<AutonomousPipelineRun>> = new Map();
+  private runRevisions: Map<string, number> = new Map();
+  private researchLeaseTokens: Map<string, string> = new Map();
 
   private constructor() {}
 
@@ -57,10 +56,7 @@ export class AutonomousPipeline {
 
     const criteria = parseResult.data as PipelineCriteria;
 
-    // Idempotency check
-    if (options.idempotencyKey && this.idempotencyCache.has(options.idempotencyKey)) {
-      return this.idempotencyCache.get(options.idempotencyKey)!;
-    }
+    const requestIdentity = JSON.stringify({ criteria, projectId: options.projectId || null, taskId: options.taskId || null, userId: options.userId || null });
 
     const runId = `run_pipe23_${Date.now()}_${randomUUID().slice(0, 6)}`;
     const taskId = options.taskId || `task_ceo_${Date.now()}`;
@@ -91,7 +87,7 @@ export class AutonomousPipeline {
     const run: AutonomousPipelineRun = {
       pipelineRunId: runId,
       taskId,
-      tenantId: options.tenantId || null,
+      tenantId: options.tenantId || options.userId || null,
       userId: options.userId || null,
       projectId: options.projectId || null,
       status: "running",
@@ -104,7 +100,11 @@ export class AutonomousPipeline {
       updatedAt: now,
     };
 
+    const registered = await registerAutonomousRun(run, options.idempotencyKey, requestIdentity);
+    if (!registered.created) return registered.run;
+    this.runRevisions.set(runId, registered.revision);
     this.runs.set(runId, run);
+    // The durable registration above claims discovery before any async tool call.
 
     emitAgentEvent({
       agent: "executive",
@@ -183,16 +183,24 @@ export class AutonomousPipeline {
       }
 
       // ─── PROCESS EACH DISCOVERED LEAD THROUGH STAGES ─────────────────────
+      // Preserve original discovered inputs before any downstream generation.
+      await this.checkpoint(run);
       for (const lead of discoveredLeads) {
         await this.processLead(run, lead, options.userId);
+        run.currentStage = run.leads[lead.leadId]?.currentStage || run.currentStage;
+        await this.checkpoint(run);
       }
 
       // Determine overall pipeline run status
       const leadRecords = Object.values(run.leads);
       const hasPendingApproval = leadRecords.some((l) => l.approvalStatus === "PENDING_HUMAN_APPROVAL");
       const hasFailed = leadRecords.some((l) => l.status === "failed");
+      const researchHold = leadRecords.find(record => record.generationHold);
 
-      if (hasPendingApproval) {
+      if (researchHold) {
+        run.status = researchHold.generationHold?.status === "WAITING_HUMAN_APPROVAL" ? "waiting_research_approval" : "research_required";
+        run.currentStage = "RESEARCH";
+      } else if (hasPendingApproval) {
         run.status = "waiting_approval";
       } else if (hasFailed) {
         run.status = "partial_success";
@@ -202,10 +210,6 @@ export class AutonomousPipeline {
       }
 
       run.updatedAt = new Date().toISOString();
-
-      if (options.idempotencyKey) {
-        this.idempotencyCache.set(options.idempotencyKey, run);
-      }
 
       // Report progress to CEO
       await this.reportProgressToCeo(runId);
@@ -411,6 +415,15 @@ export class AutonomousPipeline {
         input: { lead, leadId: lead.leadId },
       });
 
+      const hold = readGenerationHold(prevResp.result);
+      if (hold) {
+        leadRecord.generationHold = hold;
+        leadRecord.status = hold.status === "WAITING_HUMAN_APPROVAL" ? "waiting_research_approval" : "research_required";
+        leadRecord.timeline.push({ stage: "PREVIEW_GENERATION", status: "research_required",
+          timestamp: new Date().toISOString(), details: `Generation paused for research ${hold.researchId}; no preview or outreach was created` });
+        return;
+      }
+
       if (!prevResp.success || !prevResp.result?.previewId) {
         leadRecord.status = "failed";
         leadRecord.error = "Preview generation failed";
@@ -422,62 +435,75 @@ export class AutonomousPipeline {
       leadRecord.previewUrl = prevResp.result.previewUrl;
       run.stats.previewsGenerated += 1;
 
-      // ─── STAGE 7: PREVIEW VALIDATION ────────────────────────────────────
-      leadRecord.currentStage = "PREVIEW_VALIDATION";
-      const valResp = await opsToolExecutor.executeTool({
-        tool: "validate_preview",
-        requestId: `req_val_${lead.leadId}`,
-        taskId: run.taskId,
-        tenantId: run.tenantId,
-        userId: run.userId || undefined,
-        input: {
-          previewId: prevResp.result.previewId,
-          businessName: lead.businessName,
-          lead,
-        },
-      });
+      if (!await this.validateGeneratedPreview(run, leadRecord, lead, userId)) return;
+    }
+    await this.createVerifiedOutreach(run, leadRecord, lead, userId, resResp.result?.publicContact?.email);
+  }
 
-      if (!valResp.success || !valResp.result?.passed) {
-        leadRecord.previewValidated = false;
-        leadRecord.status = "failed";
-        leadRecord.error = "Preview failed deterministic quality validation checks";
-        run.stats.previewsFailedValidation += 1;
-        run.stats.failed += 1;
+  private async validateGeneratedPreview(run: AutonomousPipelineRun, leadRecord: LeadExecutionRecord,
+    lead: { leadId: string; businessName: string; email?: string }, userId?: string): Promise<boolean> {
+    // ─── STAGE 7: PREVIEW VALIDATION ────────────────────────────────────
+    leadRecord.currentStage = "PREVIEW_VALIDATION";
+    const valResp = await this.executeResearchCheckedTool(run, {
+      tool: "validate_preview",
+      requestId: `req_val_${lead.leadId}`,
+      taskId: run.taskId,
+      tenantId: run.tenantId,
+      userId: run.userId || undefined,
+      input: {
+        previewId: leadRecord.previewId,
+        businessName: lead.businessName,
+        lead,
+      },
+    });
+    if (leadRecord.terminalOutcome || ["paused", "cancelled"].includes(run.status)) return false;
 
-        leadRecord.timeline.push({
-          stage: "PREVIEW_VALIDATION",
-          status: "failed",
-          timestamp: new Date().toISOString(),
-          details: "Quality gate blocked outreach: Preview validation failed.",
-        });
-        return; // DO NOT send outreach for invalid previews
-      }
+    if (!valResp.success || !valResp.result?.passed) {
+      leadRecord.previewValidated = false;
+      leadRecord.status = "failed";
+      leadRecord.error = "Preview failed deterministic quality validation checks";
+      run.stats.previewsFailedValidation += 1;
+      run.stats.failed += 1;
 
-      leadRecord.previewValidated = true;
-      leadRecord.crmStatus = "PREVIEW_READY";
       leadRecord.timeline.push({
         stage: "PREVIEW_VALIDATION",
-        status: "completed",
+        status: "failed",
         timestamp: new Date().toISOString(),
-        details: `Preview verified. Quality score: ${valResp.result.score}`,
+        details: "Quality gate blocked outreach: Preview validation failed.",
       });
-
-      await crmRepository.updateLeadStatus(
-        lead.leadId,
-        "PREVIEW_READY",
-        `Preview generated and validated: ${leadRecord.previewUrl}`,
-        "system",
-        undefined,
-        undefined,
-        userId
-      );
+      return false; // DO NOT send outreach for invalid previews
     }
 
+    leadRecord.previewValidated = true;
+    leadRecord.crmStatus = "PREVIEW_READY";
+    leadRecord.timeline.push({
+      stage: "PREVIEW_VALIDATION",
+      status: "completed",
+      timestamp: new Date().toISOString(),
+      details: `Preview verified. Quality score: ${valResp.result.score}`,
+    });
+
+    await crmRepository.updateLeadStatus(
+      lead.leadId,
+      "PREVIEW_READY",
+      `Preview generated and validated: ${leadRecord.previewUrl}`,
+      "system",
+      undefined,
+      undefined,
+      userId
+    );
+
+    return true;
+  }
+
+  private async createVerifiedOutreach(run: AutonomousPipelineRun, leadRecord: LeadExecutionRecord,
+    lead: { leadId: string; businessName: string; email?: string }, userId?: string, researchedEmail?: string): Promise<void> {
+    if (leadRecord.terminalOutcome || ["paused", "cancelled"].includes(run.status)) return;
     // ─── STAGE 8: OUTREACH DRAFT ─────────────────────────────────────────
     leadRecord.currentStage = "OUTREACH_DRAFT";
 
     // Validate email exists; never invent email addresses
-    const recipientEmail = lead.email || (resResp.result?.publicContact?.email as string) || "";
+    const recipientEmail = lead.email || researchedEmail || "";
     if (!recipientEmail || !recipientEmail.includes("@")) {
       leadRecord.status = "skipped";
       leadRecord.terminalReason = "UNREACHABLE_NO_EMAIL";
@@ -490,7 +516,7 @@ export class AutonomousPipeline {
       return;
     }
 
-    const draftResp = await opsToolExecutor.executeTool({
+    const draftResp = await this.executeResearchCheckedTool(run, {
       tool: "create_outreach",
       requestId: `req_draft_${lead.leadId}`,
       taskId: run.taskId,
@@ -524,6 +550,7 @@ export class AutonomousPipeline {
     leadRecord.approvalStatus = "PENDING_HUMAN_APPROVAL";
     run.stats.pendingApproval += 1;
 
+    await this.assertResearchLease(run);
     await approvalGate.registerDraft({
       pipelineRunId: run.pipelineRunId,
       leadId: lead.leadId,
@@ -556,6 +583,76 @@ export class AutonomousPipeline {
       undefined,
       userId
     );
+
+  }
+
+  /** Consume the owned approved result; never repeat discovery, research or generation. */
+  public async resumeResearch(runId: string, tenantId: string): Promise<AutonomousPipelineRun> {
+    const run = this.runs.get(runId);
+    if (!tenantId.trim() || (run && run.tenantId !== tenantId)) throw new Error("Owned pipeline run not found");
+    const key = JSON.stringify([tenantId, runId]);
+    const active = this.researchResumes.get(key);
+    if (active) return active;
+    const task = (async () => {
+      const claim = await claimAutonomousResearch(runId, tenantId);
+      if (!claim) {
+        const stored = await readAutonomousRun(runId, tenantId);
+        if (!stored) throw new Error("Owned pipeline run not found");
+        return stored;
+      }
+      this.runs.set(runId, claim.run);
+      this.runRevisions.set(runId, claim.revision);
+      this.researchLeaseTokens.set(runId, claim.token);
+      try { return await this.consumeApprovedResearch(claim.run, tenantId); }
+      finally {
+        this.researchLeaseTokens.delete(runId);
+        await releaseAutonomousResearchLease(runId, tenantId, claim.token);
+      }
+    })();
+    this.researchResumes.set(key, task);
+    try { return await task; } finally { this.researchResumes.delete(key); }
+  }
+
+  private async consumeApprovedResearch(run: AutonomousPipelineRun, tenantId: string): Promise<AutonomousPipelineRun> {
+    const { readResearchObservation } = await import("../orchestration/researchObservation");
+    for (const record of Object.values(run.leads)) {
+      if (!record.generationHold) continue;
+      if (record.terminalOutcome) { delete record.generationHold; continue; }
+      const observed = await readResearchObservation(record.generationHold.researchId, { kind: "automation", tenantId });
+      await this.assertResearchLease(run);
+      if (["paused", "cancelled"].includes(run.status)) return run;
+      if (record.terminalOutcome) { delete record.generationHold; continue; }
+      if (!observed) throw new Error("Original owned research no longer available");
+      if (["FAILED", "REJECTED", "CANCELLED"].includes(observed.status)) {
+        record.status = "failed"; record.error = "Approved research rejected or generation recovery failed";
+        delete record.generationHold; run.stats.failed++;
+        continue;
+      }
+      if (!["READY", "REPAIRED"].includes(observed.status)) continue;
+      const result = observed.result;
+      if (!result?.success || !("preview" in result) || !result.preview?.id || !result.preview.url || result.leadId !== record.leadId) {
+        throw new Error("Reviewed research handoff does not match the original lead");
+      }
+      record.previewId = result.preview.id; record.previewUrl = result.preview.url;
+      record.status = "running"; delete record.generationHold; run.stats.previewsGenerated++;
+      try {
+        if (await this.validateGeneratedPreview(run, record, record, run.userId || undefined)) {
+          await this.createVerifiedOutreach(run, record, record, run.userId || undefined);
+        }
+      } catch {
+        record.status = "failed"; record.error = "Approved preview continuation failed; administrator review required";
+        run.stats.failed++;
+      }
+    }
+    const records = Object.values(run.leads);
+    const hold = records.find(record => record.generationHold);
+    if (hold) run.status = hold.generationHold?.status === "WAITING_HUMAN_APPROVAL" ? "waiting_research_approval" : "research_required";
+    else if (records.some(record => record.status === "waiting_approval")) run.status = "waiting_approval";
+    else if (records.some(record => record.status === "failed")) run.status = "partial_success";
+    else { run.status = "completed"; run.completedAt = new Date().toISOString(); }
+    run.updatedAt = new Date().toISOString();
+    await this.checkpoint(run);
+    return run;
   }
 
   /**
@@ -568,12 +665,17 @@ export class AutonomousPipeline {
     leadId: string,
     outreachId: string,
     options: { approvedBy?: string; userId?: string } = {}
-  ): Promise<{ success: boolean; messageId?: string; error?: string }> {
+  ): Promise<{ success: boolean; messageId?: string; error?: string; isSimulated?: boolean }> {
     const run = this.runs.get(pipelineRunId);
     const leadRecord = run?.leads[leadId];
 
     // 1. Strict Human Approval Gate Check
-    const approvalRecord = approvalGate.getApprovalRecord(outreachId);
+    const effectiveUserId = options.userId || leadRecord?.userId || run?.userId || run?.tenantId || undefined;
+    if (!effectiveUserId) throw new Error("Trusted send owner required");
+    const approvalRecord = await approvalGate.getStoredApprovalRecord(outreachId, effectiveUserId);
+    if (!approvalRecord || approvalRecord.pipelineRunId !== pipelineRunId || approvalRecord.leadId !== leadId) {
+      throw new Error("Send must match the original owned approval, run and lead");
+    }
     if (approvalRecord?.status === "SENT") {
       return { success: false, error: "Duplicate send prevented: Outreach email has already been sent." };
     }
@@ -584,7 +686,6 @@ export class AutonomousPipeline {
     }
 
     // 2. Check if lead opted out (DO_NOT_CONTACT)
-    const effectiveUserId = options.userId || leadRecord?.userId || run?.userId || run?.tenantId || undefined;
     const crmState = await crmRepository.getLeadCRMState(leadId, effectiveUserId);
     if (crmState && crmState.status === "DO_NOT_CONTACT") {
       throw new Error("Pre-flight check failed: Lead is marked as DO_NOT_CONTACT.");
@@ -611,7 +712,11 @@ export class AutonomousPipeline {
     }
 
     // 4. Update approval gate and lead record
-    const messageId = sendResult.messageId || `msg_${Date.now()}`;
+    if (sendResult.isSimulated) {
+      return { success: true, messageId: sendResult.messageId, isSimulated: true };
+    }
+    if (!sendResult.messageId?.trim()) return { success: false, error: "No verified Gmail message ID; delivery reconciliation required." };
+    const messageId = sendResult.messageId;
     approvalGate.markSent(outreachId, messageId);
 
     if (leadRecord) {
@@ -925,6 +1030,7 @@ export class AutonomousPipeline {
   public async reportProgressToCeo(runId: string): Promise<void> {
     const run = this.runs.get(runId);
     if (!run) return;
+    await this.checkpoint(run);
 
     const summary = `Autonomous Pipeline Report: ${run.stats.discovered} discovered, ${run.stats.qualified} qualified, ${run.stats.previewsGenerated} previews built, ${run.stats.outreachDrafted} drafts created, ${run.stats.pendingApproval} awaiting human approval, ${run.stats.sent} sent, ${run.stats.repliesReceived} replies, ${run.stats.meetingsScheduled} meetings, ${run.stats.won} won, ${run.stats.lost} lost.`;
 
@@ -964,6 +1070,32 @@ export class AutonomousPipeline {
     return this.runs.get(runId);
   }
 
+  private async checkpoint(run: AutonomousPipelineRun): Promise<void> {
+    const revision = this.runRevisions.get(run.pipelineRunId);
+    if (revision === undefined) throw new Error("Durable autonomous execution revision missing");
+    this.runRevisions.set(run.pipelineRunId, await checkpointAutonomousRun(run, revision, this.researchLeaseTokens.get(run.pipelineRunId)));
+  }
+
+  private async assertResearchLease(run: AutonomousPipelineRun): Promise<void> {
+    const token = this.researchLeaseTokens.get(run.pipelineRunId);
+    if (token) await assertAutonomousResearchLease(run.pipelineRunId, run.tenantId || "", token);
+  }
+
+  private async executeResearchCheckedTool(run: AutonomousPipelineRun, request: Parameters<typeof opsToolExecutor.executeTool>[0]) {
+    await this.assertResearchLease(run);
+    const result = await opsToolExecutor.executeTool(request);
+    await this.assertResearchLease(run);
+    return result;
+  }
+
+  public readStoredRun(runId: string, tenantId: string): Promise<AutonomousPipelineRun | undefined> {
+    return readAutonomousRun(runId, tenantId);
+  }
+
+  public listStoredRuns(limit: number, tenantId: string): Promise<AutonomousPipelineRun[]> {
+    return listAutonomousRuns(tenantId, limit);
+  }
+
   /**
    * Lists recent pipeline runs.
    */
@@ -981,7 +1113,8 @@ export class AutonomousPipeline {
   public clear(): void {
     this.runs.clear();
     this.processedReplyIds.clear();
-    this.idempotencyCache.clear();
+    this.runRevisions.clear();
+    this.researchLeaseTokens.clear();
   }
 }
 

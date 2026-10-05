@@ -43,7 +43,7 @@ export async function GET(req: Request) {
 
     // Fetch recent operational decisions/reports from MemoryStore
     const memoryStore = MemoryStore.getInstance();
-    const recentDecisions = await memoryStore.getDecisions({
+    const recentDecisions = await memoryStore.getDecisions(auth.userId, {
       limit: 20,
     });
 

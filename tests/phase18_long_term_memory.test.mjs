@@ -344,22 +344,17 @@ describe("Phase 18 — Long-Term Memory + Real Learning", () => {
       benchmarks: { accuracy: 90, safety: 100 },
     });
 
-    // Activate
-    const active = await strategyManager.activateStrategy(draft.strategyId);
-    assert.equal(active.status, "ACTIVE");
+    // Direct legacy activation is retired — must reject requiring governed candidate evaluation
+    await assert.rejects(
+      async () => strategyManager.activateStrategy(draft.strategyId),
+      /Direct legacy activation is unavailable/
+    );
 
-    // Check active strategy lookup
-    const foundActive = await strategyManager.getActiveStrategy("fashion");
-    assert.ok(foundActive);
-    assert.equal(foundActive.strategyId, draft.strategyId);
-
-    // Rollback
-    const rolledBack = await strategyManager.rollbackStrategy("fashion", "Safety benchmark failure detected in test run");
-    assert.ok(rolledBack);
-    assert.equal(rolledBack.status, "DEPRECATED");
-
-    const currentActive = await strategyManager.getActiveStrategy("fashion");
-    assert.equal(currentActive, null, "No active strategy should remain after rollback without prior version");
+    // Direct legacy rollback is retired — must reject requiring authenticated governed rollback
+    await assert.rejects(
+      async () => strategyManager.rollbackStrategy("fashion", "Safety benchmark failure detected in test run"),
+      /Direct legacy rollback is unavailable/
+    );
   });
 
   it("Test 13: 4-Level Memory retrieval by domain and level", async () => {

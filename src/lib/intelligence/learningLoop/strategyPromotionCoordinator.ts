@@ -6,6 +6,8 @@
 // Direct CANDIDATE -> PROMOTED transitions are strictly rejected.
 
 import { GovernanceApprovalStore } from "../policies/governanceApprovalStore";
+import { requireHumanApproval } from "../pipeline/humanApprovalAuthorization";
+import { hashActionPayload } from "../policies/policyEngine";
 import { MemoryStore } from "../memory/memoryStore";
 import type {
   CandidateLesson,
@@ -13,6 +15,13 @@ import type {
   StrategyVersionRecord,
 } from "./types";
 import type { AgentStrategyRecord } from "../memory/memoryTypes";
+
+function promotionPayload(candidate: CandidateLesson) {
+  return { candidateId: candidate.id, lessonId: candidate.lessonId, domain: candidate.domain,
+    statement: candidate.statement, isAntiPattern: Boolean(candidate.metadata?.isAntiPattern),
+    evaluationReport: candidate.evaluationReport, regressionBenchmark: candidate.regressionBenchmark,
+    evidence: candidate.evidence };
+}
 
 export class StrategyPromotionCoordinator {
   private static instance: StrategyPromotionCoordinator;
@@ -41,6 +50,10 @@ export class StrategyPromotionCoordinator {
     proposedDirectives?: string[];
     proposedAvoidPatterns?: string[];
   }): { approvalId: string; candidate: CandidateLesson } {
+    if (!params.candidate.tenantId) throw new Error("Owned candidate required for promotion approval");
+    if (params.proposedDirectives?.length || params.proposedAvoidPatterns?.length) {
+      throw new Error("Extra directives must be evaluated as separate candidates before approval");
+    }
     if (params.candidate.status !== "APPROVAL_PENDING") {
       throw new Error(
         `Cannot request promotion approval for candidate with status '${params.candidate.status}'. ` +
@@ -53,14 +66,8 @@ export class StrategyPromotionCoordinator {
       tool: "strategy_promotion_coordinator",
       requestedBy: params.requestedBy,
       tenantId: params.candidate.tenantId || null,
-      actionPayload: {
-        candidateId: params.candidate.id,
-        lessonId: params.candidate.lessonId,
-        domain: params.candidate.domain,
-        statement: params.candidate.statement,
-        proposedDirectives: params.proposedDirectives,
-        proposedAvoidPatterns: params.proposedAvoidPatterns,
-      },
+      taskId: params.candidate.id,
+      actionPayload: promotionPayload(params.candidate),
     });
 
     params.candidate.approvalId = approval.approvalId;
@@ -76,11 +83,16 @@ export class StrategyPromotionCoordinator {
     approvalId: string;
     approvedBy: string;
     tenantId?: string | null;
+    authorization?: unknown;
   }): Promise<{
     candidate: CandidateLesson;
     newStrategy: StrategyVersionRecord;
     diff: StrategyDiff;
   }> {
+    const authenticatedUser = requireHumanApproval(params.authorization, params.tenantId);
+    if (authenticatedUser !== params.approvedBy || params.candidate.tenantId !== params.tenantId) {
+      throw new Error("Strategy promotion requires the authenticated candidate owner");
+    }
     // Check 1: Invariant - State must be APPROVAL_PENDING
     if (params.candidate.status === "CANDIDATE") {
       throw new Error(
@@ -101,24 +113,32 @@ export class StrategyPromotionCoordinator {
       throw new Error("Cannot promote candidate: Regression benchmark has not passed.");
     }
 
+    const reviewed = this.approvalStore.getRecord(params.approvalId);
+    if (params.candidate.approvalId !== params.approvalId || !reviewed || reviewed.tenantId !== params.tenantId ||
+        reviewed.action !== "promote_strategy" || reviewed.tool !== "strategy_promotion_coordinator" ||
+        reviewed.taskId !== params.candidate.id || reviewed.actionHash !== hashActionPayload(promotionPayload(params.candidate))) {
+      throw new Error("Candidate or regression evidence changed after promotion review; fresh approval required");
+    }
+
     // Check 3: Human governance approval authorization
     // GovernanceApprovalStore.approve() strictly rejects automated approvers (AI, CEO, Boss, n8n)
     this.approvalStore.approve({
       approvalId: params.approvalId,
       approvedBy: params.approvedBy,
       tenantId: params.tenantId ?? params.candidate.tenantId,
+      authorization: params.authorization,
     });
 
     // Check 4: Consume approval token (one-time use)
-    this.approvalStore.consume(params.approvalId);
+    this.approvalStore.consume(params.approvalId, params.tenantId);
 
     const domain = params.candidate.domain.toLowerCase().trim();
-    const existingVersions = this.getStrategyVersionsForDomain(domain);
+    const existingVersions = this.getStrategyVersionsForDomain(domain, params.tenantId);
     const activeVersion = existingVersions.find((v) => v.status === "ACTIVE");
 
     const versionNumber = existingVersions.length + 1;
     const version = `v${versionNumber}`;
-    const strategyId = `strat_${domain}_${version}`;
+    const strategyId = `strat_${hashActionPayload({ tenantId: params.tenantId, domain })}_${version}`;
     const now = new Date().toISOString();
 
     const isAntiPattern = Boolean(params.candidate.metadata?.isAntiPattern);
@@ -166,6 +186,7 @@ export class StrategyPromotionCoordinator {
     }
 
     const newStrategy: StrategyVersionRecord = {
+      tenantId: params.tenantId,
       strategyId,
       domain,
       version,
@@ -185,10 +206,11 @@ export class StrategyPromotionCoordinator {
     };
 
     existingVersions.push(newStrategy);
-    this.strategyVersions.set(domain, existingVersions);
+    this.strategyVersions.set(JSON.stringify([params.tenantId, domain]), existingVersions);
 
     // Also persist into MemoryStore for backward compatibility with Phase 18
     const legacyRecord: AgentStrategyRecord = {
+      tenantId: params.tenantId,
       id: strategyId,
       strategyId,
       name: `${domain}_strategy_${version}`,
@@ -227,9 +249,13 @@ export class StrategyPromotionCoordinator {
     targetVersion?: string;
     rollbackReason: string;
     executedBy: string;
+    tenantId?: string | null;
+    authorization?: unknown;
   }): { rolledBackVersion: StrategyVersionRecord; restoredVersion: StrategyVersionRecord | null } {
+    const authenticatedUser = requireHumanApproval(params.authorization, params.tenantId);
+    if (authenticatedUser !== params.executedBy) throw new Error("Strategy rollback actor identity mismatch");
     const domain = params.domain.toLowerCase().trim();
-    const versions = this.getStrategyVersionsForDomain(domain);
+    const versions = this.getStrategyVersionsForDomain(domain, params.tenantId);
     const activeVersion = versions.find((v) => v.status === "ACTIVE");
 
     if (!activeVersion) {
@@ -270,23 +296,25 @@ export class StrategyPromotionCoordinator {
     };
   }
 
-  public getStrategyVersionsForDomain(domain: string): StrategyVersionRecord[] {
-    const d = domain.toLowerCase().trim();
+  public getStrategyVersionsForDomain(domain: string, tenantId?: string | null): StrategyVersionRecord[] {
+    if (!tenantId) return [];
+    const d = JSON.stringify([tenantId, domain.toLowerCase().trim()]);
     if (!this.strategyVersions.has(d)) {
       this.strategyVersions.set(d, []);
     }
     return this.strategyVersions.get(d)!;
   }
 
-  public getActiveStrategy(domain: string): StrategyVersionRecord | null {
-    const versions = this.getStrategyVersionsForDomain(domain);
+  public getActiveStrategy(domain: string, tenantId?: string | null): StrategyVersionRecord | null {
+    const versions = this.getStrategyVersionsForDomain(domain, tenantId);
     return versions.find((v) => v.status === "ACTIVE") || null;
   }
 
-  public listAllActiveStrategies(): StrategyVersionRecord[] {
+  public listAllActiveStrategies(tenantId?: string | null): StrategyVersionRecord[] {
+    if (!tenantId) return [];
     const active: StrategyVersionRecord[] = [];
     for (const versions of this.strategyVersions.values()) {
-      const act = versions.find((v) => v.status === "ACTIVE");
+      const act = versions.find((v) => v.tenantId === tenantId && v.status === "ACTIVE");
       if (act) active.push(act);
     }
     return active;

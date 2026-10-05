@@ -2320,7 +2320,7 @@ export function generateDesignStrategy(context: StrategyInputContext): ComputedD
     : options[seedNum % options.length];
 
   let defaultPrimary = chosenPalette.p;
-  let defaultSecondary = chosenPalette.s;
+  const defaultSecondary = chosenPalette.s;
 
   const hasColorCollision = isCollided(chosenPalette.p) || isCollided(chosenPalette.name);
   if (hasColorCollision && uncollided.length === 0) {

@@ -26,18 +26,41 @@ export class MemoryRetriever {
 
   /**
    * Retrieves relevance-scoped verified memory for the CEO or agent execution.
+   * Requires trusted tenant context; returns empty result if tenant context is missing.
    */
   public async retrieve(query: MemoryQuery): Promise<MemoryRetrievalResult> {
+    const tenantId = (query.tenantId || query.userId || "").trim();
     const domain = (query.domain || "general").toLowerCase();
     const minConfidence = query.minConfidence ?? 0.6;
     const limit = query.limit ?? 10;
 
+    // Strict tenant isolation: private memory must never be read without trusted tenant context
+    if (!tenantId) {
+      return {
+        memories: [],
+        totalFound: 0,
+        highestConfidence: 0,
+        activeStrategy: null,
+        relevantLessons: [],
+        businessContext: null,
+        workingMemory: [],
+        businessMemory: [],
+        experienceMemory: [],
+        strategicMemory: [],
+        experienceSummary: {
+          pastRunsCount: 0,
+          successRate: 100,
+          knownFailurePatterns: [],
+        },
+      } as any;
+    }
+
     const retrievedItems: RetrievedMemoryItem[] = [];
 
-    // 1. STRATEGIC MEMORY (Active, promoted domain strategies)
+    // 1. STRATEGIC MEMORY (Active, promoted domain strategies for this tenant)
     let activeStrategy: AgentStrategyRecord | undefined;
     if (!query.level || query.level === "STRATEGIC_MEMORY") {
-      activeStrategy = await this.store.getActiveStrategyForDomain(domain);
+      activeStrategy = await this.store.getActiveStrategyForDomain(tenantId, domain);
       if (activeStrategy) {
         retrievedItems.push({
           id: activeStrategy.strategyId,
@@ -58,10 +81,10 @@ export class MemoryRetriever {
       }
     }
 
-    // 2. EXPERIENCE MEMORY (Verified / Promoted Lessons only — reject candidates or deprecated items)
+    // 2. EXPERIENCE MEMORY (Verified / Promoted Lessons for this tenant)
     let relevantLessons: AgentLessonRecord[] = [];
     if (!query.level || query.level === "EXPERIENCE_MEMORY") {
-      const allLessons = await this.store.listLessons(domain);
+      const allLessons = await this.store.listLessons(tenantId, domain);
       relevantLessons = allLessons.filter((l) => {
         // Strict evidence filter: Only PROMOTED or VERIFIED lessons with confidence >= threshold
         const isVerified = l.status === "PROMOTED" || l.status === "VERIFIED";
@@ -83,10 +106,10 @@ export class MemoryRetriever {
       }
     }
 
-    // 3. BUSINESS MEMORY (Strictly isolated by projectId and userId)
+    // 3. BUSINESS MEMORY (Strictly isolated by projectId and tenant)
     let businessContext: BusinessMemoryItem | null = null;
     if (query.projectId && (!query.level || query.level === "BUSINESS_MEMORY")) {
-      const bMem = await this.store.getBusinessMemory(query.projectId, query.userId);
+      const bMem = await this.store.getBusinessMemory(tenantId, query.projectId);
       if (bMem) {
         businessContext = bMem;
         retrievedItems.push({
@@ -106,9 +129,9 @@ export class MemoryRetriever {
       }
     }
 
-    // 4. EXPERIENCE SUMMARY (Aggregated from past runs & failures for domain)
-    const domainRuns = await this.store.listRuns(50, domain);
-    const domainFailures = await this.store.listFailures(50, domain);
+    // 4. EXPERIENCE SUMMARY (Aggregated from tenant's past runs & failures for domain)
+    const domainRuns = await this.store.listRuns(tenantId, 50, domain);
+    const domainFailures = await this.store.listFailures(tenantId, 50, domain);
 
     const successfulRuns = domainRuns.filter((r) => r.success).length;
     const successRate = domainRuns.length > 0 ? Math.round((successfulRuns / domainRuns.length) * 100) : 100;

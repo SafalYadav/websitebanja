@@ -2,34 +2,22 @@
 // Phase 13 — Autonomous Lead Pipeline API: Retry Failed Jobs for Run
 
 import { NextResponse } from "next/server";
-import { isAuthorized } from "@/lib/automation/auth";
+import { authorizeAutomationTenant } from "@/lib/automation/automationApiIdentity";
 import { PipelineOrchestrator } from "@/lib/automation/pipelineOrchestrator";
 import { sanitizeErrorOutput } from "@/lib/ai/router/modelConfig";
+import { PipelineRunIdSchema } from "@/lib/automation/pipelineTypes";
 
 export async function POST(
   req: Request,
   { params }: { params: Promise<{ runId: string }> }
 ) {
-  if (!(await isAuthorized(req))) {
-    return NextResponse.json(
-      {
-        success: false,
-        error: { code: "UNAUTHORIZED", message: "Unauthorized: Missing or invalid automation secret." },
-      },
-      { status: 401 }
-    );
-  }
+  const auth = await authorizeAutomationTenant(req);
+  if (auth.response) return auth.response;
 
   try {
     const { runId } = await params;
-    let body: { userId?: string } = {};
-    try {
-      body = await req.json();
-    } catch {
-      // Body optional
-    }
-
-    const run = await PipelineOrchestrator.retryFailedJobs(runId, body.userId);
+    if (!PipelineRunIdSchema.safeParse(runId).success) return NextResponse.json({ success: false, error: { code: "VALIDATION_ERROR", message: "Invalid pipeline identifier" } }, { status: 400 });
+    const run = await PipelineOrchestrator.retryFailedJobs(runId, auth.identity.userId, auth.identity.tenantId);
     return NextResponse.json({ success: true, run });
   } catch (err) {
     return NextResponse.json(

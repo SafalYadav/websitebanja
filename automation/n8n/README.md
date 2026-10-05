@@ -2,6 +2,18 @@
 
 This directory contains the exported n8n workflow and configuration for triggering local preview website generation from n8n.
 
+## Governed research / approval resume
+
+The local and personalized preview workflows now handle HTTP 409 research responses instead of treating them as completed previews. Import the updated JSON exports into n8n; editing files here does not update a running n8n instance.
+
+Configure `WEBSITEBANJA_BASE_URL` and `WEBSITEBANJA_AUTOMATION_SECRET` on n8n. Configure the matching secret and `AUTOMATION_TENANT_ID` on the WebsiteBanja server. Tenant identity is never accepted from workflow payloads. Use HTTPS for production; the localhost default is for local development.
+
+Flow: generation → Research Pending? → Wait for Human Review (two minutes) → authenticated `GET /api/automation/research/<research-id>` → normalize result → success gate. Pending states return to Wait; rejected/failed/quality-blocked states go to the error branch. READY/REPAIRED results must contain an approved preview ID before outreach handoff. Polling never POSTs generation again, never approves research, and never activates learning. The server resumes the stored original request only after real human-admin approval using a fenced durable lease.
+
+The two-minute wait allows n8n to offload paused execution state, per the [official Wait documentation](https://docs.n8n.io/integrations/builtin/core-nodes/n8n-nodes-base.wait). No approval webhook or automatic approval node is introduced.
+
+Current verification covers exported graph structure, code-node contract behavior and mocked tenant-scoped status reads. Import/execution in the actual n8n instance, PostgreSQL concurrency and downstream outreach delivery remain required acceptance checks. Autonomous/ops workflows have separate orchestration paths and are not certified by these two exports.
+
 ---
 
 ## 1. Prerequisites

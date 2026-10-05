@@ -75,9 +75,10 @@ export class ExecutiveOrchestrator {
     transitionState("OBSERVING", { objective: request.objective });
     const context: ExecutiveContext = await buildExecutiveContext(request, runId);
     const domain = context.detectedDomain || "general";
+    const tenantId = context.tenantId || request.tenantId || request.userId || "default_tenant";
 
     // Persist run start and execution_started event into long-term memory
-    await this.store.saveRun({
+    await this.store.saveRun(tenantId, {
       id: runId,
       runId,
       parentRunId: null,
@@ -94,7 +95,7 @@ export class ExecutiveOrchestrator {
       createdAt: new Date(startTime).toISOString(),
     });
 
-    await this.store.saveEvent({
+    await this.store.saveEvent(tenantId, {
       id: `evt_start_${Date.now()}`,
       eventId: `evt_start_${Date.now()}`,
       runId,
@@ -142,7 +143,7 @@ export class ExecutiveOrchestrator {
     }
 
     // Persist strategic decision into long-term memory
-    await this.store.saveDecision({
+    await this.store.saveDecision(tenantId, {
       id: `dec_${Date.now()}`,
       decisionId: `dec_${Date.now()}`,
       runId,
@@ -156,7 +157,7 @@ export class ExecutiveOrchestrator {
       createdAt: new Date().toISOString(),
     });
 
-    await this.store.saveEvent({
+    await this.store.saveEvent(tenantId, {
       id: `evt_plan_${Date.now()}`,
       eventId: `evt_plan_${Date.now()}`,
       runId,
@@ -407,7 +408,7 @@ export class ExecutiveOrchestrator {
 
     // Record failure if not recovered
     if (!isExecutionSuccess) {
-      await this.store.saveFailure({
+      await this.store.saveFailure(tenantId, {
         id: `fail_${Date.now()}`,
         failureId: `fail_${Date.now()}`,
         runId,
@@ -441,6 +442,7 @@ export class ExecutiveOrchestrator {
           statement: `Strategy '${decision.next_action}' verified successful for domain '${domain}' with ${verifications.length} passed checks.`,
           domain,
           sourceRunId: runId,
+          tenantId,
           initialEvidence: {
             type: "execution_outcome",
             description: `All ${verifications.length} validation and quality checks passed in ${durationMs}ms.`,
@@ -453,7 +455,7 @@ export class ExecutiveOrchestrator {
     }
 
     // Update final run state in MemoryStore
-    await this.store.saveRun({
+    await this.store.saveRun(tenantId, {
       id: runId,
       runId,
       parentRunId: null,
@@ -474,7 +476,7 @@ export class ExecutiveOrchestrator {
       createdAt: new Date(startTime).toISOString(),
     });
 
-    await this.store.saveEvent({
+    await this.store.saveEvent(tenantId, {
       id: `evt_end_${Date.now()}`,
       eventId: `evt_end_${Date.now()}`,
       runId,

@@ -23,10 +23,8 @@ import {
   CheckCircle2,
   Lock,
   ArrowRight,
-  Filter,
   Compass,
   Target,
-  Cpu,
   MessageSquare,
   Send,
   BarChart3,
@@ -36,6 +34,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import AdminIntelligenceCenter from "@/components/admin/AdminIntelligenceCenter";
+import BusinessResearchApprovals from "@/components/admin/BusinessResearchApprovals";
 import AdminUsersAccess from "@/components/admin/AdminUsersAccess";
 import AdminBossResearchPanel from "@/components/admin/AdminBossResearchPanel";
 import AdminLeadCommandCenter from "@/components/admin/AdminLeadCommandCenter";
@@ -147,7 +146,7 @@ function AdminDashboardContent() {
   const [isUnauthorized, setIsUnauthorized] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [data, setData] = useState<AnalyticsData | null>(null);
-  const [activeTab, setActiveTab] = useState<TabType>(() => normalizeTab(tabParam));
+  const activeTab = normalizeTab(tabParam);
 
   // Filter & Search states
   const [projectSearch, setProjectSearch] = useState("");
@@ -157,22 +156,13 @@ function AdminDashboardContent() {
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [sessionToken, setSessionToken] = useState<string | undefined>(undefined);
 
-  // Sync tab with URL query parameter
-  useEffect(() => {
-    if (tabParam) {
-      const matched = normalizeTab(tabParam);
-      setActiveTab(matched);
-    }
-  }, [tabParam]);
-
   const handleTabChange = useCallback((tab: TabType) => {
-    setActiveTab(tab);
     if (typeof window !== "undefined") {
       const url = new URL(window.location.href);
       url.searchParams.set("tab", tab);
-      window.history.replaceState(null, "", url.toString());
+      router.replace(`${url.pathname}${url.search}${url.hash}`, { scroll: false });
     }
-  }, []);
+  }, [router]);
 
   useEffect(() => {
     let isMounted = true;
@@ -243,7 +233,7 @@ function AdminDashboardContent() {
     };
   }, []);
 
-  const handleRefresh = useCallback(async () => {
+  const handleRefresh = async () => {
     setIsRefreshing(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -272,7 +262,7 @@ function AdminDashboardContent() {
     } finally {
       setIsRefreshing(false);
     }
-  }, []);
+  };
 
   if (isLoading) {
     return (
@@ -343,7 +333,7 @@ function AdminDashboardContent() {
     );
   }
 
-  const { overview, timeSeries, usersDirectory, projectsDirectory, recentActivity } = data;
+  const { overview, timeSeries, projectsDirectory, recentActivity } = data;
 
   const filteredProjects = projectsDirectory.filter((p) => {
     return (
@@ -654,7 +644,7 @@ function AdminDashboardContent() {
         {/* Tab 2: AI Health & Agents                                 */}
         {/* ======================================================== */}
         {activeTab === "ai_health" && (
-          <AdminIntelligenceCenter sessionToken={sessionToken} onNavigateTab={(tab) => handleTabChange(tab as TabType)} />
+          <><BusinessResearchApprovals sessionToken={sessionToken} /><AdminIntelligenceCenter sessionToken={sessionToken} onNavigateTab={(tab) => handleTabChange(tab as TabType)} /></>
         )}
 
         {/* ======================================================== */}

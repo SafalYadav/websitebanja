@@ -71,6 +71,7 @@ export async function buildExecutiveContext(
   try {
     const { MemoryRetriever } = await import("../memory/memoryRetriever");
     const memResult = await MemoryRetriever.getInstance().retrieve({
+      tenantId: request.tenantId || request.userId,
       domain: detectedDomain,
       projectId: request.projectId || undefined,
       userId: request.userId || undefined,
@@ -102,6 +103,7 @@ export async function buildExecutiveContext(
     objective: request.objective,
     priority: request.priority || "medium",
     userId: request.userId,
+    tenantId: request.tenantId || request.userId || "default_tenant",
     projectId: request.projectId,
     sessionId: request.sessionId,
     allowExternalWrite: request.allowExternalWrite ?? false,

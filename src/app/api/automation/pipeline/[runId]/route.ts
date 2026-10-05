@@ -2,28 +2,23 @@
 // Phase 13 — Autonomous Lead Pipeline API: Get Run Details & Handoff Contract
 
 import { NextResponse } from "next/server";
-import { isAuthorized } from "@/lib/automation/auth";
+import { authorizeAutomationTenant } from "@/lib/automation/automationApiIdentity";
 import { PipelineQueue } from "@/lib/automation/pipelineQueue";
 import { PipelineOrchestrator } from "@/lib/automation/pipelineOrchestrator";
 import { sanitizeErrorOutput } from "@/lib/ai/router/modelConfig";
+import { PipelineRunIdSchema } from "@/lib/automation/pipelineTypes";
 
 export async function GET(
   req: Request,
   { params }: { params: Promise<{ runId: string }> }
 ) {
-  if (!(await isAuthorized(req))) {
-    return NextResponse.json(
-      {
-        success: false,
-        error: { code: "UNAUTHORIZED", message: "Unauthorized: Missing or invalid automation secret." },
-      },
-      { status: 401 }
-    );
-  }
+  const auth = await authorizeAutomationTenant(req);
+  if (auth.response) return auth.response;
 
   try {
     const { runId } = await params;
-    const run = await PipelineQueue.getPipelineRun(runId);
+    if (!PipelineRunIdSchema.safeParse(runId).success) return NextResponse.json({ success: false, error: { code: "VALIDATION_ERROR", message: "Invalid pipeline identifier" } }, { status: 400 });
+    const run = await PipelineQueue.getPipelineRun(runId, auth.identity.tenantId);
     if (!run) {
       return NextResponse.json(
         {
@@ -34,7 +29,7 @@ export async function GET(
       );
     }
 
-    const handoff = await PipelineOrchestrator.getHandoffContract(runId);
+    const handoff = await PipelineOrchestrator.getHandoffContract(runId, auth.identity.tenantId);
 
     return NextResponse.json({
       success: true,

@@ -23,6 +23,7 @@ import type { AutomationPreviewRequest, AutomationErrorResponse } from "@/lib/au
 
 const MAX_PAYLOAD_BYTES = 256 * 1024; // 256 KB
 import { isAuthorized } from "@/lib/automation/auth";
+import { verifyAdminAuth } from "@/lib/adminAuth";
 
 export async function POST(req: Request) {
   const requestId = `req_auto_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
@@ -124,11 +125,15 @@ export async function POST(req: Request) {
   }
 
   // 4. Idempotency Check
+  const admin = await verifyAdminAuth(req);
+  const tenantId = admin.isAdmin && admin.userId ? admin.userId : process.env.AUTOMATION_TENANT_ID;
+  if (!tenantId) return NextResponse.json({ success: false, error: { code: "AUTOMATION_TENANT_REQUIRED", message: "Configure a server-side automation tenant or use an authenticated administrator session" } }, { status: 403 });
   const explicitIdempotencyKey =
     req.headers.get("x-idempotency-key") || body.idempotencyKey;
   const idempotencyKey = computeIdempotencyKey(
     explicitIdempotencyKey,
-    body as unknown as Record<string, unknown>
+    body as unknown as Record<string, unknown>,
+    tenantId
   );
 
   const cachedResponse = getIdempotentResult(idempotencyKey);
@@ -179,7 +184,8 @@ export async function POST(req: Request) {
 
   // 6. Pipeline Execution
   try {
-    const result = await generateAutomationPreview(body, requestId);
+    const result = await generateAutomationPreview(body, requestId, { tenantId, userId: admin.isAdmin ? admin.userId : undefined });
+    if (!result.success) return NextResponse.json(result, { status: result.status === "failed" ? 500 : 409 });
 
     emitAgentEvent({
       event: "automation.website_generation_completed",

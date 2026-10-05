@@ -5,21 +5,14 @@ import { NextResponse } from "next/server";
 import { PipelineQueue } from "@/lib/automation/pipelineQueue";
 import { sanitizeErrorOutput } from "@/lib/ai/router/modelConfig";
 
-import { isAuthorized } from "@/lib/automation/auth";
+import { authorizeAutomationTenant } from "@/lib/automation/automationApiIdentity";
 
 export async function GET(req: Request) {
-  if (!(await isAuthorized(req))) {
-    return NextResponse.json(
-      {
-        success: false,
-        error: { code: "UNAUTHORIZED", message: "Unauthorized: Missing or invalid automation secret." },
-      },
-      { status: 401 }
-    );
-  }
+  const auth = await authorizeAutomationTenant(req);
+  if (auth.response) return auth.response;
 
   try {
-    const runs = await PipelineQueue.listPipelineRuns();
+    const runs = await PipelineQueue.listPipelineRuns(auth.identity.tenantId);
     return NextResponse.json({
       success: true,
       count: runs.length,

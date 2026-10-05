@@ -1,6 +1,6 @@
 // src/lib/intelligence/learning/strategyManager.ts
 import { MemoryStore } from "../memory/memoryStore";
-import type { AgentStrategyRecord, StrategyStatus } from "../memory/memoryTypes";
+import type { AgentStrategyRecord } from "../memory/memoryTypes";
 import { sanitizeErrorOutput } from "@/lib/ai/router/modelConfig";
 
 export const BENCHMARK_CATEGORIES = [
@@ -17,6 +17,7 @@ export const BENCHMARK_CATEGORIES = [
 ] as const;
 
 export interface StrategyRegressionResult {
+  status: "unavailable";
   passed: boolean;
   score: number; // 0 - 100
   categoriesTested: number;
@@ -50,9 +51,11 @@ export class StrategyManager {
     avoidPatterns?: string[];
     promotedFromLessonId?: string;
     benchmarks?: Record<string, number>;
+    tenantId?: string | null;
   }): Promise<AgentStrategyRecord> {
+    const tenantId = (params.tenantId || "default_tenant").trim();
     const domain = params.domain.toLowerCase();
-    const existingStrategies = await this.store.listStrategies(domain);
+    const existingStrategies = await this.store.listStrategies(tenantId, domain);
 
     const versionNum = existingStrategies.length + 1;
     const version = `strategy_v${versionNum}`;
@@ -60,6 +63,7 @@ export class StrategyManager {
     const now = new Date().toISOString();
 
     const strategy: AgentStrategyRecord = {
+      tenantId,
       id: strategyId,
       strategyId,
       name: sanitizeErrorOutput(params.name),
@@ -77,7 +81,7 @@ export class StrategyManager {
       updatedAt: now,
     } as any;
 
-    await this.store.saveStrategy(strategy);
+    await this.store.saveStrategy(tenantId, strategy);
     return strategy;
   }
 
@@ -113,7 +117,8 @@ export class StrategyManager {
   }
 
   /**
-   * Executes simulated regression test suite across the 10 standard WebsiteBanja categories.
+   * Legacy heuristic checks are not executed regression evidence.
+   * Canonical governed research/learning evaluation owns verification and activation.
    */
   public async runRegressionTests(strategyId: string): Promise<StrategyRegressionResult> {
     const strategy = await this.store.getStrategy(strategyId);
@@ -121,45 +126,12 @@ export class StrategyManager {
       throw new Error(`Strategy '${strategyId}' not found.`);
     }
 
-    const details: Record<string, { passed: boolean; note?: string }> = {};
-    let passedCount = 0;
-
-    for (const cat of BENCHMARK_CATEGORIES) {
-      const isTargetDomain = cat.includes(strategy.domain);
-      const hasConflict = strategy.avoidPatterns.some((pattern) =>
-        cat.toLowerCase().includes(pattern.toLowerCase())
-      );
-
-      // If a category has an explicit conflict with the strategy domain, ensure it is avoided
-      if (hasConflict && !isTargetDomain) {
-        details[cat] = {
-          passed: true,
-          note: `Conflict with '${strategy.domain}' cleanly guarded by avoid_patterns.`,
-        };
-        passedCount++;
-      } else {
-        details[cat] = {
-          passed: true,
-          note: "Passed baseline domain boundary check.",
-        };
-        passedCount++;
-      }
-    }
-
-    const score = Math.round((passedCount / BENCHMARK_CATEGORIES.length) * 100);
-    const passed = score >= 90;
-
-    strategy.status = passed ? "APPROVED" : "EVALUATION";
-    strategy.benchmarkResults = { score, passed, testedAt: new Date().toISOString() };
-    strategy.updatedAt = new Date().toISOString();
-
-    await this.store.saveStrategy(strategy);
-
     return {
-      passed,
-      score,
-      categoriesTested: BENCHMARK_CATEGORIES.length,
-      details,
+      status: "unavailable",
+      passed: false,
+      score: 0,
+      categoriesTested: 0,
+      details: { verification: { passed: false, note: "No executed regression evidence. Submit a candidate through governed learning evaluation and human approval." } },
     };
   }
 
@@ -167,35 +139,11 @@ export class StrategyManager {
    * Activates an approved strategy for production, cleanly deprecating the prior version.
    */
   public async activateStrategy(strategyId: string): Promise<AgentStrategyRecord> {
-    const target = await this.store.getStrategy(strategyId);
-    if (!target) {
-      throw new Error(`Strategy '${strategyId}' not found.`);
-    }
-
-    if (target.status !== "APPROVED" && target.status !== "DRAFT") {
-      throw new Error(`Cannot activate strategy with status '${target.status}'. Must be APPROVED or DRAFT.`);
-    }
-
-    // Deprecate currently active strategy for this domain
-    const activeCurrent = await this.store.getActiveStrategyForDomain(target.domain);
-    if (activeCurrent && activeCurrent.strategyId !== target.strategyId) {
-      activeCurrent.status = "DEPRECATED";
-      activeCurrent.deprecatedAt = new Date().toISOString();
-      activeCurrent.updatedAt = new Date().toISOString();
-      await this.store.saveStrategy(activeCurrent);
-      target.supersedesVersion = activeCurrent.version;
-    }
-
-    target.status = "ACTIVE";
-    target.activatedAt = new Date().toISOString();
-    target.updatedAt = new Date().toISOString();
-    await this.store.saveStrategy(target);
-
-    return target;
+    throw new Error(`Direct legacy activation is unavailable for '${strategyId}'. Use governed candidate evaluation and authenticated human promotion.`);
   }
 
-  public async getActiveStrategy(domain: string): Promise<AgentStrategyRecord | null> {
-    const s = await this.store.getActiveStrategyForDomain(domain);
+  public async getActiveStrategy(domain: string, tenantId?: string | null): Promise<AgentStrategyRecord | null> {
+    const s = await this.store.getActiveStrategyForDomain(domain, tenantId);
     return s || null;
   }
 
@@ -203,24 +151,6 @@ export class StrategyManager {
    * Rolls back an active strategy to a previous approved version or deprecates it.
    */
   public async rollbackStrategy(domain: string, targetVersionOrReason?: string): Promise<AgentStrategyRecord | null> {
-    const active = await this.store.getActiveStrategyForDomain(domain);
-    const strategies = await this.store.listStrategies(domain);
-    const target = strategies.find((s) => s.version === targetVersionOrReason);
-
-    if (active) {
-      active.status = "DEPRECATED";
-      active.deprecatedAt = new Date().toISOString();
-      await this.store.saveStrategy(active);
-    }
-
-    if (target) {
-      target.status = "ACTIVE";
-      target.activatedAt = new Date().toISOString();
-      target.updatedAt = new Date().toISOString();
-      await this.store.saveStrategy(target);
-      return target;
-    }
-
-    return active || null;
+    throw new Error(`Direct legacy rollback is unavailable for '${domain}' (${targetVersionOrReason ?? "previous version"}). Use authenticated governed rollback.`);
   }
 }

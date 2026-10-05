@@ -34,6 +34,7 @@ export class LessonEngine {
     rule?: string;
     domain: string;
     sourceRunId?: string;
+    tenantId?: string | null;
     initialConfidence?: number;
     initialEvidence?: {
       type?: EvidenceType;
@@ -43,6 +44,7 @@ export class LessonEngine {
       verified?: boolean;
     };
   }): Promise<AgentLessonRecord> {
+    const tenantId = (params.tenantId || "default_tenant").trim();
     const lessonId = `lsn_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
     const now = new Date().toISOString();
     const sourceRunId = params.sourceRunId || params.initialEvidence?.referenceId || `run_src_${Date.now()}`;
@@ -77,6 +79,7 @@ export class LessonEngine {
       supportingOutcomes: params.initialEvidence ? 1 : 0,
       contradictingOutcomes: 0,
       validationCount: 0,
+      metadata: { tenantId },
       createdAt: now,
       updatedAt: now,
     };
@@ -85,8 +88,9 @@ export class LessonEngine {
     (lesson as any).confidenceScore = confidence;
     (lesson as any).rule = lesson.statement;
     (lesson as any).insight = lesson.title;
+    (lesson as any).tenantId = tenantId;
 
-    await this.store.saveLesson(lesson);
+    await this.store.saveLesson(tenantId, lesson);
     return lesson;
   }
 
@@ -95,8 +99,18 @@ export class LessonEngine {
    * Supports contradictory evidence without overwriting history.
    */
   public async recordEvidence(
-    lessonId: string,
-    evidence: {
+    tenantOrLessonId: string,
+    lessonIdOrEvidence: string | {
+      type?: EvidenceType;
+      source?: string;
+      referenceId?: string;
+      description: string;
+      runId?: string;
+      isContradictory?: boolean;
+      verified?: boolean;
+      weight?: number;
+    },
+    optionalEvidence?: {
       type?: EvidenceType;
       source?: string;
       referenceId?: string;
@@ -107,7 +121,24 @@ export class LessonEngine {
       weight?: number;
     }
   ): Promise<AgentLessonRecord | undefined> {
-    const lesson = await this.store.getLesson(lessonId);
+    let tenantId: string;
+    let lessonId: string;
+    let evidence: any;
+
+    if (optionalEvidence !== undefined) {
+      tenantId = tenantOrLessonId;
+      lessonId = lessonIdOrEvidence as string;
+      evidence = optionalEvidence;
+    } else {
+      lessonId = tenantOrLessonId;
+      evidence = lessonIdOrEvidence;
+      tenantId = (evidence?.tenantId || "default_tenant").trim();
+    }
+
+    let lesson = await this.store.getLesson(tenantId, lessonId);
+    if (!lesson) {
+      lesson = await this.store.getLesson(lessonId);
+    }
     if (!lesson) return undefined;
 
     const runId = evidence.runId || evidence.referenceId || `run_${Date.now()}`;
@@ -131,16 +162,13 @@ export class LessonEngine {
     }
 
     if (evidence.isContradictory) {
-      // Contradictory evidence decreases confidence
       lesson.contradictingOutcomes += 1;
       lesson.confidence = Math.max(0.1, Number((lesson.confidence - weight).toFixed(2)));
 
-      // If contradicting outcomes match or exceed supporting outcomes, reject lesson
       if (lesson.contradictingOutcomes >= lesson.supportingOutcomes) {
         lesson.status = "REJECTED";
       }
     } else {
-      // Supporting evidence increases confidence
       lesson.supportingOutcomes += 1;
       lesson.confidence = Math.min(0.99, Number((lesson.confidence + weight).toFixed(2)));
 
@@ -156,33 +184,53 @@ export class LessonEngine {
     (lesson as any).rule = lesson.statement;
     (lesson as any).insight = lesson.title;
 
-    await this.store.saveLesson(lesson);
+    await this.store.saveLesson(tenantId, lesson);
     return lesson;
   }
 
   public async recordContradictoryEvidence(
-    lessonId: string,
-    evidence: {
-      type?: EvidenceType;
-      source?: string;
-      referenceId?: string;
-      description: string;
-      runId?: string;
-      verified?: boolean;
-      weight?: number;
-    }
+    tenantOrLessonId: string,
+    lessonIdOrEvidence: any,
+    optionalEvidence?: any
   ): Promise<AgentLessonRecord | undefined> {
-    return this.recordEvidence(lessonId, {
-      ...evidence,
+    if (optionalEvidence !== undefined) {
+      return this.recordEvidence(tenantOrLessonId, lessonIdOrEvidence, {
+        ...optionalEvidence,
+        isContradictory: true,
+      });
+    }
+    return this.recordEvidence(tenantOrLessonId, {
+      ...lessonIdOrEvidence,
       isContradictory: true,
     });
   }
 
   /**
-   * Manually sets lesson status (for human reviewers or automated promotions).
+   * Sets lesson status (for human reviewers or automated promotions).
    */
-  public async updateStatus(lessonId: string, status: LessonStatus): Promise<AgentLessonRecord | undefined> {
-    const lesson = await this.store.getLesson(lessonId);
+  public async updateStatus(
+    tenantOrLessonId: string,
+    lessonIdOrStatus: string | LessonStatus,
+    statusParam?: LessonStatus
+  ): Promise<AgentLessonRecord | undefined> {
+    let tenantId: string;
+    let lessonId: string;
+    let status: LessonStatus;
+
+    if (statusParam !== undefined) {
+      tenantId = tenantOrLessonId;
+      lessonId = lessonIdOrStatus as string;
+      status = statusParam;
+    } else {
+      lessonId = tenantOrLessonId;
+      status = lessonIdOrStatus as LessonStatus;
+      tenantId = "default_tenant";
+    }
+
+    let lesson = await this.store.getLesson(tenantId, lessonId);
+    if (!lesson) {
+      lesson = await this.store.getLesson(lessonId);
+    }
     if (!lesson) return undefined;
 
     lesson.status = status;
@@ -190,7 +238,7 @@ export class LessonEngine {
       lesson.promotedAt = new Date().toISOString();
     }
     lesson.updatedAt = new Date().toISOString();
-    await this.store.saveLesson(lesson);
+    await this.store.saveLesson(tenantId, lesson);
     return lesson;
   }
 }

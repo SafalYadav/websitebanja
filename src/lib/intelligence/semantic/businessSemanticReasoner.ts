@@ -940,7 +940,6 @@ export class BusinessSemanticReasoner {
       params.category || "",
       ...(params.types || []),
       params.description || "",
-      params.location || "",
     ]
       .join(" ")
       .toLowerCase();
@@ -969,6 +968,27 @@ export class BusinessSemanticReasoner {
       }
     }
 
+    // Location is never category evidence. Explicit category/types outweigh
+    // incidental mentions in a description or neighbouring business names.
+    const explicitEvidence = [params.category || "", ...(params.types || [])].join(" ");
+    const explicitMatches = CONCEPT_CLUSTERS.map((cluster) => ({
+      cluster,
+      score: cluster.keywords.filter((keyword) => {
+        // Broad nouns cannot establish specialist knowledge (liquor_store,
+        // pet_store, etc. require their own approved semantic understanding).
+        if (["store", "shop", "retail", "business"].includes(keyword)) {
+          return explicitEvidence.trim().toLowerCase() === keyword;
+        }
+        return containsSemanticPhrase(explicitEvidence, keyword);
+      }).length,
+    })).filter((match) => match.score > 0).sort((a, b) => b.score - a.score);
+    if (explicitMatches.length && explicitMatches[0].score > (explicitMatches[1]?.score || 0)) {
+      bestCluster = explicitMatches[0].cluster;
+      highestScore = Math.max(highestScore, explicitMatches[0].score * 2);
+    } else if (explicitEvidence.trim() && explicitMatches.length === 0) {
+      bestCluster = GENERIC_COMMERCIAL_CLUSTER;
+      highestScore = 0;
+    }
     const confidence = highestScore >= 4 ? 0.95 : highestScore >= 2 ? 0.80 : 0.55;
     const confidenceLevel: "HIGH" | "MEDIUM" | "LOW" =
       confidence >= 0.85 ? "HIGH" : confidence >= 0.70 ? "MEDIUM" : "LOW";

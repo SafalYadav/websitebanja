@@ -5,6 +5,7 @@ import { NextResponse } from "next/server";
 import { isAuthorized } from "@/lib/automation/auth";
 import { PipelineOrchestrator } from "@/lib/automation/pipelineOrchestrator";
 import { sanitizeErrorOutput } from "@/lib/ai/router/modelConfig";
+import { verifyAdminAuth } from "@/lib/adminAuth";
 
 export async function POST(req: Request) {
   if (!(await isAuthorized(req))) {
@@ -18,10 +19,10 @@ export async function POST(req: Request) {
   }
 
   try {
-    const body = await req.json();
-    const { runId, userId } = body || {};
+    const body: unknown = await req.json();
+    const runId = body && typeof body === "object" && "runId" in body ? body.runId : undefined;
 
-    if (!runId) {
+    if (typeof runId !== "string" || !/^[a-zA-Z0-9_-]{1,160}$/.test(runId)) {
       return NextResponse.json(
         {
           success: false,
@@ -31,7 +32,10 @@ export async function POST(req: Request) {
       );
     }
 
-    const run = await PipelineOrchestrator.resumeRun(runId, userId);
+    const admin = await verifyAdminAuth(req);
+    const tenantId = admin.isAdmin && admin.userId ? admin.userId : process.env.AUTOMATION_TENANT_ID;
+    if (!tenantId) return NextResponse.json({ success: false, error: { code: "AUTOMATION_TENANT_REQUIRED", message: "Configure a server-side automation tenant" } }, { status: 403 });
+    const run = await PipelineOrchestrator.resumeRun(runId, admin.isAdmin ? admin.userId : undefined, tenantId);
     return NextResponse.json({ success: true, run });
   } catch (err) {
     return NextResponse.json(

@@ -1,27 +1,23 @@
 // src/components/admin/AdminBossResearchPanel.tsx
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useCallback } from "react";
+import { useAsyncResource } from "@/hooks/useAsyncResource";
 import {
   Compass,
-  Sparkles,
   CheckCircle2,
   XCircle,
   AlertTriangle,
   RefreshCw,
   ExternalLink,
   Filter,
-  ShieldCheck,
   Search,
   ChevronDown,
   ChevronUp,
-  Cpu,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type {
   BossResearchReport,
-  DiscoveredPatternItem,
-  DiscoveryClassification,
   AdminDecisionState,
 } from "@/lib/agents/boss/research/types";
 
@@ -30,21 +26,15 @@ interface AdminBossResearchPanelProps {
 }
 
 export default function AdminBossResearchPanel({ sessionToken }: AdminBossResearchPanelProps) {
-  const [report, setReport] = useState<BossResearchReport | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [filterClassification, setFilterClassification] = useState<string>("ALL");
   const [filterDecision, setFilterDecision] = useState<string>("ALL");
   const [searchQuery, setSearchQuery] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
-  // Local admin approval override simulation (in memory for live dashboard control)
+  // Local reference triage only; never a durable approval or knowledge activation.
   const [adminDecisions, setAdminDecisions] = useState<Record<string, AdminDecisionState>>({});
 
-  const fetchResearch = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
-    try {
+  const loadResearch = useCallback(async (): Promise<BossResearchReport> => {
       const headers: Record<string, string> = {};
       if (sessionToken) {
         headers["Authorization"] = `Bearer ${sessionToken}`;
@@ -57,23 +47,16 @@ export default function AdminBossResearchPanel({ sessionToken }: AdminBossResear
       if (!res.ok || !json.success) {
         throw new Error(json.message || "Failed to fetch research report.");
       }
-      setReport(json.data);
-    } catch (err: any) {
-      setError(err.message || "Error loading research.");
-    } finally {
-      setIsLoading(false);
-    }
+      if (!json.data) throw new Error("Research report is missing");
+      return json.data;
   }, [sessionToken]);
-
-  useEffect(() => {
-    fetchResearch();
-  }, [fetchResearch]);
+  const { data: report, loading: isLoading, error, refresh: fetchResearch } = useAsyncResource("boss-research", loadResearch);
 
   if (isLoading) {
     return (
       <div className="flex flex-col items-center justify-center p-16 text-zinc-500">
         <RefreshCw className="h-8 w-8 animate-spin text-violet-600 mb-3" />
-        <p className="text-sm font-semibold">Running Boss Internet Research & Skill Discovery Engine...</p>
+        <p className="text-sm font-semibold">Loading reference research catalog...</p>
       </div>
     );
   }
@@ -133,7 +116,7 @@ export default function AdminBossResearchPanel({ sessionToken }: AdminBossResear
               Continuous Intelligence & 21-Skill Delta Analysis
             </h2>
             <p className="text-xs text-zinc-500 dark:text-zinc-400 max-w-2xl leading-relaxed">
-              Boss continuously audits 24 modern web design topics across verified web standards, open-source frameworks, and commercial asset repositories. Boss recommends candidates, but strictly requires explicit Admin Approval (YES=ADD / NO=DROP) before production skill integration.
+              This is a static reference catalog, not live internet research or verified generation evidence. Local triage is not saved and cannot approve or activate skills or learning. Use the governed Command Center approval flow for durable human decisions.
             </p>
           </div>
           <button
@@ -141,16 +124,16 @@ export default function AdminBossResearchPanel({ sessionToken }: AdminBossResear
             className="self-start md:self-auto flex items-center gap-1.5 px-4 py-2 bg-zinc-900 text-white dark:bg-white dark:text-zinc-900 rounded-xl text-xs font-bold hover:opacity-90 transition shadow-xs"
           >
             <RefreshCw className="h-3.5 w-3.5" />
-            <span>Re-Sync Research</span>
+            <span>Reload Catalog</span>
           </button>
         </div>
 
         {/* 4 Stat Cards */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-5">
           <div className="p-4 rounded-xl bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200/60 dark:border-white/5">
-            <div className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider">Topics Audited</div>
+            <div className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider">Reference Topics</div>
             <div className="text-2xl font-bold text-zinc-900 dark:text-white mt-1">{report.totalTopicsCovered} / 24</div>
-            <div className="text-[11px] text-emerald-600 dark:text-emerald-400 mt-1 font-medium">100% Core Web Coverage</div>
+            <div className="text-[11px] text-amber-600 dark:text-amber-400 mt-1 font-medium">Runtime verification not attached</div>
           </div>
           <div className="p-4 rounded-xl bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200/60 dark:border-white/5">
             <div className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider">Total Discoveries</div>
@@ -163,13 +146,13 @@ export default function AdminBossResearchPanel({ sessionToken }: AdminBossResear
             <div className="text-[11px] text-violet-600 dark:text-violet-400 mt-1 font-medium">Verified Protected Skills</div>
           </div>
           <div className="p-4 rounded-xl bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200/60 dark:border-white/5">
-            <div className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider">Admin Decision Status</div>
+            <div className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider">Catalog Suggestions</div>
             <div className="text-2xl font-bold text-zinc-900 dark:text-white mt-1">
               <span className="text-emerald-600 dark:text-emerald-400">{report.adminDecisionCounts.YES_ADD} YES</span>
               <span className="text-zinc-400 mx-1.5 font-normal">/</span>
               <span className="text-zinc-500">{report.adminDecisionCounts.NO_DROP} NO</span>
             </div>
-            <div className="text-[11px] text-zinc-500 mt-1 font-medium">Human Approval Gated</div>
+            <div className="text-[11px] text-zinc-500 mt-1 font-medium">Not human approvals or active learning</div>
           </div>
         </div>
       </div>
@@ -210,8 +193,8 @@ export default function AdminBossResearchPanel({ sessionToken }: AdminBossResear
             className="text-xs py-1.5 px-2.5 rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-800 dark:text-zinc-200 font-medium"
           >
             <option value="ALL">All Decisions</option>
-            <option value="YES">YES = ADD</option>
-            <option value="NO">NO = DROP</option>
+            <option value="YES">Local: consider</option>
+            <option value="NO">Local: skip</option>
           </select>
         </div>
       </div>
@@ -227,7 +210,7 @@ export default function AdminBossResearchPanel({ sessionToken }: AdminBossResear
                 <th className="py-3 px-4">Classification</th>
                 <th className="py-3 px-4">Existing Skill Overlap</th>
                 <th className="py-3 px-4 text-center">Confidence</th>
-                <th className="py-3 px-4 text-center">Admin Decision</th>
+                <th className="py-3 px-4 text-center">Local Triage</th>
                 <th className="py-3 px-4 text-right">Details</th>
               </tr>
             </thead>
@@ -297,7 +280,7 @@ export default function AdminBossResearchPanel({ sessionToken }: AdminBossResear
                         <button
                           type="button"
                           onClick={() => handleToggleDecision(item.id, currentDecision)}
-                          title="Click to toggle Admin Approval"
+                          title="Local triage only — not saved and cannot activate learning"
                           className={cn(
                             "inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold transition shadow-2xs cursor-pointer",
                             currentDecision === "YES"
@@ -308,12 +291,12 @@ export default function AdminBossResearchPanel({ sessionToken }: AdminBossResear
                           {currentDecision === "YES" ? (
                             <>
                               <CheckCircle2 className="h-3.5 w-3.5" />
-                              <span>YES = ADD</span>
+                              <span>Consider (local)</span>
                             </>
                           ) : (
                             <>
                               <XCircle className="h-3.5 w-3.5" />
-                              <span>NO = DROP</span>
+                              <span>Skip (local)</span>
                             </>
                           )}
                         </button>
@@ -350,7 +333,7 @@ export default function AdminBossResearchPanel({ sessionToken }: AdminBossResear
                                 </p>
                               </div>
                               <div>
-                                <span className="font-bold text-zinc-900 dark:text-white uppercase tracking-wider text-[10px]">Admin Decision Rationale:</span>
+                                <span className="font-bold text-zinc-900 dark:text-white uppercase tracking-wider text-[10px]">Catalog Suggestion Rationale:</span>
                                 <p className="text-zinc-600 dark:text-zinc-300 mt-0.5 italic">{item.decisionReason}</p>
                               </div>
                             </div>

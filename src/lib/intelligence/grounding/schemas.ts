@@ -186,6 +186,8 @@ export const BusinessIdentitySchema = z.object({
 });
 
 export const GroundedBusinessProfileSchema = z.object({
+  googlePlaceTypes: z.array(z.string()).optional(),
+  googlePrimaryType: z.string().optional(),
   businessId: z.string().min(1),
   tenantId: z.string().nullable(),
   identity: BusinessIdentitySchema,

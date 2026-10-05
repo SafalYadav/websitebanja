@@ -31,6 +31,7 @@ import {
 import ThemeToggle from "@/components/theme/ThemeToggle";
 import Logo from "@/components/brand/Logo";
 import { detectBackendRequirement } from "@/lib/backendDetection";
+import { waitForApprovedResearch, pendingResearchStorageKey } from "@/lib/researchResumeClient";
 
 interface CustomerMilestone {
   title: string;
@@ -81,6 +82,7 @@ export default function LoadingPage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [errorType, setErrorType] = useState<"auth" | "network" | "general" | null>(null);
   const [currentStep, setCurrentStep] = useState<number>(0);
+  const [researchStatus, setResearchStatus] = useState<string | null>(null);
   const [viewportMode, setViewportMode] = useState<ViewportMode>("desktop");
   const [generatedSiteData, setGeneratedSiteData] = useState<WebsiteData | null>(null);
   const [isRetrying, setIsRetrying] = useState(false);
@@ -137,6 +139,29 @@ export default function LoadingPage() {
       if (!token) {
         setErrorType("auth");
         throw new Error("Authentication session expired or missing. Please sign in to generate and save your website.");
+      }
+      const researchStorageKey = pendingResearchStorageKey(session!.user.id, effectiveProjectId);
+      const observeResearch = (researchId: string) => waitForApprovedResearch({ researchId,
+        getAccessToken: async () => {
+          const current = (await supabase.auth.getSession()).data.session;
+          if (!current) throw new Error("Authentication session expired; please sign in to resume research");
+          if (current.expires_at && current.expires_at * 1000 < Date.now() + 60_000) {
+            const refreshed = (await supabase.auth.refreshSession()).data.session;
+            if (!refreshed) throw new Error("Authentication session expired; please sign in to resume research");
+            return refreshed.access_token;
+          }
+          return current.access_token;
+        }, onStatus: status => setResearchStatus(`Business research: ${status.replaceAll("_", " ").toLowerCase()}`) });
+      const existingResearchId = localStorage.getItem(researchStorageKey);
+      if (existingResearchId && /^[a-f0-9]{64}$/.test(existingResearchId)) {
+        const restoredWebsite = await observeResearch(existingResearchId);
+        setGeneratedSiteData(restoredWebsite);
+        setWebsiteForProject(effectiveProjectId, restoredWebsite);
+        localStorage.removeItem(researchStorageKey);
+        setResearchStatus(null);
+        setIsComplete(true);
+        router.push(editorRoute(effectiveProjectId, "workspace"));
+        return;
       }
 
       // Hydrate metadata from store or Supabase
@@ -299,7 +324,8 @@ export default function LoadingPage() {
       await new Promise((r) => setTimeout(r, 400));
       setCurrentStep(3);
 
-      const genRes = await executeWithRetry("/api/generate", {
+      let genRes = await executeWithRetry("/api/generate", {
+        projectId: effectiveProjectId,
         businessName: curBusinessName,
         category: curCategory,
         description: curDesc,
@@ -316,6 +342,17 @@ export default function LoadingPage() {
         threeDPreference: cur3DPreference,
         workspace,
       });
+
+      if (genRes.status === 409) {
+        const paused = await genRes.clone().json() as { researchId?: string; status?: string };
+        if (paused.researchId && ["research_required", "waiting_human_approval"].includes(paused.status || "")) {
+          setResearchStatus("Research required for this business. Waiting for verified research and human approval.");
+          localStorage.setItem(researchStorageKey, paused.researchId);
+          const restoredWebsite = await observeResearch(paused.researchId);
+          genRes = new Response(JSON.stringify({ success: true, data: restoredWebsite }), { status: 200 });
+          setResearchStatus(null);
+        }
+      }
 
       let genData: {
         success?: boolean;
@@ -377,6 +414,7 @@ export default function LoadingPage() {
       }
 
       setIsComplete(true);
+      localStorage.removeItem(researchStorageKey);
       setTimeout(() => {
         router.push(editorRoute(effectiveProjectId, "workspace"));
       }, 1600);
@@ -476,7 +514,7 @@ export default function LoadingPage() {
               )}
             </span>
             <span className="text-[11px] font-medium text-zinc-300">
-              {isComplete ? "Generation Complete" : errorMessage ? "Generation Paused" : "Synthesizing Live"}
+              {isComplete ? "Generation Complete" : errorMessage ? "Generation Paused" : researchStatus || "Synthesizing Live"}
             </span>
           </div>
 

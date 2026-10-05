@@ -9,14 +9,14 @@ export async function isAuthorized(req: Request): Promise<boolean> {
   const configuredSecret =
     process.env.WEBSITEBANJA_AUTOMATION_SECRET ||
     process.env.AUTOMATION_SECRET ||
-    DEFAULT_LOCAL_AUTOMATION_SECRET;
+    (process.env.NODE_ENV !== "production" ? DEFAULT_LOCAL_AUTOMATION_SECRET : "");
 
   // 1. Direct automation secret header (for n8n, internal cron, background jobs, test suites)
   const headerSecret = req.headers.get("x-automation-secret");
   if (headerSecret) {
     const trimmed = headerSecret.trim();
     if (
-      trimmed === configuredSecret ||
+      (Boolean(configuredSecret) && trimmed === configuredSecret) ||
       (process.env.NODE_ENV !== "production" && trimmed === DEFAULT_LOCAL_AUTOMATION_SECRET)
     ) {
       return true;
@@ -29,7 +29,7 @@ export async function isAuthorized(req: Request): Promise<boolean> {
     const token = authHeader.slice(7).trim();
     // 2a. Direct secret via Bearer
     if (
-      token === configuredSecret ||
+      (Boolean(configuredSecret) && token === configuredSecret) ||
       (process.env.NODE_ENV !== "production" && token === DEFAULT_LOCAL_AUTOMATION_SECRET)
     ) {
       return true;

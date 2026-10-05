@@ -1,49 +1,24 @@
 "use client";
 
-import React, { useState, useEffect, use } from "react";
-import { motion, MotionConfig } from "framer-motion";
+import React, { useState, use } from "react";
+import { referenceAudit } from "@/lib/skills/referenceAudit";
+import { MotionConfig } from "framer-motion";
 import BentoGrid21st from "@/components/21st/BentoGrid21st";
-import HeroGlow21st from "@/components/21st/HeroGlow21st";
-import PricingTable21st from "@/components/21st/PricingTable21st";
-import SpatialSectionWrapper from "@/components/editor/SpatialSectionWrapper";
-import FeaturesSection from "@/components/editor/FeaturesSection";
-import ServicesSection from "@/components/editor/ServicesSection";
-import ProductsSection from "@/components/editor/ProductsSection";
-import ReviewsSection from "@/components/editor/ReviewsSection";
-import JsonLd from "@/components/seo/JsonLd";
 import GsapReveal from "@/components/motion/GsapReveal";
-import GsapScrollScene from "@/components/motion/GsapScrollScene";
 import GsapStagger from "@/components/motion/GsapStagger";
-import WebGLScene from "@/components/three/WebGLScene";
 import FloatingParticles from "@/components/three/FloatingParticles";
 import InteractiveOrb from "@/components/three/InteractiveOrb";
-import ShaderBackground from "@/components/three/ShaderBackground";
-import { LineChart, BarChart, AreaChart, DonutChart, StatMetric, ProgressMetric } from "@/components/charts/SvgCharts";
+import { LineChart, BarChart, DonutChart, StatMetric, ProgressMetric } from "@/components/charts/SvgCharts";
 import {
   BentoCard,
-  ExpandableCard,
-  StackedCard,
   SpotlightCard,
-  ImageRevealCard,
-  PerspectiveCard,
-  EditorialCard,
-  HorizontalMediaCard,
-  ProjectShowcaseCard,
-  TestimonialStackCard,
-  ComparisonCard,
-  StatCard,
-  ServiceCard,
-  FeatureRevealCard,
-  FloatingCard
 } from "@/components/cards";
 import { 
-  CheckCircle2, 
   Smartphone, 
   Monitor, 
   Eye, 
   EyeOff,
   Activity,
-  Layers,
   Sparkles,
   Zap,
   ShieldCheck
@@ -82,61 +57,7 @@ export default function SkillAuditPage({ params }: { params: Promise<{ skill: st
   const [reducedMotion, setReducedMotion] = useState(false);
   const [clickCount, setClickCount] = useState(0);
   const [isHovered, setIsHovered] = useState(false);
-  const [runtimeAudit, setRuntimeAudit] = useState<{
-    status: "PASS" | "PARTIAL" | "FAIL" | "NOT_FOUND";
-    reasons: string[];
-    evidence: Record<string, unknown>;
-  }>({
-    status: "PASS",
-    reasons: [],
-    evidence: {},
-  });
-
-  useEffect(() => {
-    const reasons: string[] = [];
-    const evidence: Record<string, unknown> = {};
-    let status: "PASS" | "PARTIAL" | "FAIL" | "NOT_FOUND" = "PASS";
-
-    if (!ALL_SKILLS.includes(skill)) {
-      status = "NOT_FOUND";
-      reasons.push(`Skill "${skill}" is not registered in WebsiteBanja skill catalog.`);
-      evidence.registeredSkills = ALL_SKILLS;
-    } else if (skill === "threejs") {
-      status = "PASS";
-      reasons.push("Three.js WebGL renderer, FloatingParticles, and InteractiveOrb mounted and active with resize/disposal lifecycle.");
-      evidence.installed = true;
-      evidence.hasCanvas = true;
-    } else if (skill === "gsap") {
-      status = "PASS";
-      reasons.push("GSAP 3 installed and active with GsapReveal, GsapStagger, and ScrollTrigger scene cleanup.");
-      evidence.installed = true;
-      evidence.hasGsap = true;
-    } else if (skill === "21st-dev") {
-      status = "PASS";
-      reasons.push("21st.dev BentoGrid21st verified with dynamic pointer tracking (--mouse-x, --mouse-y) and tactile ambient glow.");
-      evidence.bentoMounted = true;
-      evidence.spotlightDynamic = true;
-    } else if (skill === "data-visualization") {
-      status = "PASS";
-      reasons.push("Full SVG chart suite implemented: LineChart, BarChart, AreaChart, DonutChart, StatMetric, and ProgressMetric.");
-      evidence.chartsImplemented = ["line", "bar", "area", "donut", "stat", "progress"];
-    } else if (skill === "accessibility") {
-      status = "PASS";
-      reasons.push("Full keyboard focus-visible rings, ARIA roles, tab order, and reduced-motion fallbacks verified.");
-      evidence.wcagTested = true;
-      evidence.focusVisible = true;
-    } else if (skill === "spatial-interaction") {
-      status = "PASS";
-      reasons.push("SpatialSectionWrapper and 3D PerspectiveCard active with hardware-accelerated CSS transforms.");
-      evidence.hasPerspective = true;
-    } else {
-      status = "PASS";
-      reasons.push(`Skill ${skill} verified with active DOM tokens, components, and zero errors.`);
-      evidence.evaluated = true;
-    }
-
-    setRuntimeAudit({ status, reasons, evidence });
-  }, [skill]);
+  const runtimeAudit = referenceAudit(skill, ALL_SKILLS);
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 p-4 md:p-8 font-sans">
@@ -153,7 +74,7 @@ export default function SkillAuditPage({ params }: { params: Promise<{ skill: st
                 </h1>
                 <span 
                   id="audit-status-badge"
-                  className="px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider border bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
+                  className="px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider border bg-amber-500/10 text-amber-400 border-amber-500/30"
                 >
                   {runtimeAudit.status}
                 </span>
@@ -413,7 +334,7 @@ export default function SkillAuditPage({ params }: { params: Promise<{ skill: st
                     title="Precision Architecture"
                     description="Autonomous layout engine with 8pt mathematical rhythm and responsive container queries."
                     tag="Core Engine"
-                    metric="100% PASS"
+                    metric="Reference demo"
                   />
                   <SpotlightCard
                     title="Interactive Spotlight"

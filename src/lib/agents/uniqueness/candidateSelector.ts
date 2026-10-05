@@ -3,6 +3,26 @@ import { getPool } from "@/lib/db/queries";
 import type { CandidateWebsite } from "./types";
 import { extractDetailedDesignFingerprint } from "./fingerprint";
 
+/** Production reviews never consume the global offline cache or another owner's project. */
+export async function selectOwnedComparisonWebsites(userId?: string): Promise<CandidateWebsite[]> {
+  if (!userId) return [];
+  try {
+    const result = await getPool().query<{ id: string; json_data: Record<string, unknown> }>(
+      "SELECT id,json_data FROM public.projects WHERE user_id=$1 AND json_data IS NOT NULL ORDER BY updated_at DESC LIMIT 4", [userId]);
+    return result.rows.filter(row => row.json_data && typeof row.json_data === "object" && !Array.isArray(row.json_data)).flatMap(row => {
+      const fingerprint = extractDetailedDesignFingerprint(row.json_data);
+      const hero = row.json_data.hero;
+      const heroTitle = hero && typeof hero === "object" ? (hero as Record<string, unknown>).title : undefined;
+      if (!hero || typeof hero !== "object" || Array.isArray(hero) ||
+        typeof heroTitle !== "string" || !heroTitle.trim() ||
+        fingerprint.sectionOrder.length < 3 || fingerprint.heroType === "unknown" || fingerprint.visualArchetype === "unknown") return [];
+      return [{ id: row.id, businessName: "Previous owned website", category: "comparison", fingerprint,
+        sectionOrder: fingerprint.sectionOrder, layoutType: fingerprint.layoutType,
+        primaryColor: fingerprint.colorDirection, cardStyle: fingerprint.cardStyle }];
+    });
+  } catch { return []; }
+}
+
 // In-memory bounded candidate cache for offline/dev environments (bounded to 20 items)
 const localCandidateCache: CandidateWebsite[] = [];
 

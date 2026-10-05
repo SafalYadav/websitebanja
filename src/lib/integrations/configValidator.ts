@@ -34,7 +34,7 @@ interface IntegrationInternalState {
   };
 }
 
-let memoryState: IntegrationInternalState = {
+const memoryState: IntegrationInternalState = {
   googlePlaces: { lastRequestAt: null, lastSuccessAt: null, lastError: null },
   gmail: { lastSendAt: null, lastSyncAt: null, lastError: null },
 };

@@ -7,11 +7,14 @@ import {
 import type { CatalogItem } from "@/types/catalog";
 import WebsiteRenderer from "@/components/editor/WebsiteRenderer";
 import type { WebsiteData } from "@/types/website";
+import { verifyPreviewAuditToken } from "@/lib/intelligence/orchestration/previewAuditToken";
+import { readApprovedGeneratedPreview } from "@/lib/intelligence/orchestration/generationTraceStore";
 
 export const dynamic = "force-dynamic";
 
-export default async function PreviewPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function PreviewPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ qa?: string }> }) {
   const resolvedParams = await params;
+  if (!/^[a-zA-Z0-9_-]{1,160}$/.test(resolvedParams.id)) notFound();
   const { data, error, expired, projectId } = await getPreviewLinkData(resolvedParams.id);
 
   if (expired) {
@@ -26,6 +29,9 @@ export default async function PreviewPage({ params }: { params: Promise<{ id: st
   }
 
   let rawData = data;
+  if (!rawData) {
+    try { rawData = await readApprovedGeneratedPreview(resolvedParams.id); } catch { /* Legacy previews remain compatible; pending candidates still require signed QA access. */ }
+  }
   if (!rawData) {
     try {
       const fs = await import("fs");
@@ -45,6 +51,9 @@ export default async function PreviewPage({ params }: { params: Promise<{ id: st
   }
 
   const previewData = { ...rawData } as WebsiteData;
+  if ((previewData as unknown as Record<string, unknown>).generationGate &&
+      (previewData as unknown as Record<string, unknown>).generationGate !== "READY" &&
+      !verifyPreviewAuditToken(resolvedParams.id, (await searchParams).qa)) notFound();
   const themeConfig = previewData.theme as { colors?: { background?: string } } | undefined;
   const bgColor = themeConfig?.colors?.background || "#ffffff";
 
@@ -70,6 +79,7 @@ export default async function PreviewPage({ params }: { params: Promise<{ id: st
         category={project?.category || (previewData as any)?.category || previewData?.brand?.industry}
         businessName={project?.business_name || project?.name || (previewData as any)?.businessName || previewData?.brand?.name}
         isPublic={true}
+        previewNavigation={true}
         whatsappNumber={project?.whatsapp_number || undefined}
         phone={project?.phone || undefined}
         whatsappMessage={project?.whatsapp_message || undefined}
@@ -78,4 +88,3 @@ export default async function PreviewPage({ params }: { params: Promise<{ id: st
     </div>
   );
 }
-

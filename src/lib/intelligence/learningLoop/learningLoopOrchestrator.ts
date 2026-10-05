@@ -279,6 +279,7 @@ export class LearningLoopOrchestrator {
     approvalId: string;
     approvedBy: string;
     tenantId?: string | null;
+    authorization?: unknown;
   }): Promise<{
     candidate: CandidateLesson;
     newStrategy: StrategyVersionRecord;
@@ -306,6 +307,7 @@ export class LearningLoopOrchestrator {
       approvalId: params.approvalId,
       approvedBy: params.approvedBy,
       tenantId: params.tenantId,
+      authorization: params.authorization,
     });
 
     this.candidates.set(params.candidateId, result.candidate);
@@ -320,6 +322,8 @@ export class LearningLoopOrchestrator {
     targetVersion?: string;
     rollbackReason: string;
     executedBy: string;
+    tenantId?: string | null;
+    authorization?: unknown;
   }): {
     rolledBackVersion: StrategyVersionRecord;
     restoredVersion: StrategyVersionRecord | null;
@@ -347,26 +351,25 @@ export class LearningLoopOrchestrator {
       list = list.filter((c) => c.status === filter.status);
     }
 
-    if (filter?.tenantId !== undefined) {
-      list = list.filter((c) => c.tenantId === filter.tenantId || c.isGlobalScope);
-    }
+    if (!filter?.tenantId) return [];
+    list = list.filter((c) => c.tenantId === filter.tenantId);
 
     return list.sort(
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     );
   }
 
-  public getStrategyHistory(domain: string): StrategyVersionRecord[] {
-    return this.promotionCoordinator.getStrategyVersionsForDomain(domain);
+  public getStrategyHistory(domain: string, tenantId?: string | null): StrategyVersionRecord[] {
+    return this.promotionCoordinator.getStrategyVersionsForDomain(domain, tenantId);
   }
 
-  public getActiveStrategy(domain: string): StrategyVersionRecord | null {
-    return this.promotionCoordinator.getActiveStrategy(domain);
+  public getActiveStrategy(domain: string, tenantId?: string | null): StrategyVersionRecord | null {
+    return this.promotionCoordinator.getActiveStrategy(domain, tenantId);
   }
 
-  public getLearningSummary(): LearningSummary {
-    const all = Array.from(this.candidates.values());
-    const activeStrategies = this.promotionCoordinator.listAllActiveStrategies();
+  public getLearningSummary(tenantId?: string | null): LearningSummary {
+    const all = tenantId ? Array.from(this.candidates.values()).filter(candidate => candidate.tenantId === tenantId) : [];
+    const activeStrategies = this.promotionCoordinator.listAllActiveStrategies(tenantId);
 
     return {
       totalCandidates: all.length,

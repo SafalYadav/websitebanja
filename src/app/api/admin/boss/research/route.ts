@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 
 /**
  * GET /api/admin/boss/research
- * Returns Boss Agent continuous internet research, 21-skill comparisons, and Admin YES/NO decisions.
+ * Returns a static reference catalog. It is not live research or approval authority.
  * Strictly restricted to verified administrators.
  */
 export async function GET(req: Request) {
@@ -37,6 +37,9 @@ export async function GET(req: Request) {
     return NextResponse.json({
       success: true,
       data: report,
+      evidenceKind: "reference_catalog",
+      runtimeVerified: false,
+      activationAllowed: false,
     });
   } catch (err) {
     const safeErrorMsg = sanitizeErrorOutput(String(err));

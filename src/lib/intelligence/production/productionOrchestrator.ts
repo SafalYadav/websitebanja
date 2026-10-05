@@ -40,6 +40,7 @@ import type { ValidationReport } from "../validation/types";
 
 // Phase 25 Governance Imports
 import { GovernanceApprovalStore } from "../policies/governanceApprovalStore";
+import { requireHumanApproval } from "../pipeline/humanApprovalAuthorization";
 
 // Phase 27 Learning Loop Imports
 import { LearningLoopOrchestrator } from "../learningLoop/learningLoopOrchestrator";
@@ -1091,8 +1092,11 @@ export class AutonomousProductionOrchestrator {
   public async approveJob(
     jobId: string,
     approver: string,
-    tenantId?: string | null
+    tenantId?: string | null,
+    authorization?: unknown
   ): Promise<AutonomousProductionJob> {
+    const authenticatedUser = requireHumanApproval(authorization, tenantId);
+    if (authenticatedUser !== approver) throw new Error("Production approver identity mismatch");
     const job = this.jobStore.getJob(jobId, tenantId);
     if (!job) {
       throw new Error(`Production job '${jobId}' not found`);
@@ -1112,17 +1116,13 @@ export class AutonomousProductionOrchestrator {
     }
 
     // Resolve governance request in Phase 25 Governance Store
-    if (job.approvalId) {
-      try {
-        this.governanceStore.approve({
+    if (!job.approvalId || job.tenantId !== tenantId) throw new Error("Owned governance approval required");
+    this.governanceStore.approve({
           approvalId: job.approvalId,
           approvedBy: approver,
           tenantId: job.tenantId,
+          authorization,
         });
-      } catch {
-        // Continue
-      }
-    }
 
     const now = new Date().toISOString();
     this.jobStore.updateJob(
@@ -1164,24 +1164,24 @@ export class AutonomousProductionOrchestrator {
     jobId: string,
     rejector: string,
     reason: string,
-    tenantId?: string | null
+    tenantId?: string | null,
+    authorization?: unknown
   ): Promise<AutonomousProductionJob> {
+    const authenticatedUser = requireHumanApproval(authorization, tenantId);
+    if (authenticatedUser !== rejector) throw new Error("Production rejector identity mismatch");
     const job = this.jobStore.getJob(jobId, tenantId);
     if (!job) {
       throw new Error(`Production job '${jobId}' not found`);
     }
 
-    if (job.approvalId) {
-      try {
-        this.governanceStore.reject({
+    if (!job.approvalId || job.tenantId !== tenantId) throw new Error("Owned governance approval required");
+    this.governanceStore.reject({
           approvalId: job.approvalId,
           rejectedBy: rejector,
           rejectionReason: reason,
+          tenantId,
+          authorization,
         });
-      } catch {
-        // Continue
-      }
-    }
 
     this.jobStore.updateJob(
       jobId,

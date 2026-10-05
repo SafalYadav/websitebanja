@@ -3,9 +3,11 @@
 // src/app/admin/leads/page.tsx
 // Phase 15 — WebsiteBanja Lead Command Center
 
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
+import { useAsyncResource } from "@/hooks/useAsyncResource";
+import type { LeadCommandCenterService } from "@/lib/leads/leadCommandCenterService";
 import {
   Search,
   RefreshCw,
@@ -15,30 +17,15 @@ import {
   ChevronLeft,
   X,
   Play,
-  Pause,
-  RotateCcw,
   Clock,
   AlertTriangle,
   CheckCircle2,
-  XCircle,
-  Eye,
   MessageSquare,
-  Sparkles,
-  Shield,
   Layers,
-  Building,
-  Globe,
-  Phone,
-  Mail,
-  ArrowUpDown,
-  Filter,
   Users,
   Send,
-  Calendar,
 } from "lucide-react";
 import type {
-  CommandCenterLead,
-  CommandCenterKPIs,
   FilterPreset,
   LeadDetailView,
   LeadReviewItem,
@@ -84,14 +71,11 @@ export interface AdminLeadCommandCenterProps {
   onNavigateTab?: (tab: string) => void;
 }
 
+type LeadListResponse = Awaited<ReturnType<typeof LeadCommandCenterService.listCommandCenterLeads>>;
+
 export default function AdminLeadCommandCenter({ sessionToken, onNavigateTab }: AdminLeadCommandCenterProps = {}) {
   // State
-  const [leads, setLeads] = useState<CommandCenterLead[]>([]);
-  const [kpis, setKpis] = useState<CommandCenterKPIs | null>(null);
-  const [facets, setFacets] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [actionError, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   // Filters & Search
@@ -99,14 +83,12 @@ export default function AdminLeadCommandCenter({ sessionToken, onNavigateTab }: 
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedStage, setSelectedStage] = useState<PipelineStage | "ALL">("ALL");
   const [selectedIndustry, setSelectedIndustry] = useState<string>("ALL");
-  const [sortField, setSortField] = useState<string>("lastActivityAt");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const sortField = "lastActivityAt";
+  const sortDir = "desc";
   const [density, setDensity] = useState<"compact" | "comfortable">("compact");
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [totalCount, setTotalCount] = useState(0);
 
   // Selection
   const [selectedLeadIds, setSelectedLeadIds] = useState<Set<string>>(new Set());
@@ -168,13 +150,8 @@ export default function AdminLeadCommandCenter({ sessionToken, onNavigateTab }: 
   }, [getAuthHeaders]);
 
   // 1. Fetch Leads List
-  const fetchLeads = useCallback(
-    async (isManual = false) => {
-      if (isManual) setRefreshing(true);
-      else setLoading(true);
-      setErrorMessage(null);
-
-      try {
+  const loadLeads = useCallback(
+    async (): Promise<LeadListResponse> => {
         const params = new URLSearchParams();
         if (activePreset !== "all") params.set("preset", activePreset);
         if (searchQuery.trim()) params.set("search", searchQuery.trim());
@@ -189,30 +166,30 @@ export default function AdminLeadCommandCenter({ sessionToken, onNavigateTab }: 
         const res = await fetch(`/api/automation/leads?${params.toString()}`, {
           headers,
         });
-        const data = await res.json();
-
-        if (data.success) {
-          setLeads(data.leads || []);
-          setTotalCount(data.totalCount || 0);
-          setTotalPages(data.totalPages || 1);
-          setKpis(data.kpis || null);
-          setFacets(data.facets || null);
-        } else {
-          setErrorMessage(data.error?.message || data.error || "Failed to load leads");
+        const data: LeadListResponse & { success?: boolean; error?: string | { message?: string } } = await res.json();
+        if (!res.ok || !data.success) throw new Error(typeof data.error === "string" ? data.error : data.error?.message || "Failed to load leads");
+        if (!Array.isArray(data.leads) || !Number.isInteger(data.totalCount) || !Number.isInteger(data.totalPages) || !data.facets || !data.kpis) {
+          throw new Error("Lead listing response is incomplete");
         }
-      } catch {
-        setErrorMessage("Network error fetching lead records");
-      } finally {
-        setLoading(false);
-        setRefreshing(false);
-      }
+        return data;
     },
     [activePreset, searchQuery, selectedStage, selectedIndustry, currentPage, sortField, sortDir, getAuthHeaders]
   );
 
-  useEffect(() => {
-    fetchLeads();
-  }, [fetchLeads]);
+  const leadResource = useAsyncResource(sessionToken || "current-session", loadLeads);
+  const leads = leadResource.data?.leads ?? [];
+  const kpis = leadResource.data?.kpis ?? null;
+  const facets = leadResource.data?.facets ?? null;
+  const totalPages = leadResource.data?.totalPages ?? 1;
+  const totalCount = leadResource.data?.totalCount ?? 0;
+  const loading = leadResource.loading && !leadResource.data;
+  const refreshing = leadResource.loading && Boolean(leadResource.data);
+  const errorMessage = actionError || leadResource.error;
+  const { refresh: refreshLeads } = leadResource;
+  const fetchLeads = useCallback((_isManual = false) => {
+    setErrorMessage(null);
+    refreshLeads();
+  }, [refreshLeads]);
 
   // 2. Fetch Single Lead Detail
   const openLeadDetail = async (leadId: string) => {
@@ -368,13 +345,19 @@ export default function AdminLeadCommandCenter({ sessionToken, onNavigateTab }: 
   };
 
   const handleApproveOutreach = async (outreachId: string) => {
+    const reviewed = leadDetail?.outreach;
+    if (!reviewed || reviewed.outreachId !== outreachId || !reviewed.message || !reviewed.recipientEmail) {
+      setErrorMessage("Reload the draft and verify its message and recipient before approving.");
+      return;
+    }
     setActionLoading(true);
     try {
       const headers = await getAuthHeaders();
       const res = await fetch("/api/automation/outreach", {
         method: "PATCH",
         headers,
-        body: JSON.stringify({ outreachId, status: "approved" }),
+        body: JSON.stringify({ outreachId, status: "approved", expectedReviewedMessage: reviewed.message,
+          expectedReviewedSubject: reviewed.subject || "", expectedReviewedRecipient: reviewed.recipientEmail }),
       });
       const data = await res.json();
       if (data.success) {
@@ -402,7 +385,8 @@ export default function AdminLeadCommandCenter({ sessionToken, onNavigateTab }: 
       });
       const data = await res.json();
       if (data.success) {
-        setSuccessMessage(`Email dispatched via Gmail API! Message ID: ${data.messageId || "Delivered"}`);
+        if (!data.isSimulated && !data.messageId) throw new Error("Missing verified delivery ID. Reload before attempting another send.");
+        setSuccessMessage(data.isSimulated ? "Simulation completed — no email was delivered." : `Email dispatched via Gmail API! Message ID: ${data.messageId}`);
         fetchLeads(true);
         if (activeLeadId) openLeadDetail(activeLeadId);
       } else {
@@ -526,9 +510,9 @@ export default function AdminLeadCommandCenter({ sessionToken, onNavigateTab }: 
             >
               <AlertTriangle className="w-3.5 h-3.5 text-amber-300" />
               <span>Review Queue</span>
-              {facets?.presets?.needs_review > 0 && (
+              {(facets?.presets.needs_review ?? 0) > 0 && (
                 <span className="px-1.5 py-0.2 rounded-full bg-amber-500 text-slate-950 font-bold text-[10px]">
-                  {facets.presets.needs_review}
+                  {facets?.presets.needs_review}
                 </span>
               )}
             </button>
@@ -630,7 +614,7 @@ export default function AdminLeadCommandCenter({ sessionToken, onNavigateTab }: 
               <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
               <span>{errorMessage}</span>
             </span>
-            <button onClick={() => setErrorMessage(null)} className="text-slate-400 hover:text-white">
+            <button onClick={() => { setErrorMessage(null); leadResource.dismissError(); }} className="text-slate-400 hover:text-white">
               <X className="w-4 h-4" />
             </button>
           </div>
@@ -692,7 +676,7 @@ export default function AdminLeadCommandCenter({ sessionToken, onNavigateTab }: 
 
           <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 xl:grid-cols-14 gap-2">
             {CANONICAL_STAGES.map((st) => {
-              const stageCount = facets?.stages?.find((s: any) => s.stage === st)?.count || 0;
+              const stageCount = facets?.stages?.find(s => s.stage === st)?.count || 0;
               const isSelected = selectedStage === st;
 
               return (
@@ -788,7 +772,7 @@ export default function AdminLeadCommandCenter({ sessionToken, onNavigateTab }: 
                 className="bg-slate-950 border border-slate-800 text-slate-300 text-xs rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-indigo-500"
               >
                 <option value="ALL">All Industries</option>
-                {facets?.industries?.map((ind: any) => (
+                {facets?.industries?.map(ind => (
                   <option key={ind.industry} value={ind.industry}>
                     {ind.industry} ({ind.count})
                   </option>
@@ -1381,10 +1365,14 @@ export default function AdminLeadCommandCenter({ sessionToken, onNavigateTab }: 
                               {leadDetail.outreach.message}
                             </div>
                           </div>
+                          <div>
+                            <span className="text-slate-400 block mb-1">Reviewed Recipient</span>
+                            <span className="text-slate-200">{leadDetail.outreach.recipientEmail || "Missing — approval blocked"}</span>
+                          </div>
 
                           {leadDetail.outreach.outreachId && (
                             <div className="pt-3 border-t border-slate-900 flex flex-wrap items-center gap-2">
-                              {(leadDetail.outreach.status === "drafted" || leadDetail.outreach.status === "review") && (
+                              {(["draft", "drafted", "review"].includes(leadDetail.outreach.status)) && (
                                 <button
                                   onClick={() => handleApproveOutreach(leadDetail.outreach.outreachId!)}
                                   disabled={actionLoading}

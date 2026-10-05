@@ -55,7 +55,7 @@ const nextConfig: NextConfig = {
       },
     ];
   },
-  serverExternalPackages: ['@google/genai', 'ws', 'bufferutil', 'utf-8-validate', '@azure/storage-blob', '@azure/identity', 'pg'],
+  serverExternalPackages: ['playwright', 'playwright-core', '@google/genai', 'ws', 'bufferutil', 'utf-8-validate', '@azure/storage-blob', '@azure/identity', 'pg'],
 };
 
 export default nextConfig;

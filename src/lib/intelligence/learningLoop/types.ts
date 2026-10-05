@@ -52,6 +52,7 @@ export interface LearningEvaluationReport {
 }
 
 export interface LearningRegressionBenchmarkResult {
+  status?: "unavailable" | "verified";
   testedAt: string;
   passed: boolean;
   overallScore: number; // 0 - 100 (Threshold >= 90)
@@ -87,6 +88,7 @@ export interface StrategyDiff {
 }
 
 export interface StrategyVersionRecord {
+  tenantId?: string | null;
   strategyId: string;
   domain: string;
   version: string; // e.g. "v1", "v2"

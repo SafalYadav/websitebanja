@@ -2,30 +2,22 @@
 // Phase 13 — Autonomous Lead Pipeline API: Simulate Inbound Reply for Lead in Run
 
 import { NextResponse } from "next/server";
-import { isAuthorized } from "@/lib/automation/auth";
+import { authorizeAutomationTenant } from "@/lib/automation/automationApiIdentity";
 import { PipelineOrchestrator } from "@/lib/automation/pipelineOrchestrator";
 import { sanitizeErrorOutput } from "@/lib/ai/router/modelConfig";
+import { PipelineRunIdSchema, PipelineReplySimulationSchema } from "@/lib/automation/pipelineTypes";
 
 export async function POST(
   req: Request,
   { params }: { params: Promise<{ runId: string }> }
 ) {
-  if (!(await isAuthorized(req))) {
-    return NextResponse.json(
-      {
-        success: false,
-        error: { code: "UNAUTHORIZED", message: "Unauthorized: Missing or invalid automation secret." },
-      },
-      { status: 401 }
-    );
-  }
+  const auth = await authorizeAutomationTenant(req);
+  if (auth.response) return auth.response;
 
   try {
     const { runId } = await params;
-    const body = await req.json();
-    const { leadId, messageText, channel = "email", userId } = body || {};
-
-    if (!leadId || !messageText) {
+    const parsed = PipelineReplySimulationSchema.safeParse(await req.json());
+    if (!PipelineRunIdSchema.safeParse(runId).success || !parsed.success) {
       return NextResponse.json(
         {
           success: false,
@@ -34,13 +26,15 @@ export async function POST(
         { status: 400 }
       );
     }
+    const { leadId, messageText, channel } = parsed.data;
 
     const result = await PipelineOrchestrator.simulateReplyForRunLead(
       runId,
       leadId,
       messageText,
       channel,
-      userId
+      auth.identity.userId,
+      auth.identity.tenantId
     );
 
     return NextResponse.json(result);

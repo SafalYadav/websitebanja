@@ -8,7 +8,6 @@ import {
   MemoryRetriever,
   LessonEngine,
   LessonEvaluator,
-  StrategyManager,
   ExperimentManager,
 } from "@/lib/intelligence";
 import { sanitizeErrorOutput } from "@/lib/ai/router/modelConfig";
@@ -28,7 +27,7 @@ export async function GET(req: Request) {
     }
 
     const auth = await verifyAdminAuth(req);
-    if (!auth.isAdmin) {
+    if (!auth.isAdmin || !auth.userId) {
       return NextResponse.json(
         { success: false, message: auth.error || "Forbidden: Administrator clearance required." },
         { status: auth.error?.includes("Missing") ? 401 : 403 }
@@ -39,12 +38,13 @@ export async function GET(req: Request) {
     const domain = url.searchParams.get("domain") || undefined;
     const store = MemoryStore.getInstance();
 
+    const tenantId = auth.userId;
     const [strategies, lessons, runs, failures, experiments] = await Promise.all([
-      store.listStrategies(domain),
-      store.listLessons(domain),
-      store.listRuns(20, domain),
-      store.listFailures(20, domain),
-      store.listExperiments(domain),
+      store.listStrategies(tenantId, domain),
+      store.listLessons(tenantId, domain),
+      store.listRuns(tenantId, 20, domain),
+      store.listFailures(tenantId, 20, domain),
+      store.listExperiments(tenantId, domain),
     ]);
 
     return NextResponse.json({
@@ -76,25 +76,25 @@ export async function POST(req: Request) {
     }
 
     const auth = await verifyAdminAuth(req);
-    if (!auth.isAdmin) {
+    if (!auth.isAdmin || !auth.userId) {
       return NextResponse.json(
         { success: false, message: auth.error || "Forbidden: Administrator clearance required." },
         { status: auth.error?.includes("Missing") ? 401 : 403 }
       );
     }
 
+    const tenantId = auth.userId;
     const body = await req.json();
     const action = body.action as string;
 
     const store = MemoryStore.getInstance();
     const lessonEngine = LessonEngine.getInstance();
-    const strategyManager = StrategyManager.getInstance();
     const experimentManager = ExperimentManager.getInstance();
 
     switch (action) {
       case "record_feedback": {
         const feedbackId = `fb_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-        await store.saveFeedback({
+        await store.saveFeedback(tenantId, {
           id: feedbackId,
           feedbackId,
           runId: body.runId || "manual_review",
@@ -112,7 +112,7 @@ export async function POST(req: Request) {
       }
 
       case "evaluate_lesson": {
-        const lesson = await store.getLesson(body.lessonId);
+        const lesson = await store.getLesson(tenantId, body.lessonId);
         if (!lesson) {
           return NextResponse.json({ success: false, message: "Lesson not found." }, { status: 404 });
         }
@@ -121,7 +121,7 @@ export async function POST(req: Request) {
       }
 
       case "promote_lesson": {
-        const lesson = await store.getLesson(body.lessonId);
+        const lesson = await store.getLesson(tenantId, body.lessonId);
         if (!lesson) {
           return NextResponse.json({ success: false, message: "Lesson not found." }, { status: 404 });
         }
@@ -133,12 +133,13 @@ export async function POST(req: Request) {
           );
         }
 
-        const updated = await lessonEngine.updateStatus(body.lessonId, "PROMOTED");
+        const updated = await lessonEngine.updateStatus(tenantId, body.lessonId, "PROMOTED");
         return NextResponse.json({ success: true, lesson: updated });
       }
 
       case "create_experiment": {
         const exp = await experimentManager.createExperiment({
+          tenantId,
           hypothesis: body.hypothesis,
           domain: body.domain || "general",
           strategyA: body.strategyA,
@@ -149,8 +150,10 @@ export async function POST(req: Request) {
       }
 
       case "activate_strategy": {
-        const active = await strategyManager.activateStrategy(body.strategyId);
-        return NextResponse.json({ success: true, strategy: active });
+        return NextResponse.json({ success: false, code: "GOVERNED_APPROVAL_REQUIRED",
+          message: "Direct legacy activation is retired. Submit this strategy as a learning candidate, complete evidence evaluation and regression verification, then request authenticated human approval.",
+          requiredFlow: ["create_candidate", "evaluate", "benchmark", "request_approval", "promote"],
+        }, { status: 409 });
       }
 
       default:

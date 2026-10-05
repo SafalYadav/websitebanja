@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { OutreachChannel } from "@/lib/outreach/types";
 import type { CRMLeadStatus } from "@/lib/crm/types";
 import type { ReplyIntent, ReplySentiment } from "@/lib/crm/types";
+import type { GenerationHold } from "../orchestration/generationHold";
 
 export type AutonomousPipelineStage =
   | "DISCOVER"
@@ -25,6 +26,8 @@ export type AutonomousPipelineStatus =
   | "pending"
   | "running"
   | "waiting_approval"
+  | "research_required"
+  | "waiting_research_approval"
   | "completed"
   | "failed"
   | "partial_success"
@@ -62,7 +65,8 @@ export interface LeadExecutionRecord {
   phone?: string;
   website?: string;
   currentStage: AutonomousPipelineStage;
-  status: "pending" | "running" | "waiting_approval" | "completed" | "failed" | "skipped";
+  status: "pending" | "running" | "waiting_approval" | "research_required" | "waiting_research_approval" | "completed" | "failed" | "skipped";
+  generationHold?: GenerationHold;
   qualificationScore?: number;
   qualificationStatus?: string;
   auditId?: string;
@@ -95,7 +99,7 @@ export interface LeadExecutionRecord {
   retryCount: number;
   timeline: Array<{
     stage: AutonomousPipelineStage;
-    status: "started" | "completed" | "failed" | "skipped" | "waiting_approval";
+    status: "started" | "completed" | "failed" | "skipped" | "waiting_approval" | "research_required";
     timestamp: string;
     details?: string;
   }>;

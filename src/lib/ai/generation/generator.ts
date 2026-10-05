@@ -174,9 +174,9 @@ import BentoGrid21st from "${meta.importPath}";
 export default function GeneratedBentoGrid21st() {
   return (
     <BentoGrid21st
-      heading="Intelligent Infrastructure & Design Systems"
-      subheading="Modular, fault-tolerant components engineered to turn visitors into loyal advocates."
-      badge="Architectural Core"
+      heading="Distinct Capabilities & Service Highlights"
+      subheading="Thoughtfully designed solutions tailored to deliver memorable experiences."
+      badge="Core Highlights"
     />
   );
 }

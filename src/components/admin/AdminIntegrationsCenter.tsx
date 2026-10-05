@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useCallback } from "react";
+import { useAsyncResource } from "@/hooks/useAsyncResource";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import {
@@ -14,7 +15,6 @@ import {
   MapPin,
   MessageSquare,
   ArrowRight,
-  Send,
   Inbox,
   Lock,
 } from "lucide-react";
@@ -60,8 +60,6 @@ export interface AdminIntegrationsCenterProps {
 }
 
 export default function AdminIntegrationsCenter({ sessionToken, onNavigateTab }: AdminIntegrationsCenterProps = {}) {
-  const [data, setData] = useState<IntegrationStatusData | null>(null);
-  const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [syncFeedback, setSyncFeedback] = useState<string | null>(null);
 
@@ -83,25 +81,13 @@ export default function AdminIntegrationsCenter({ sessionToken, onNavigateTab }:
     return headers;
   }, [sessionToken]);
 
-  const fetchStatus = useCallback(async () => {
-    setLoading(true);
-    try {
-      const headers = await getAuthHeaders();
-      const res = await fetch("/api/integrations/status", { headers });
-      if (res.ok) {
-        const json = await res.json();
-        setData(json);
-      }
-    } catch (err) {
-      console.error("Failed to load integrations status", err);
-    } finally {
-      setLoading(false);
-    }
+  const loadStatus = useCallback(async (): Promise<IntegrationStatusData> => {
+    const headers = await getAuthHeaders();
+    const res = await fetch("/api/integrations/status", { headers, cache: "no-store" });
+    if (!res.ok) throw new Error(`Integration status unavailable (${res.status})`);
+    return await res.json();
   }, [getAuthHeaders]);
-
-  useEffect(() => {
-    fetchStatus();
-  }, [fetchStatus]);
+  const { data, loading, error, refresh: fetchStatus } = useAsyncResource("integrations", loadStatus);
 
   const handleSyncReplies = async () => {
     setSyncing(true);
@@ -118,8 +104,8 @@ export default function AdminIntegrationsCenter({ sessionToken, onNavigateTab }:
       } else {
         setSyncFeedback(`Sync failed: ${json.error || "Unknown error"}`);
       }
-    } catch (err: any) {
-      setSyncFeedback(`Sync error: ${err.message}`);
+    } catch (err: unknown) {
+      setSyncFeedback(`Sync error: ${err instanceof Error ? err.message : "Request failed"}`);
     } finally {
       setSyncing(false);
     }
@@ -138,8 +124,8 @@ export default function AdminIntegrationsCenter({ sessionToken, onNavigateTab }:
       } else {
         alert(data.error || "Failed to generate authorization URL");
       }
-    } catch (err: any) {
-      alert("Error initiating OAuth: " + err.message);
+    } catch (err: unknown) {
+      alert("Error initiating OAuth: " + (err instanceof Error ? err.message : "Request failed"));
     } finally {
       setConnectingGmail(false);
     }
@@ -147,6 +133,7 @@ export default function AdminIntegrationsCenter({ sessionToken, onNavigateTab }:
 
   return (
     <div className="space-y-6 text-slate-100 font-sans">
+      {error && <p role="alert" className="rounded-xl border border-red-500/30 bg-red-950/30 p-4 text-red-200">{error}. Retry using Refresh Status.</p>}
       {/* Top Toolbar */}
       <div className="rounded-3xl border border-slate-800 bg-slate-900/90 p-5 shadow-xs">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -548,7 +535,7 @@ export default function AdminIntegrationsCenter({ sessionToken, onNavigateTab }:
                       <span className="text-amber-400">Requires OAuth Connect</span>
                     )}
                   </td>
-                  <td className="p-3 text-slate-300 font-sans">Obtained automatically via 'Connect Gmail' button above</td>
+                  <td className="p-3 text-slate-300 font-sans">Obtained automatically via &lsquo;Connect Gmail&rsquo; button above</td>
                 </tr>
               </tbody>
             </table>

@@ -24,7 +24,9 @@ export class ExperimentManager {
     strategyA: string;
     strategyB: string;
     sampleSize?: number;
+    tenantId?: string | null;
   }): Promise<AgentExperimentRecord> {
+    const tenantId = (params.tenantId || "default_tenant").trim();
     const experimentId = `exp_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
     const experiment: AgentExperimentRecord = {
       id: experimentId,
@@ -45,17 +47,39 @@ export class ExperimentManager {
       createdAt: new Date().toISOString(),
     };
 
-    await this.store.saveExperiment(experiment);
+    (experiment as any).tenantId = tenantId;
+    await this.store.saveExperiment(tenantId, experiment);
     return experiment;
   }
 
   public async recordSample(
-    experimentId: string,
-    variant: "A" | "B" | string,
-    success: boolean,
-    score?: number
+    tenantOrExperimentId: string,
+    experimentIdOrVariant: string,
+    variantOrSuccess: any,
+    successOrScore?: any,
+    scoreParam?: number
   ): Promise<any | undefined> {
-    const exp = await this.store.getExperiment(experimentId);
+    let tenantId: string;
+    let experimentId: string;
+    let variant: string;
+    let success: boolean;
+
+    if (scoreParam !== undefined || typeof successOrScore === "boolean") {
+      tenantId = tenantOrExperimentId;
+      experimentId = experimentIdOrVariant;
+      variant = variantOrSuccess;
+      success = successOrScore;
+    } else {
+      tenantId = "default_tenant";
+      experimentId = tenantOrExperimentId;
+      variant = experimentIdOrVariant;
+      success = variantOrSuccess;
+    }
+
+    let exp = await this.store.getExperiment(tenantId, experimentId);
+    if (!exp) {
+      exp = await this.store.getExperiment(experimentId);
+    }
     if (!exp) return undefined;
 
     const metrics = (exp.metrics as {
@@ -77,7 +101,6 @@ export class ExperimentManager {
 
     exp.metrics = metrics;
 
-    // Check if sample size reached
     const totalSamples = metrics.samplesA + metrics.samplesB;
     (exp as any).samplesRecorded = totalSamples;
 
@@ -97,11 +120,11 @@ export class ExperimentManager {
       exp.confidence = 0.85;
     }
 
-    await this.store.saveExperiment(exp);
+    await this.store.saveExperiment(tenantId, exp);
     return exp;
   }
 
-  public async listExperiments(domain?: string): Promise<AgentExperimentRecord[]> {
-    return this.store.listExperiments(domain);
+  public async listExperiments(domainOrTenant?: string, domainFilter?: string): Promise<AgentExperimentRecord[]> {
+    return this.store.listExperiments(domainOrTenant, domainFilter);
   }
 }

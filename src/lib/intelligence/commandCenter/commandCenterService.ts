@@ -100,12 +100,14 @@ export class CommandCenterService {
     let failures: any[] = [];
     let experiments: any[] = [];
     try {
-      [lessons, strategies, failures, experiments] = await Promise.all([
-        memoryStore.listLessons(),
-        memoryStore.listStrategies(),
-        memoryStore.listFailures(20),
-        memoryStore.listExperiments(),
-      ]);
+      if (tenantId) {
+        [lessons, strategies, failures, experiments] = await Promise.all([
+          memoryStore.listLessons(tenantId),
+          memoryStore.listStrategies(tenantId),
+          memoryStore.listFailures(tenantId, 20),
+          memoryStore.listExperiments(tenantId),
+        ]);
+      }
     } catch {
       // In-memory or safe empty fallback
     }
@@ -115,8 +117,8 @@ export class CommandCenterService {
     const liveStatuses = getActiveAgentStatuses();
 
     // Approvals: Governance (Phase 25) + Outreach ApprovalGate (Phase 23)
-    const govPending = governanceApprovalStore.listPending();
-    const outreachPending = approvalGate.getPendingApprovals(tenantId);
+    const govPending = governanceApprovalStore.listPending(tenantId);
+    const outreachPending = await approvalGate.getStoredPendingApprovals(tenantId || "");
 
     // ─── Section 1: Executive Overview ─────────────────────────────────────────
     const activeObjectivesCount = recentExecutiveRuns.filter(

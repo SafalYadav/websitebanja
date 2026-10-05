@@ -54,7 +54,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "http://localhost:3000/api/automation/generate-personalized-preview",
+        "url": "={{ ($env.WEBSITEBANJA_BASE_URL || 'http://localhost:3000') + '/api/automation/generate-personalized-preview' }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -72,7 +72,8 @@
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify($json) }}",
         "options": {
-          "timeout": 90000
+          "timeout": 120000,
+          "response": { "response": { "neverError": true } }
         }
       },
       "id": "e440c440-4004-4004-8004-000000000004",
@@ -149,6 +150,21 @@
         1340,
         420
       ]
+    },
+    {
+      "id": "research_pending", "name": "Research Pending?", "type": "n8n-nodes-base.if", "typeVersion": 2, "position": [1340, 620],
+      "parameters": { "conditions": { "boolean": [{ "value1": "={{ /^[a-f0-9]{64}$/.test($json.researchId || '') && ['RESEARCH_REQUIRED','RESEARCHING','BOSS_REVIEW','WAITING_HUMAN_APPROVAL','APPROVED','QUEUED','GENERATING'].includes(String($json.status || '').toUpperCase()) }}", "value2": true }] } }
+    },{
+      "id": "research_wait", "name": "Wait for Human Review", "type": "n8n-nodes-base.wait", "typeVersion": 1.1, "position": [1560, 620],
+      "parameters": { "resume": "timeInterval", "amount": 2, "unit": "minutes" }
+    },{
+      "id": "research_poll", "name": "Observe Approved Research", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2, "position": [1780, 620],
+      "parameters": { "method": "GET", "url": "={{ ($env.WEBSITEBANJA_BASE_URL || 'http://localhost:3000') + '/api/automation/research/' + encodeURIComponent($json.researchId) }}",
+        "sendHeaders": true, "headerParameters": { "parameters": [{ "name": "x-automation-secret", "value": "={{ $env.WEBSITEBANJA_AUTOMATION_SECRET }}" }] },
+        "options": { "timeout": 30000, "response": { "response": { "neverError": true } } } }
+    },{
+      "id": "research_result", "name": "Normalize Research Result", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [2000, 620],
+      "parameters": { "jsCode": "const response = $input.first().json;\nconst ready = ['READY','REPAIRED'].includes(response.status) && response.result?.success === true && Boolean(response.result?.preview?.id);\nif (ready) return [{json: {...response.result, success: true, status: 'generated', researchId: response.researchId}}];\nreturn [{json: {success: false, status: response.status || 'FAILED', researchId: response.researchId, error: response.result?.error || response.error || {code: 'RESEARCH_PENDING', message: 'Research requires independent human review'}}}];" }
     }
   ],
   "connections": {
@@ -207,13 +223,17 @@
         ],
         [
           {
-            "node": "Handle Preview Failure",
+            "node": "Research Pending?",
             "type": "main",
             "index": 0
           }
         ]
       ]
-    }
+    },
+    "Research Pending?": { "main": [[{ "node": "Wait for Human Review", "type": "main", "index": 0 }], [{ "node": "Handle Preview Failure", "type": "main", "index": 0 }]] },
+    "Wait for Human Review": { "main": [[{ "node": "Observe Approved Research", "type": "main", "index": 0 }]] },
+    "Observe Approved Research": { "main": [[{ "node": "Normalize Research Result", "type": "main", "index": 0 }]] },
+    "Normalize Research Result": { "main": [[{ "node": "Preview Generation Succeeded?", "type": "main", "index": 0 }]] }
   },
   "active": false,
   "settings": {

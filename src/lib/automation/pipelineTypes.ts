@@ -1,5 +1,22 @@
 // src/lib/automation/pipelineTypes.ts
 // Phase 13 — Autonomous Lead Pipeline Data Models and State Machine
+import { z } from "zod";
+
+export const PipelineRunIdSchema = z.string().regex(/^[a-zA-Z0-9_-]{1,160}$/);
+export const PipelineRunMutationSchema = z.object({ runId: PipelineRunIdSchema, reason: z.string().trim().max(500).optional() });
+export const PipelineReplySimulationSchema = z.object({
+  leadId: z.string().trim().min(1).max(160),
+  messageText: z.string().trim().min(1).max(4000),
+  channel: z.enum(["email", "instagram", "sms"]).default("email"),
+});
+
+export const PipelineRunCriteriaSchema = z.object({
+  industry: z.string().trim().min(2).max(200),
+  city: z.string().trim().min(2).max(200),
+  limit: z.number().int().min(1).max(50).optional(),
+  autoApproveOutreach: z.boolean().optional(),
+  channel: z.enum(["email", "instagram", "sms"]).optional(),
+});
 
 export type PipelineStage =
   | "DISCOVERY"
@@ -53,6 +70,8 @@ export interface LeadTimelineEvent {
 }
 
 export interface LeadPipelineProgress {
+  researchId?: string;
+  generationCorrelationId?: string;
   leadId: string;
   businessName: string;
   currentStage: PipelineStage;
@@ -75,7 +94,7 @@ export interface PipelineJob {
   runId: string;
   leadId: string;
   stage: PipelineStage;
-  status: "queued" | "running" | "completed" | "failed" | "skipped";
+  status: "queued" | "running" | "completed" | "failed" | "skipped" | "paused";
   attempt: number;
   maxAttempts: number;
   idempotencyKey: string;
@@ -102,6 +121,8 @@ export interface PipelineRunError {
 }
 
 export interface PipelineRun {
+  tenantId?: string;
+  userId?: string;
   id: string;
   status: PipelineStatus;
   currentStage: PipelineStage;
@@ -112,6 +133,8 @@ export interface PipelineRun {
   updatedAt: string;
   completedAt?: string;
   pausedAt?: string;
+  pauseReason?: "human" | "research" | "outreach";
+  activeResearchContinuationId?: string;
   cancelledAt?: string;
   error?: string;
   errors: PipelineRunError[];

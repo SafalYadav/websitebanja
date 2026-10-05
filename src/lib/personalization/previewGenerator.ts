@@ -583,7 +583,7 @@ export async function generatePersonalizedPreview(
   });
 
   // 2.3 Query Active Strategy from Learning Loop (Phase 27)
-  const activeStrategy = await StrategyManager.getInstance().getActiveStrategy("generation").catch(() => null);
+  const activeStrategy = await StrategyManager.getInstance().getActiveStrategy("generation", request.userId).catch(() => null);
 
   // 3. Formulate WebsiteRequirement with semantic CTA and Brand Style
   let primaryCta = request.executiveBrief?.primaryCta.label || semanticAnalysis.primaryCta?.label || "Inquire Today";
@@ -999,6 +999,9 @@ export async function generatePersonalizedPreview(
   const previewId = `prev_${baseSlug}_${uniqueHash}`;
   const previewSlug = `${baseSlug}-${uniqueHash}`;
 
+  if (request.deferPublication) {
+    (websiteData as unknown as Record<string, unknown>).generationGate = "PENDING";
+  }
   ensurePreviewStorage();
   const previewFilePath = path.join(PREVIEW_DIR, `${previewId}.json`);
   fs.writeFileSync(previewFilePath, JSON.stringify(websiteData, null, 2), "utf-8");
@@ -1027,7 +1030,7 @@ export async function generatePersonalizedPreview(
   };
 
   const updatedManifest = [...storedManifest.filter((p) => p.previewId !== previewId), storedRecord];
-  writeStoredManifest(updatedManifest);
+  if (!request.deferPublication) writeStoredManifest(updatedManifest);
 
   // 11. Formulate Outreach Context for Phase 11
   const allAuditIssues: Array<{ category?: string; evidence?: string; message?: string }> = [

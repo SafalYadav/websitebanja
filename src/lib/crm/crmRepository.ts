@@ -507,7 +507,7 @@ export class CRMRepository {
     }
 
     const statesMap = this.getLeadStatesMap();
-    let leadState = statesMap[leadId];
+    const leadState = statesMap[leadId];
 
     if (!leadState) {
       try {

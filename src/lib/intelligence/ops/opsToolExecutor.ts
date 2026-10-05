@@ -3,14 +3,12 @@ import { randomUUID } from "crypto";
 import type {
   OpsToolRequest,
   OpsToolResponse,
-  OpsToolName,
 } from "./opsToolTypes";
 import { OpsToolRequestSchema } from "./opsToolTypes";
 import { executeDiscoveryRun } from "@/lib/discovery/discoveryService";
 import { qualifyBusinessLead } from "@/lib/discovery/qualificationEngine";
 import { leadRepository } from "@/lib/discovery/leadRepository";
 import { buildResearchSummary, auditQualifiedLead } from "@/lib/audit/auditService";
-import { generatePersonalizedPreview } from "@/lib/personalization/previewGenerator";
 import { validateWebsiteQuality } from "@/lib/ai/design/qualityValidator";
 import { generateOutreachDraft } from "@/lib/outreach/personalizationEngine";
 import { crmRepository } from "@/lib/crm/crmRepository";
@@ -21,6 +19,7 @@ import { redactSecretsInObject } from "../memory/memoryStore";
 import { emitAgentEvent } from "@/lib/telemetry/agentTelemetry";
 import { groundedIntelligenceService } from "../grounding/groundedIntelligenceService";
 import { canonicalGenerationOrchestrator } from "../orchestration/canonicalGenerationOrchestrator";
+import { readOwnedApprovedGeneratedPreview, readOwnedGenerationHandoff } from "../orchestration/generationTraceStore";
 
 export class OpsToolExecutor {
   private static instance: OpsToolExecutor;
@@ -85,9 +84,8 @@ export class OpsToolExecutor {
     }
 
     // 3. Idempotency Check
-    const idempotencyKey =
-      request.idempotencyKey ||
-      `${request.tool}_${request.taskId}_${request.leadId || "global"}_${request.requestId}`;
+    const idempotencyKey = JSON.stringify([request.tenantId || request.userId || null,
+      request.idempotencyKey || `${request.tool}_${request.taskId}_${request.leadId || "global"}_${request.requestId}`, request.input]);
 
     if (this.idempotencyCache.has(idempotencyKey)) {
       const cached = this.idempotencyCache.get(idempotencyKey)!;
@@ -118,6 +116,8 @@ export class OpsToolExecutor {
     try {
       let resultData: any = null;
       const warnings: string[] = [];
+      let toolSucceeded = true;
+      const toolErrors: string[] = [];
 
       switch (request.tool) {
         case "discover_leads": {
@@ -191,20 +191,20 @@ export class OpsToolExecutor {
           const summary = buildResearchSummary(lead);
 
           // Phase 20 / Grounded Business Intelligence enrichment
-          let groundedProfile = null;
-          try {
+          const tenantId = request.tenantId || request.userId;
+          if (!tenantId) throw new Error("Trusted tenant required for business research");
             const researchResult = await groundedIntelligenceService.researchBusiness({
               businessName: lead.businessName || summary.businessName || "Unknown Business",
               website: lead.website || (lead as any).websiteUrl,
               location: lead.city ? `${lead.city}, ${lead.country || "IN"}` : summary.location,
               category: lead.category || summary.category || summary.industry,
               placeId: (lead as any).placeId,
-              tenantId: request.tenantId || request.userId || "default",
+              tenantId,
             });
-            groundedProfile = researchResult.profile;
-          } catch (researchErr) {
-            // Non-blocking fallback to preserve workflow execution
+          if (!researchResult.success || !researchResult.profile.evidence.some(item => item.verificationStatus === "verified" && !item.supports.includes("location"))) {
+            throw new Error("Business research unavailable or lacks verified business evidence; generic summary cannot replace research");
           }
+          const groundedProfile = researchResult.profile;
 
           resultData = {
             leadId: lead.leadId,
@@ -264,20 +264,24 @@ export class OpsToolExecutor {
           });
 
           if (!canonicalRes.success) {
-            throw new Error(canonicalRes.error?.message || "Canonical generation orchestrator failed in ops execution");
+            toolSucceeded = false;
+            toolErrors.push(canonicalRes.error?.message || "Canonical generation did not complete");
+            resultData = { status: canonicalRes.status, researchId: canonicalRes.researchId,
+              correlationId: canonicalRes.correlationId, error: canonicalRes.error };
+            break;
           }
 
           resultData = {
             previewId: canonicalRes.preview.id,
             previewUrl: canonicalRes.preview.url,
             status: canonicalRes.status,
-            qualityScore: 95,
+            qualityScore: canonicalRes.validationReport?.overallScore ?? canonicalRes.previewDetails?.qualityScore,
+            correlationId: canonicalRes.correlationId,
             business: {
               name: businessName,
               category,
               city: location,
             },
-            websiteData: canonicalRes.websiteData,
           };
           break;
         }
@@ -286,16 +290,19 @@ export class OpsToolExecutor {
           const previewId = sanitizedInput.previewId as string;
           const lead = sanitizedInput.lead as any;
           const businessName = String(sanitizedInput.businessName || lead?.businessName || "Business");
-          const websiteData = (sanitizedInput.websiteData as Record<string, unknown>) || {
-            businessName,
-            sectionOrder: ["hero", "services", "about", "contact"],
-            hero: { headline: `Welcome to ${businessName}`, subtitle: "Quality service" },
-          };
+          const tenantId = request.tenantId || request.userId;
+          if (!tenantId || !previewId) throw new Error("Owned approved preview identity required for validation");
+          const websiteData = await readOwnedApprovedGeneratedPreview(previewId, tenantId);
+          if (!websiteData) throw new Error("Owned approved preview not found; supplied website data cannot replace rendered review");
 
           const qualityReport = validateWebsiteQuality(
             websiteData,
             businessName
           );
+          if (!qualityReport.passed) {
+            toolSucceeded = false;
+            toolErrors.push("Owned reviewed preview did not pass additional quality validation");
+          }
 
           resultData = {
             previewId,
@@ -312,16 +319,22 @@ export class OpsToolExecutor {
         case "create_outreach": {
           const leadId = String(sanitizedInput.leadId || "");
           if (!leadId) throw new Error("Missing required leadId for outreach draft creation");
+          const previewId = typeof sanitizedInput.previewId === "string" ? sanitizedInput.previewId : "";
+          const tenantId = request.tenantId || request.userId;
+          if (!tenantId || !previewId) throw new Error("Owned approved preview required before outreach");
+          const preview = await readOwnedGenerationHandoff(previewId, tenantId, leadId);
+          if (!preview) throw new Error("Owned approved preview does not match this lead; outreach blocked");
 
           const draftResult = await generateOutreachDraft({
             leadId,
-            previewId: sanitizedInput.previewId as string,
+            previewId,
             channel: "email",
             userId: request.userId || request.tenantId || undefined,
             overrideLead: sanitizedInput.lead as any,
             overrideAudit: sanitizedInput.audit as any,
-            overridePreview: sanitizedInput.preview as any,
+            overridePreview: preview,
           });
+          if (!draftResult.success || !draftResult.outreach) throw new Error(draftResult.error?.message || "Outreach specialist did not return a completed draft");
 
           resultData = {
             outreachId: draftResult.outreach?.outreachId,
@@ -529,12 +542,12 @@ export class OpsToolExecutor {
       }
 
       const response: OpsToolResponse<any> = {
-        success: true,
+        success: toolSucceeded,
         tool: request.tool,
         requestId: request.requestId,
         taskId: request.taskId,
         result: redactSecretsInObject(resultData),
-        errors: [],
+        errors: toolErrors,
         warnings,
         metadata: {
           durationMs: performance.now() - startTime,
@@ -544,13 +557,13 @@ export class OpsToolExecutor {
       };
 
       // Store in idempotency cache
-      this.idempotencyCache.set(idempotencyKey, response);
+      if (response.success) this.idempotencyCache.set(idempotencyKey, response);
 
       emitAgentEvent({
         agent: "n8n_automation",
         event: "agent.tool_result",
         requestId: request.requestId,
-        status: "success",
+        status: response.success ? "success" : "error",
         metadata: { tool: request.tool, taskId: request.taskId },
       });
 

@@ -13,6 +13,8 @@ export interface ModelRequest<TSchema = unknown> {
 
   /** User prompt or task input */
   userPrompt: string;
+  /** Pixel evidence; requests with images must use a vision-capable provider. */
+  images?: Array<{ mimeType: "image/png" | "image/jpeg"; data: string }>;
 
   /** Optional JSON schema for structured output enforcement */
   responseSchema?: Record<string, unknown>;
@@ -60,6 +62,8 @@ export interface ModelResponse<T = unknown> {
 
   /** Number of fallback providers attempted before success (0 = primary) */
   fallbackCount?: number;
+  /** Actual provider invocations across retries and fallbacks. */
+  attemptCount?: number;
 
   /** Token consumption if provided by upstream */
   tokensUsed?: {
@@ -100,6 +104,10 @@ export interface RoutingPolicy {
 
   /** Max retries for transient errors (429, 503, network) per provider */
   maxRetries?: number;
+  /** Whole invocation cap, not a per-provider budget. */
+  maxTotalAttempts?: number;
+  /** Invalid/auth/unknown failures must not be hidden by another provider. */
+  stopOnNonTransient?: boolean;
 
   /** Overall timeout in milliseconds */
   timeoutMs?: number;

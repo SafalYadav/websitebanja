@@ -5,7 +5,8 @@ import { NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
 import { checkMemoryRateLimit } from "@/lib/rateLimit";
-import { getClientIp } from "@/lib/supabaseServer";
+import { getClientIp, validateUserAuth } from "@/lib/supabaseServer";
+import { isUserAdmin } from "@/lib/adminAuth";
 
 interface RouteContext {
   params: Promise<{ id: string }>;
@@ -17,6 +18,8 @@ const FORBIDDEN_KEYS = new Set(["__proto__", "constructor", "prototype"]);
 
 export async function POST(request: Request, context: RouteContext) {
   try {
+    const auth = await validateUserAuth(request);
+    if (!auth.user) return NextResponse.json({ success: false, error: "Authentication required" }, { status: 401 });
     const ip = getClientIp(request);
     const { success: allowed } = checkMemoryRateLimit(`preview_edit_${ip}`, 60, 60 * 1000);
     if (!allowed) {
@@ -39,10 +42,17 @@ export async function POST(request: Request, context: RouteContext) {
 
     const body = await request.json().catch(() => ({}));
     const currentData = JSON.parse(fs.readFileSync(previewFile, "utf-8"));
+    if (currentData.generationOwnerId !== auth.user.id && !isUserAdmin(auth.user)) {
+      return NextResponse.json({ success: false, error: "Preview ownership validation failed" }, { status: 403 });
+    }
+    const governed = Boolean(currentData.generationGate);
+    if (governed) currentData.generationGate = "PENDING";
 
     if (body.websiteData) {
       // Direct whole-object replace
-      fs.writeFileSync(previewFile, JSON.stringify(body.websiteData, null, 2), "utf-8");
+      const replacement = { ...body.websiteData, generationOwnerId: currentData.generationOwnerId,
+        ...(governed ? { generationGate: "PENDING" } : {}) };
+      fs.writeFileSync(previewFile, JSON.stringify(replacement, null, 2), "utf-8");
       return NextResponse.json({ success: true, message: "Website data saved" });
     }
 

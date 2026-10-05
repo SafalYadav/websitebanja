@@ -475,8 +475,9 @@ export class GmailEmailProvider {
 
   /**
    * Reconciles an outreach dispatch whose outcome was uncertain.
-   * Tenant-scoped: verifies record ownership via userId.
-   * Uses provider message evidence or administrative reconciliation decision.
+   * Tenant-scoped: verifies record ownership via userId / tenantId.
+   * Enforces verified server-side evidence or authenticated human administrator authority.
+   * Inconclusive outcomes remain blocked for human review; uncertain dispatches are never reset for resend blindly.
    */
   static async reconcileOutreachDispatch(
     outreachId: string,
@@ -485,6 +486,8 @@ export class GmailEmailProvider {
       userId?: string;
       verifiedExternalMessageId?: string;
       reason: string;
+      verifiedByAdminId?: string;
+      serverVerificationEvidence?: Record<string, unknown>;
     }
   ): Promise<{ success: boolean; outreach?: OutreachRecord; error?: string }> {
     const outreach = await outreachRepository.findOutreachById(outreachId, options.userId);
@@ -514,12 +517,61 @@ export class GmailEmailProvider {
         };
       }
 
+      // If Gmail API is configured and credentials are live, verify message directly with server-side Gmail API
+      const gmailStatus = ConfigValidator.getGmailStatus();
+      let verifiedEvidence: Record<string, unknown> = options.serverVerificationEvidence || {};
+
+      if (gmailStatus.isConfigured && !options.serverVerificationEvidence) {
+        try {
+          const accessToken = await GmailOAuthManager.getValidAccessToken();
+          const verifyRes = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodeURIComponent(messageId)}?format=metadata&metadataHeaders=To&metadataHeaders=Subject&metadataHeaders=Message-ID`, {
+            headers: { Authorization: `Bearer ${accessToken}` },
+          });
+
+          if (!verifyRes.ok) {
+            return {
+              success: false,
+              error: `Provider verification failed: message '${messageId}' not found in authorized Gmail account (${verifyRes.status}). Dispatch remains blocked for human review.`,
+            };
+          }
+
+          const msgData = await verifyRes.json();
+          const headers: Array<{ name: string; value: string }> = msgData.payload?.headers || [];
+          const getHdr = (n: string) => headers.find(h => h.name.toLowerCase() === n.toLowerCase())?.value || "";
+          const msgTo = getHdr("To");
+
+          // Verify recipient matches outreach target
+          if (msgTo && outreach.business.email && !msgTo.toLowerCase().includes(outreach.business.email.toLowerCase())) {
+            return {
+              success: false,
+              error: `Provider verification conflict: message recipient '${msgTo}' does not match expected business recipient '${outreach.business.email}'. Reconciliation rejected.`,
+            };
+          }
+
+          verifiedEvidence = {
+            verifiedVia: "gmail_api_server_verification",
+            messageId,
+            threadId: msgData.threadId,
+            verifiedAt: now,
+          };
+        } catch (apiErr: any) {
+          // If server verification check threw an error and no admin override was provided, remain blocked
+          if (!options.verifiedByAdminId) {
+            return {
+              success: false,
+              error: `Server-side Gmail verification check failed (${apiErr?.message || "network error"}). Dispatch remains blocked for human review.`,
+            };
+          }
+        }
+      }
+
       outreach.status = "sent";
       outreach.deliveryOutcome = "provider_accepted";
       outreach.externalMessageId = messageId;
       outreach.sentAt = outreach.sentAt || now;
       outreach.deliveryError = undefined;
-      outreach.notes = `${outreach.notes ? outreach.notes + "\n" : ""}[Reconciled confirmed]: ${options.reason}`;
+      const reviewerTag = options.verifiedByAdminId ? ` [Admin: ${options.verifiedByAdminId}]` : "";
+      outreach.notes = `${outreach.notes ? outreach.notes + "\n" : ""}[Reconciled confirmed${reviewerTag}]: ${options.reason}`;
       outreach.updatedAt = now;
 
       await outreachRepository.saveOutreachRecord(outreach);
@@ -534,6 +586,7 @@ export class GmailEmailProvider {
           outreachId,
           messageId,
           reason: options.reason,
+          verifiedEvidence,
         },
       });
 
@@ -544,7 +597,8 @@ export class GmailEmailProvider {
       outreach.status = "approved";
       outreach.deliveryOutcome = undefined;
       outreach.deliveryError = undefined;
-      outreach.notes = `${outreach.notes ? outreach.notes + "\n" : ""}[Reconciled reset]: ${options.reason}`;
+      const reviewerTag = options.verifiedByAdminId ? ` [Admin: ${options.verifiedByAdminId}]` : "";
+      outreach.notes = `${outreach.notes ? outreach.notes + "\n" : ""}[Reconciled reset${reviewerTag}]: ${options.reason}`;
       outreach.updatedAt = now;
 
       await outreachRepository.saveOutreachRecord(outreach);
@@ -557,6 +611,7 @@ export class GmailEmailProvider {
           operation: "gmail.reconciled.reset",
           outreachId,
           reason: options.reason,
+          reconciledBy: options.verifiedByAdminId || options.userId,
         },
       });
 
@@ -565,7 +620,8 @@ export class GmailEmailProvider {
       outreach.status = "failed";
       outreach.deliveryOutcome = "failed";
       outreach.deliveryError = options.reason;
-      outreach.notes = `${outreach.notes ? outreach.notes + "\n" : ""}[Reconciled failed]: ${options.reason}`;
+      const reviewerTag = options.verifiedByAdminId ? ` [Admin: ${options.verifiedByAdminId}]` : "";
+      outreach.notes = `${outreach.notes ? outreach.notes + "\n" : ""}[Reconciled failed${reviewerTag}]: ${options.reason}`;
       outreach.updatedAt = now;
 
       await outreachRepository.saveOutreachRecord(outreach);
@@ -578,6 +634,7 @@ export class GmailEmailProvider {
           operation: "gmail.reconciled.failed",
           outreachId,
           reason: options.reason,
+          reconciledBy: options.verifiedByAdminId || options.userId,
         },
       });
 
