@@ -93,7 +93,7 @@ export const BASELINE_SCHEMA_REQUIREMENTS = {
       "project_knowledge_revisions",
     ],
     columns: [],
-    indexes: ["idx_projects_user_id", "idx_published_versions_slug"],
+    indexes: ["idx_projects_user_id"],
     functions: [
       "publish_project_atomic",
       "get_published_project_by_slug",
@@ -132,7 +132,7 @@ export const BASELINE_SCHEMA_REQUIREMENTS = {
       "agent_recommendations",
     ],
     columns: [],
-    indexes: ["idx_agent_runs_created_at"],
+    indexes: ["idx_agent_runs_created_at", "idx_agent_decisions_run_id"],
     functions: [],
   },
   "06_uniqueness_verification": {
@@ -144,7 +144,7 @@ export const BASELINE_SCHEMA_REQUIREMENTS = {
   "07_admin_access_control_audit": {
     tables: ["admin_audit_logs"],
     columns: [],
-    indexes: ["idx_admin_audit_logs_created_at"],
+    indexes: ["idx_admin_audit_created_at", "idx_admin_audit_actor"],
     functions: [],
   },
   "08_agent_memory_learning_baseline": {
@@ -162,7 +162,7 @@ export const BASELINE_SCHEMA_REQUIREMENTS = {
       { table: "agent_runs", column: "objective" },
       { table: "agent_runs", column: "domain" },
     ],
-    indexes: ["idx_agent_lessons_strategy", "idx_agent_events_tenant_id"],
+    indexes: ["idx_agent_events_run_id", "idx_agent_lessons_domain"],
     functions: [],
   },
   "09_crm_outreach_pipeline_schema": {
@@ -175,7 +175,7 @@ export const BASELINE_SCHEMA_REQUIREMENTS = {
       "approval_records",
     ],
     columns: [],
-    indexes: ["idx_crm_leads_tenant_status", "idx_outreach_records_lead_id"],
+    indexes: ["idx_crm_leads_state_user", "idx_outreach_records_lead"],
     functions: [],
   },
 };
