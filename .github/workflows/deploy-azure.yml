@@ -85,6 +85,7 @@ jobs:
 
       - name: Ensure External n8n Ops Agent in Azure
         id: n8n-deploy
+        continue-on-error: true
         env:
           WEBSITEBANJA_AUTOMATION_SECRET: ${{ secrets.WEBSITEBANJA_AUTOMATION_SECRET }}
         run: |
