@@ -373,6 +373,25 @@ export async function executeMigrations({
               CREATE ROLE service_role NOLOGIN;
             END IF;
           END $$;
+
+          CREATE SCHEMA IF NOT EXISTS auth;
+          CREATE TABLE IF NOT EXISTS auth.users (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            email TEXT UNIQUE,
+            raw_user_meta_data JSONB DEFAULT '{}'::jsonb,
+            raw_app_meta_data JSONB DEFAULT '{}'::jsonb,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+          );
+
+          CREATE OR REPLACE VIEW public.users AS
+            SELECT 
+              id, 
+              email, 
+              COALESCE((raw_app_meta_data->>'is_admin')::boolean, (raw_user_meta_data->>'is_admin')::boolean, false) AS is_admin,
+              created_at, 
+              updated_at
+            FROM auth.users;
         `);
       } catch (roleErr) {
         // Safe fallback if client is mock or role creation is non-fatal
