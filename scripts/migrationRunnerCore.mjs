@@ -358,6 +358,28 @@ export async function executeMigrations({
       }
     }
 
+    if (!isDryRun) {
+      try {
+        await client.query(`
+          DO $$
+          BEGIN
+            IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN
+              CREATE ROLE authenticated NOLOGIN;
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN
+              CREATE ROLE anon NOLOGIN;
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'service_role') THEN
+              CREATE ROLE service_role NOLOGIN;
+            END IF;
+          END $$;
+        `);
+      } catch (roleErr) {
+        // Safe fallback if client is mock or role creation is non-fatal
+        logger.log(`[MigrationRunner] Role check: ${roleErr.message}`);
+      }
+    }
+
     // 3. Process migrations sequentially
     for (const m of verifiedMigrations) {
       if (appliedMap.has(m.id)) {
