@@ -602,9 +602,9 @@ export class GmailEmailProvider {
       }
 
       const gmailStatus = ConfigValidator.getGmailStatus();
-      let verifiedEvidence: Record<string, unknown> = options.serverVerificationEvidence || {};
+      let verifiedEvidence: Record<string, unknown> = {};
 
-      if (gmailStatus.isConfigured && !options.serverVerificationEvidence) {
+      if (gmailStatus.isConfigured) {
         try {
           const accessToken = await GmailOAuthManager.getValidAccessToken();
           const verifyRes = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodeURIComponent(messageId)}?format=metadata&metadataHeaders=To&metadataHeaders=Subject&metadataHeaders=Message-ID&metadataHeaders=From`, {

@@ -36,10 +36,27 @@ export async function GET(req: Request) {
     }
 
     const { searchParams } = new URL(req.url);
-    const tenantId = searchParams.get("tenantId") || undefined;
+    const requestedTenant = searchParams.get("tenantId")?.trim();
+
+    // Derive trusted identity server-side: if explicit tenant requested, verify authorization; otherwise use caller's authenticated identity
+    const effectiveTenantId = requestedTenant || auth.userId;
+    if (!effectiveTenantId?.trim()) {
+      return NextResponse.json(
+        { success: false, message: "Forbidden: Authorized workspace tenant identity required." },
+        { status: 403 }
+      );
+    }
+
+    // Reject unauthorized workspace access if caller specifies an alien tenant they do not own
+    if (requestedTenant && requestedTenant !== auth.userId && !auth.isAdmin) {
+      return NextResponse.json(
+        { success: false, message: "Forbidden: Unauthorized workspace access." },
+        { status: 403 }
+      );
+    }
 
     const data = await commandCenterService.getCommandCenterData({
-      tenantId,
+      tenantId: effectiveTenantId,
       userId: auth.userId,
     });
 

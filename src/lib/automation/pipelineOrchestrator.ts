@@ -462,9 +462,9 @@ export class PipelineOrchestrator {
       reason: "User requested pipeline resume",
     });
 
-    // Resume any pending leads
+    // Resume any pending or paused leads
     const pendingLeads = Object.values(run.leads).filter(
-      (l) => l.status === "pending" || l.status === "running" || (l.status === "paused" && Boolean(l.researchId))
+      (l) => l.status === "pending" || l.status === "running" || l.status === "paused"
     );
 
     if (pendingLeads.length > 0) {

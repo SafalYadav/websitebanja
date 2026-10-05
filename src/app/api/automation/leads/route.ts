@@ -1,20 +1,18 @@
 // src/app/api/automation/leads/route.ts
 
 import { NextRequest, NextResponse } from "next/server";
-import { isAuthorized } from "@/lib/automation/auth";
+import { authorizeAutomationTenant } from "@/lib/automation/automationApiIdentity";
 import { LeadCommandCenterService } from "@/lib/leads/leadCommandCenterService";
 import type { FilterPreset } from "@/lib/leads/types";
 import type { PipelineStage } from "@/lib/automation/pipelineTypes";
+import { sanitizeErrorOutput } from "@/lib/ai/router/modelConfig";
+import { randomUUID } from "node:crypto";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
-  if (!(await isAuthorized(req))) {
-    return NextResponse.json(
-      { error: "Unauthorized: Invalid or missing automation credentials" },
-      { status: 401 }
-    );
-  }
+  const auth = await authorizeAutomationTenant(req);
+  if (auth.response) return auth.response;
 
   try {
     const url = new URL(req.url);
@@ -31,6 +29,7 @@ export async function GET(req: NextRequest) {
     const sortDir = (url.searchParams.get("sortDir") as any) || undefined;
 
     const result = await LeadCommandCenterService.listCommandCenterLeads({
+      userId: auth.identity.tenantId,
       search,
       preset,
       stage,
@@ -45,9 +44,19 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({ success: true, ...result });
   } catch (error) {
-    console.error("[GET /api/automation/leads] Error:", error);
+    const correlationId = `err_${randomUUID()}`;
+    const safeMsg = sanitizeErrorOutput(error instanceof Error ? error.message : String(error));
+    console.error(`[GET /api/automation/leads][${correlationId}] Error:`, error);
     return NextResponse.json(
-      { error: "Internal server error fetching leads", details: String(error) },
+      {
+        success: false,
+        error: {
+          code: "INTERNAL_ERROR",
+          message: "Internal server error fetching leads",
+          diagnostic: safeMsg,
+          correlationId,
+        },
+      },
       { status: 500 }
     );
   }

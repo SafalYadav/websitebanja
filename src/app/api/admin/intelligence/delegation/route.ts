@@ -102,6 +102,14 @@ export async function POST(req: Request) {
       );
     }
 
+    const tenantId = body.tenantId?.trim() || auth.userId;
+    if (!tenantId) {
+      return NextResponse.json(
+        { success: false, message: "Authorized workspace tenant required." },
+        { status: 403 }
+      );
+    }
+
     const delegationRequest: CeoDelegationRequest = {
       objective: body.objective.trim(),
       input: body.input || {},
@@ -111,7 +119,7 @@ export async function POST(req: Request) {
       deadline: body.deadline,
       riskLevel: body.riskLevel || "low",
       approvalRequired: Boolean(body.approvalRequired),
-      tenantId: body.tenantId || "default-tenant",
+      tenantId,
       projectId: body.projectId || null,
       createdBy: auth.email || "admin",
       correlationId: body.correlationId,

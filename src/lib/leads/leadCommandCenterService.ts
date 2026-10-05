@@ -63,7 +63,10 @@ export class LeadCommandCenterService {
       presets: Record<string, number>;
     };
   }> {
-    const userId = criteria.userId;
+    const userId = criteria.userId?.trim();
+    if (!userId) {
+      throw new Error("Trusted lead command center owner required");
+    }
 
     // 1. Ingest raw canonical sources
     const [rawLeads, rawAudits, storedPreviews, rawOutreach, rawRuns, followUps, analytics] =
@@ -72,7 +75,7 @@ export class LeadCommandCenterService {
         auditRepository.listAudits(userId),
         readStoredPreviews(),
         outreachRepository.listOutreachRecords({ userId }),
-        PipelineQueue.listPipelineRuns(),
+        PipelineQueue.listPipelineRuns(userId),
         FollowUpQueue.listFollowUps(),
         AnalyticsService.getAnalyticsDashboard("all").catch(() => null),
       ]);
@@ -474,13 +477,17 @@ export class LeadCommandCenterService {
    * Retrieves full unified 8-section Lead Detail View.
    */
   static async getLeadDetail(leadId: string, userId?: string): Promise<LeadDetailView | null> {
+    if (!userId?.trim()) {
+      throw new Error("Trusted lead detail owner required");
+    }
+    const tenant = userId.trim();
     const [lead, audit, rawPreviews, outreachList, crmState, runs, aiOps] = await Promise.all([
-      leadRepository.findLeadById(leadId, userId),
-      auditRepository.findAuditByLeadId(leadId, userId),
+      leadRepository.findLeadById(leadId, tenant),
+      auditRepository.findAuditByLeadId(leadId, tenant),
       readStoredPreviews(),
-      outreachRepository.findOutreachByLeadId(leadId, userId),
-      crmRepository.getLeadCRMState(leadId, userId),
-      PipelineQueue.listPipelineRuns(),
+      outreachRepository.findOutreachByLeadId(leadId, tenant),
+      crmRepository.getLeadCRMState(leadId, tenant),
+      PipelineQueue.listPipelineRuns(tenant),
       AnalyticsService.getAIOperations("all"),
     ]);
 
@@ -634,10 +641,14 @@ export class LeadCommandCenterService {
    * Generates chronological activity stream for a lead.
    */
   static async getLeadTimeline(leadId: string, userId?: string): Promise<LeadTimelineEvent[]> {
+    if (!userId?.trim()) {
+      throw new Error("Trusted lead timeline owner required");
+    }
+    const tenant = userId.trim();
     const events: LeadTimelineEvent[] = [];
 
     // 1. Lead discovery & qualification events
-    const lead = await leadRepository.findLeadById(leadId, userId);
+    const lead = await leadRepository.findLeadById(leadId, tenant);
     if (lead) {
       events.push({
         id: `evt_disc_${lead.leadId}`,
@@ -755,7 +766,7 @@ export class LeadCommandCenterService {
     }
 
     // 6. Pipeline Run lead timeline entries
-    const runs = await PipelineQueue.listPipelineRuns();
+    const runs = await PipelineQueue.listPipelineRuns(tenant);
     for (const run of runs) {
       const leadEntry = run.leads?.[leadId];
       if (leadEntry && Array.isArray(leadEntry.timeline)) {
@@ -792,13 +803,17 @@ export class LeadCommandCenterService {
    * Retrieves Human Attention / Review Queue items.
    */
   static async getReviewQueue(userId?: string): Promise<LeadReviewItem[]> {
+    if (!userId?.trim()) {
+      throw new Error("Trusted review queue owner required");
+    }
+    const tenant = userId.trim();
     const items: LeadReviewItem[] = [];
 
     const [leads, outreachRecords, runs, crmStates] = await Promise.all([
-      leadRepository.getAllLeadsForUser(userId),
-      outreachRepository.listOutreachRecords({ userId }),
-      PipelineQueue.listPipelineRuns(),
-      crmRepository.listLeadCRMStates({ userId }),
+      leadRepository.getAllLeadsForUser(tenant),
+      outreachRepository.listOutreachRecords({ userId: tenant }),
+      PipelineQueue.listPipelineRuns(tenant),
+      crmRepository.listLeadCRMStates({ userId: tenant }),
     ]);
 
     const leadsById = new Map(leads.map((l) => [l.leadId, l]));
@@ -911,11 +926,16 @@ export class LeadCommandCenterService {
    * Retrieves follow-up queue jobs.
    */
   static async getFollowUpQueue(userId?: string) {
-    const jobs = await FollowUpQueue.listFollowUps();
-    const leads = await leadRepository.getAllLeadsForUser(userId);
+    if (!userId?.trim()) {
+      throw new Error("Trusted follow-up queue owner required");
+    }
+    const tenant = userId.trim();
+    const leads = await leadRepository.getAllLeadsForUser(tenant);
     const leadsById = new Map(leads.map((l) => [l.leadId, l]));
+    const jobs = await FollowUpQueue.listFollowUps();
+    const scopedJobs = jobs.filter((j) => leadsById.has(j.leadId));
 
-    return jobs.map((j) => {
+    return scopedJobs.map((j) => {
       const lead = leadsById.get(j.leadId);
       return {
         ...j,

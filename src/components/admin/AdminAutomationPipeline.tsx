@@ -142,12 +142,13 @@ export default function AdminAutomationPipeline({ sessionToken, onNavigateTab }:
         body: JSON.stringify({ runId }),
       });
       const data = await res.json();
-      if (data.success) {
-        setSuccessMessage(`Run ${runId} resumed.`);
-        fetchRuns();
+      if (res.ok && data.success && data.run?.status !== "PAUSED") {
+        setSuccessMessage(`Run ${runId} resumed successfully.`);
       } else {
-        setErrorMessage(data.error?.message || "Failed to resume run");
+        const errorMsg = data.error?.message || data.error || (data.run?.status === "PAUSED" ? `Run ${runId} remains PAUSED (${data.run.pauseReason || "hold active"}).` : "Failed to resume run");
+        setErrorMessage(errorMsg);
       }
+      fetchRuns();
     } finally {
       setActionLoading(false);
     }
@@ -578,6 +579,11 @@ export default function AdminAutomationPipeline({ sessionToken, onNavigateTab }:
                       <span className={`px-2.5 py-0.5 rounded text-xs font-semibold border ${getStatusColor(selectedRun.status)}`}>
                         {selectedRun.status}
                       </span>
+                      {selectedRun.status === "PAUSED" && selectedRun.pauseReason && (
+                        <span className="px-2 py-0.5 rounded text-xs font-medium border bg-amber-50 text-amber-800 border-amber-300">
+                          {selectedRun.pauseReason === "research" ? "Research Hold" : selectedRun.pauseReason === "human" ? "Manual Pause" : `Hold: ${selectedRun.pauseReason}`}
+                        </span>
+                      )}
                       <span className={`px-2 py-0.5 rounded text-xs font-medium border ${getStageColor(selectedRun.currentStage)}`}>
                         {selectedRun.currentStage}
                       </span>
@@ -626,6 +632,24 @@ export default function AdminAutomationPipeline({ sessionToken, onNavigateTab }:
                     )}
                   </div>
                 </div>
+
+                {/* Hold / Pause Status Banner */}
+                {selectedRun.status === "PAUSED" && (
+                  <div className="bg-amber-50/80 border-b border-amber-200 px-5 py-2.5 text-xs text-amber-900 flex items-center justify-between">
+                    <div>
+                      <span className="font-bold">
+                        {selectedRun.pauseReason === "research" ? "Paused for Business Research Review:" :
+                         selectedRun.pauseReason === "human" ? "Manually Paused:" :
+                         `Run Paused (${selectedRun.pauseReason || "hold active"}):`}
+                      </span>{" "}
+                      {selectedRun.pauseReason === "research"
+                        ? "This run is held at the research gate. Human approval is required before automated generation can proceed."
+                        : selectedRun.pauseReason === "human"
+                        ? "Pipeline execution was paused manually. Click 'Resume' to continue execution."
+                        : "Execution cannot resume until the governing hold is resolved."}
+                    </div>
+                  </div>
+                )}
 
                 {/* Stats Breakdown */}
                 <div className="grid grid-cols-4 gap-2 p-4 border-b border-zinc-100 bg-white text-center text-xs">

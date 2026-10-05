@@ -50,7 +50,13 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const validationId = searchParams.get("validationId");
     const projectId = searchParams.get("projectId");
-    const tenantId = searchParams.get("tenantId") || "default";
+    const tenantId = searchParams.get("tenantId")?.trim() || auth.userId;
+    if (!tenantId) {
+      return NextResponse.json(
+        { success: false, message: "Authorized workspace tenant required." },
+        { status: 403 }
+      );
+    }
 
     if (validationId) {
       const report = validationStore.getReport(validationId, tenantId);

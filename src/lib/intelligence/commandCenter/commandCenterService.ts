@@ -57,7 +57,7 @@ export const CANONICAL_PIPELINE_STAGES = [
 ] as const;
 
 export interface GetCommandCenterOptions {
-  tenantId?: string | null;
+  tenantId: string;
   userId?: string | null;
 }
 
@@ -77,9 +77,12 @@ export class CommandCenterService {
    * Aggregates all 15 sections for the CEO Command Center safely and deterministically.
    */
   public async getCommandCenterData(
-    options: GetCommandCenterOptions = {}
+    options: GetCommandCenterOptions
   ): Promise<CeoCommandCenterData> {
-    const tenantId = options.tenantId ?? null;
+    if (!options?.tenantId?.trim()) {
+      throw new Error("Trusted tenant identity required for CEO Command Center");
+    }
+    const tenantId = options.tenantId.trim();
     const nowIso = new Date().toISOString();
 
     // 1. Fetch from underlying stores with safe fallbacks
@@ -118,7 +121,7 @@ export class CommandCenterService {
 
     // Approvals: Governance (Phase 25) + Outreach ApprovalGate (Phase 23)
     const govPending = governanceApprovalStore.listPending(tenantId);
-    const outreachPending = await approvalGate.getStoredPendingApprovals(tenantId || "");
+    const outreachPending = await approvalGate.getStoredPendingApprovals(tenantId);
 
     // ─── Section 1: Executive Overview ─────────────────────────────────────────
     const activeObjectivesCount = recentExecutiveRuns.filter(
@@ -673,7 +676,7 @@ export class CommandCenterService {
     }
 
     // ─── Self-Correction & Validation Summary ─────────────────────────────────
-    const effectiveTenant = tenantId || "default";
+    const effectiveTenant = tenantId;
     const latestValReport = validationStore.getLatestProjectReport(effectiveTenant, "default") ||
       validationStore.getReport("latest", effectiveTenant);
 

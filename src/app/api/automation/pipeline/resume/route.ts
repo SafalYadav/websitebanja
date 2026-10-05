@@ -36,6 +36,26 @@ export async function POST(req: Request) {
     const tenantId = admin.isAdmin && admin.userId ? admin.userId : process.env.AUTOMATION_TENANT_ID;
     if (!tenantId) return NextResponse.json({ success: false, error: { code: "AUTOMATION_TENANT_REQUIRED", message: "Configure a server-side automation tenant" } }, { status: 403 });
     const run = await PipelineOrchestrator.resumeRun(runId, admin.isAdmin ? admin.userId : undefined, tenantId);
+    if (run.status === "PAUSED") {
+      const pauseReason = run.pauseReason || "hold active";
+      const message = pauseReason === "research"
+        ? `Run '${runId}' remains PAUSED waiting for human approval on business research.`
+        : pauseReason === "human"
+        ? `Run '${runId}' remains PAUSED (manual pause).`
+        : `Run '${runId}' remains PAUSED (${pauseReason}).`;
+      return NextResponse.json(
+        {
+          success: false,
+          error: {
+            code: "RUN_STILL_PAUSED",
+            message,
+            pauseReason: run.pauseReason,
+          },
+          run,
+        },
+        { status: 409 }
+      );
+    }
     return NextResponse.json({ success: true, run });
   } catch (err) {
     return NextResponse.json(

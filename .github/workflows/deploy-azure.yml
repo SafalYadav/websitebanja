@@ -261,7 +261,10 @@ jobs:
           GMAIL_CLIENT_SECRET: ${{ secrets.GMAIL_CLIENT_SECRET }}
           GMAIL_REFRESH_TOKEN: ${{ secrets.GMAIL_REFRESH_TOKEN }}
           WEBSITEBANJA_AUTOMATION_SECRET: ${{ secrets.WEBSITEBANJA_AUTOMATION_SECRET }}
-          AUTOMATION_TENANT_ID: ${{ secrets.AUTOMATION_TENANT_ID || 'a0d29ad3-4c93-4bcd-a4d0-b45804017cf2' }}
+          AUTOMATION_TENANT_ID: ${{ secrets.AUTOMATION_TENANT_ID }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           ADMIN_EMAILS: ${{ secrets.ADMIN_EMAILS }}
           ADMIN_USER_IDS: ${{ secrets.ADMIN_USER_IDS }}
           NEXT_PUBLIC_APP_URL: "https://websitebanja.com"

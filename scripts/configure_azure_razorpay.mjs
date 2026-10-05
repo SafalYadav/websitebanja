@@ -31,6 +31,9 @@ const nextPublicAppUrl = process.env.NEXT_PUBLIC_APP_URL || "https://websitebanj
 const n8nWebhookUrl = process.env.N8N_OPS_AGENT_WEBHOOK_URL || "https://n8n-app.calmcoast-298a6aef.centralindia.azurecontainerapps.io/webhook/wb-ops-agent";
 const imageTag = process.env.IMAGE_TAG;
 const clientId = process.env.AZURE_CLIENT_ID;
+const geminiApiKey = process.env.GEMINI_API_KEY;
+const groqApiKey = process.env.GROQ_API_KEY;
+const openrouterApiKey = process.env.OPENROUTER_API_KEY;
 
 export function parseAuthorizedAdminUserIds(env = process.env) {
   const rawAdminUserIds = env.ADMIN_USER_IDS || defaultAdminUserIds;
@@ -153,6 +156,9 @@ async function main() {
   if (gmailClientSecret) secretsToSet.push({ name: "gmail-client-secret", value: gmailClientSecret });
   if (gmailRefreshToken) secretsToSet.push({ name: "gmail-refresh-token", value: gmailRefreshToken });
   if (automationSecret) secretsToSet.push({ name: "automation-secret", value: automationSecret });
+  if (geminiApiKey) secretsToSet.push({ name: "gemini-api-key", value: geminiApiKey });
+  if (groqApiKey) secretsToSet.push({ name: "groq-api-key", value: groqApiKey });
+  if (openrouterApiKey) secretsToSet.push({ name: "openrouter-api-key", value: openrouterApiKey });
 
   if (secretsToSet.length > 0) {
     console.log(`\n[Step 2] Configuring secrets in Azure Container App Secret Store (${secretsToSet.map(s => s.name).join(", ")})...`);
@@ -246,6 +252,15 @@ async function main() {
   envVarsToSet.push(`COMMUNICATION_DRY_RUN=false`);
   envVarsToSet.push(`WEBSITEBANJA_RUNTIME_MODE=production`);
   envVarsToSet.push(`N8N_OPS_AGENT_WEBHOOK_URL=${n8nWebhookUrl}`);
+  if (geminiApiKey) {
+    envVarsToSet.push(`GEMINI_API_KEY=secretref:gemini-api-key`);
+  }
+  if (groqApiKey) {
+    envVarsToSet.push(`GROQ_API_KEY=secretref:groq-api-key`);
+  }
+  if (openrouterApiKey) {
+    envVarsToSet.push(`OPENROUTER_API_KEY=secretref:openrouter-api-key`);
+  }
 
   if (envVarsToSet.length > 0) {
     updateCmd += ` --set-env-vars ${envVarsToSet.map((v) => `"${v}"`).join(" ")}`;
@@ -318,6 +333,15 @@ async function main() {
           envMap.set("COMMUNICATION_DRY_RUN", { name: "COMMUNICATION_DRY_RUN", value: "false" });
           envMap.set("WEBSITEBANJA_RUNTIME_MODE", { name: "WEBSITEBANJA_RUNTIME_MODE", value: "production" });
           envMap.set("N8N_OPS_AGENT_WEBHOOK_URL", { name: "N8N_OPS_AGENT_WEBHOOK_URL", value: n8nWebhookUrl });
+          if (geminiApiKey) {
+            envMap.set("GEMINI_API_KEY", { name: "GEMINI_API_KEY", secretRef: "gemini-api-key" });
+          }
+          if (groqApiKey) {
+            envMap.set("GROQ_API_KEY", { name: "GROQ_API_KEY", secretRef: "groq-api-key" });
+          }
+          if (openrouterApiKey) {
+            envMap.set("OPENROUTER_API_KEY", { name: "OPENROUTER_API_KEY", secretRef: "openrouter-api-key" });
+          }
 
           container.env = Array.from(envMap.values());
 
