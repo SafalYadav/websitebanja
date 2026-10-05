@@ -1,4 +1,14 @@
 import { execSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
+
+export const UUID_V4_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export const CANONICAL_ADMIN_USER_IDS = [
+  "a0d29ad3-4c93-4bcd-a4d0-b45804017cf2",
+  "cceafe47-a710-49e9-a894-16f592dc8e64",
+  "d1df43b9-cdec-4e9a-916a-4c1f8009d238",
+  "badf862a-79c0-463d-95ff-55a02e6aa88b",
+];
 
 const subscriptionId = process.env.AZURE_SUBSCRIPTION_ID;
 const resourceGroup = process.env.RESOURCE_GROUP || "websitebanja-rg";
@@ -22,24 +32,53 @@ const n8nWebhookUrl = process.env.N8N_OPS_AGENT_WEBHOOK_URL || "https://n8n-app.
 const imageTag = process.env.IMAGE_TAG;
 const clientId = process.env.AZURE_CLIENT_ID;
 
-console.log("================================================================================");
-console.log("CONFIGURING AZURE CONTAINER APP FOR PRODUCTION & REAL-WORLD INTEGRATIONS");
-console.log("================================================================================");
-console.log("Container App:", containerAppName);
-console.log("Resource Group:", resourceGroup);
-console.log("Image Tag:", imageTag || "not specified");
-console.log("Production App URL:", nextPublicAppUrl);
-console.log("n8n Ops Agent Webhook URL:", n8nWebhookUrl);
-console.log("Admin Emails configured:", adminEmails.split(",").length, "accounts");
-console.log("Admin User IDs configured:", adminUserIds.split(",").length, "identities");
-console.log("Razorpay Key ID configured:", Boolean(keyId));
-console.log("Razorpay Key Secret configured:", Boolean(keySecret));
-console.log("Billing CRON Secret configured:", Boolean(cronSecret));
-console.log("Google Places API Key configured:", Boolean(googlePlacesApiKey));
-console.log("Gmail Client ID configured:", Boolean(gmailClientId));
-console.log("Gmail Client Secret configured:", Boolean(gmailClientSecret));
-console.log("Gmail Refresh Token configured:", Boolean(gmailRefreshToken));
-console.log("Automation Secret configured:", Boolean(automationSecret));
+export function parseAuthorizedAdminUserIds(env = process.env) {
+  const rawAdminUserIds = env.ADMIN_USER_IDS || defaultAdminUserIds;
+  const configured = rawAdminUserIds
+    .split(",")
+    .map((id) => id.trim())
+    .filter(Boolean);
+  const idSet = new Set([...CANONICAL_ADMIN_USER_IDS, ...configured]);
+  return Array.from(idSet);
+}
+
+export function validateAutomationTenantConfig(env = process.env) {
+  const isAutomationEnabled = Boolean(
+    env.WEBSITEBANJA_AUTOMATION_SECRET ||
+    env.AUTOMATION_SECRET ||
+    env.WEBSITEBANJA_AUTOMATION_ENABLED === "true"
+  );
+
+  const rawTenantId = env.AUTOMATION_TENANT_ID;
+
+  if (isAutomationEnabled) {
+    if (!rawTenantId || typeof rawTenantId !== "string" || !rawTenantId.trim()) {
+      throw new Error(
+        "AUTOMATION_TENANT_ID must be explicitly configured when automation is enabled. " +
+        "Selecting a tenant from admin ordering or a hardcoded UUID fallback is prohibited."
+      );
+    }
+  } else if (!rawTenantId || typeof rawTenantId !== "string" || !rawTenantId.trim()) {
+    return null;
+  }
+
+  const tenantId = rawTenantId.trim();
+
+  if (!UUID_V4_REGEX.test(tenantId)) {
+    throw new Error(
+      `Invalid AUTOMATION_TENANT_ID '${tenantId}': must be a valid UUID format.`
+    );
+  }
+
+  const authorizedAdmins = parseAuthorizedAdminUserIds(env);
+  if (!authorizedAdmins.includes(tenantId)) {
+    throw new Error(
+      `Unauthorized AUTOMATION_TENANT_ID '${tenantId}': tenant is not present in authorized ADMIN_USER_IDS allowlist.`
+    );
+  }
+
+  return tenantId;
+}
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -67,6 +106,31 @@ async function waitForProvisioningReady(maxSeconds = 90) {
 }
 
 async function main() {
+  console.log("================================================================================");
+  console.log("CONFIGURING AZURE CONTAINER APP FOR PRODUCTION & REAL-WORLD INTEGRATIONS");
+  console.log("================================================================================");
+  console.log("Container App:", containerAppName);
+  console.log("Resource Group:", resourceGroup);
+  console.log("Image Tag:", imageTag || "not specified");
+  console.log("Production App URL:", nextPublicAppUrl);
+  console.log("n8n Ops Agent Webhook URL:", n8nWebhookUrl);
+  console.log("Admin Emails configured:", adminEmails.split(",").length, "accounts");
+  console.log("Admin User IDs configured:", adminUserIds.split(",").length, "identities");
+  console.log("Razorpay Key ID configured:", Boolean(keyId));
+  console.log("Razorpay Key Secret configured:", Boolean(keySecret));
+  console.log("Billing CRON Secret configured:", Boolean(cronSecret));
+  console.log("Google Places API Key configured:", Boolean(googlePlacesApiKey));
+  console.log("Gmail Client ID configured:", Boolean(gmailClientId));
+  console.log("Gmail Client Secret configured:", Boolean(gmailClientSecret));
+  console.log("Gmail Refresh Token configured:", Boolean(gmailRefreshToken));
+  console.log("Automation Secret configured:", Boolean(automationSecret));
+
+  // Pre-flight check: validate automation tenant before ANY cloud or deployment actions
+  const automationTenantId = validateAutomationTenantConfig(process.env);
+  if (automationSecret) {
+    console.log("Validated Automation Tenant ID:", automationTenantId);
+  }
+
   // Step 1: Attempt role assignment for managedEnvironment if permitted
   if (clientId && subscriptionId) {
     try {
@@ -94,7 +158,7 @@ async function main() {
     console.log(`\n[Step 2] Configuring secrets in Azure Container App Secret Store (${secretsToSet.map(s => s.name).join(", ")})...`);
     await waitForProvisioningReady(60);
 
-    let secretsConfigured = false;
+    let _secretsConfigured = false;
     for (let attempt = 1; attempt <= 4; attempt++) {
       try {
         await waitForProvisioningReady(30);
@@ -125,7 +189,7 @@ async function main() {
           stdio: "pipe",
         });
         console.log("Targeted ARM REST API secrets patch succeeded.");
-        secretsConfigured = true;
+        _secretsConfigured = true;
         break;
       } catch (restErr) {
         console.warn(`ARM REST API secrets patch attempt ${attempt} error:`, restErr.message);
@@ -166,8 +230,7 @@ async function main() {
     envVarsToSet.push(`GMAIL_REFRESH_TOKEN=secretref:gmail-refresh-token`);
     envVarsToSet.push(`GOOGLE_REFRESH_TOKEN=secretref:gmail-refresh-token`);
   }
-  const automationTenantId = process.env.AUTOMATION_TENANT_ID || adminUserIds.split(",")[0]?.trim() || "a0d29ad3-4c93-4bcd-a4d0-b45804017cf2";
-  if (automationSecret) {
+  if (automationSecret && automationTenantId) {
     envVarsToSet.push(`WEBSITEBANJA_AUTOMATION_SECRET=secretref:automation-secret`);
     envVarsToSet.push(`WEBSITEBANJA_AUTOMATION_ENABLED=true`);
     envVarsToSet.push(`AUTOMATION_TENANT_ID=${automationTenantId}`);
@@ -239,7 +302,7 @@ async function main() {
             envMap.set("GMAIL_REFRESH_TOKEN", { name: "GMAIL_REFRESH_TOKEN", secretRef: "gmail-refresh-token" });
             envMap.set("GOOGLE_REFRESH_TOKEN", { name: "GOOGLE_REFRESH_TOKEN", secretRef: "gmail-refresh-token" });
           }
-          if (automationSecret) {
+          if (automationSecret && automationTenantId) {
             envMap.set("WEBSITEBANJA_AUTOMATION_SECRET", { name: "WEBSITEBANJA_AUTOMATION_SECRET", secretRef: "automation-secret" });
             envMap.set("WEBSITEBANJA_AUTOMATION_ENABLED", { name: "WEBSITEBANJA_AUTOMATION_ENABLED", value: "true" });
             envMap.set("AUTOMATION_TENANT_ID", { name: "AUTOMATION_TENANT_ID", value: automationTenantId });
@@ -309,7 +372,9 @@ async function main() {
   console.log("\nConfiguration complete.");
 }
 
-main().catch((err) => {
-  console.error("Configuration failed:", err);
-  process.exit(1);
-});
+if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+  main().catch((err) => {
+    console.error("Configuration failed:", err);
+    process.exit(1);
+  });
+}

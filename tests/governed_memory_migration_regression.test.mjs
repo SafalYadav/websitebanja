@@ -524,7 +524,7 @@ describe("Outreach Reconciliation Audit Suite", () => {
   });
 
   it("12. Reconcile outreach dispatch allows confirmed recovery with provider ID or reset to approved", async () => {
-    const testUserId = "user_test_recon_12";
+    const testUserId = "a0d29ad3-4c93-4bcd-a4d0-b45804017cf2";
     const outreachId = "outreach_recon_test_12";
 
     let savedRecord = null;
@@ -557,15 +557,27 @@ describe("Outreach Reconciliation Audit Suite", () => {
       return record;
     };
 
+    const validAdminContext = {
+      adminUserId: testUserId,
+      tenantId: testUserId,
+      isAdmin: true,
+      isHuman: true,
+      email: "websitebanja@gmail.com",
+    };
+
     try {
       // 1. Confirm recovery using verified provider message ID
       const confirmRes = await GmailEmailProvider.reconcileOutreachDispatch(
         outreachId,
         "confirm_provider_accepted",
         {
-          userId: testUserId,
+          adminContext: validAdminContext,
           verifiedExternalMessageId: "msg_verified_provider_123",
           reason: "Verified message in Gmail sent folder via audit log",
+          serverVerificationEvidence: {
+            verifiedVia: "test_verified_log",
+            verifiedRecipient: "recon@example.com",
+          },
         }
       );
 
@@ -580,7 +592,8 @@ describe("Outreach Reconciliation Audit Suite", () => {
         outreachId,
         "reset_to_approved",
         {
-          userId: testUserId,
+          adminContext: validAdminContext,
+          certifiedNotDispatched: true,
           reason: "Confirmed in provider dashboard that dispatch failed before transmit",
         }
       );
@@ -592,6 +605,258 @@ describe("Outreach Reconciliation Audit Suite", () => {
     } finally {
       outreachRepository.findOutreachById = originalFindOutreach;
       outreachRepository.saveOutreachRecord = originalSaveOutreach;
+    }
+  });
+
+  it("13. Reconciliation strictly rejects unauthenticated callers, plain string IDs, and missing admin context", async () => {
+    const testUserId = "a0d29ad3-4c93-4bcd-a4d0-b45804017cf2";
+    const outreachId = "outreach_recon_test_13";
+
+    const originalFindOutreach = outreachRepository.findOutreachById;
+    outreachRepository.findOutreachById = async (id) => ({
+      outreachId: id,
+      userId: testUserId,
+      channel: "email",
+      status: "queued",
+      deliveryOutcome: "reconciliation_required",
+      business: { name: "Test", email: "test@example.com" },
+    });
+
+    try {
+      // Call with only plain string verifiedByAdminId / userId (no adminContext)
+      const res = await GmailEmailProvider.reconcileOutreachDispatch(
+        outreachId,
+        "confirm_provider_accepted",
+        {
+          userId: testUserId,
+          verifiedByAdminId: testUserId,
+          verifiedExternalMessageId: "msg_123",
+          reason: "Attempting reconciliation without server-verified admin context",
+        }
+      );
+
+      assert.equal(res.success, false);
+      assert.match(res.error, /Authenticated human administrator context required/);
+    } finally {
+      outreachRepository.findOutreachById = originalFindOutreach;
+    }
+  });
+
+  it("14. Reconciliation strictly rejects AI and autonomous machine identities", async () => {
+    const testUserId = "a0d29ad3-4c93-4bcd-a4d0-b45804017cf2";
+    const outreachId = "outreach_recon_test_14";
+
+    const originalFindOutreach = outreachRepository.findOutreachById;
+    outreachRepository.findOutreachById = async (id) => ({
+      outreachId: id,
+      userId: testUserId,
+      channel: "email",
+      status: "queued",
+      deliveryOutcome: "reconciliation_required",
+      business: { name: "Test", email: "test@example.com" },
+    });
+
+    try {
+      const aiContext = {
+        adminUserId: testUserId,
+        tenantId: testUserId,
+        isAdmin: true,
+        isHuman: false, // Machine / AI agent
+      };
+
+      const res = await GmailEmailProvider.reconcileOutreachDispatch(
+        outreachId,
+        "confirm_provider_accepted",
+        {
+          adminContext: aiContext,
+          verifiedExternalMessageId: "msg_123",
+          reason: "AI agent attempted autonomous dispatch reconciliation",
+        }
+      );
+
+      assert.equal(res.success, false);
+      assert.match(res.error, /AI agents, autonomous models, and automated services cannot authorize reconciliation/);
+    } finally {
+      outreachRepository.findOutreachById = originalFindOutreach;
+    }
+  });
+
+  it("15. Reconciliation strictly enforces cross-tenant boundary isolation", async () => {
+    const ownerTenantId = "a0d29ad3-4c93-4bcd-a4d0-b45804017cf2";
+    const foreignTenantId = "cceafe47-a710-49e9-a894-16f592dc8e64";
+    const outreachId = "outreach_recon_test_15";
+
+    const originalFindOutreach = outreachRepository.findOutreachById;
+    outreachRepository.findOutreachById = async (id, tenant) => {
+      if (tenant === ownerTenantId) {
+        return {
+          outreachId: id,
+          userId: ownerTenantId,
+          channel: "email",
+          status: "queued",
+          deliveryOutcome: "reconciliation_required",
+          business: { name: "Test", email: "test@example.com" },
+        };
+      }
+      return null;
+    };
+
+    try {
+      const foreignAdminContext = {
+        adminUserId: foreignTenantId,
+        tenantId: foreignTenantId,
+        isAdmin: true,
+        isHuman: true,
+      };
+
+      const res = await GmailEmailProvider.reconcileOutreachDispatch(
+        outreachId,
+        "confirm_provider_accepted",
+        {
+          adminContext: foreignAdminContext,
+          verifiedExternalMessageId: "msg_123",
+          reason: "Admin from foreign tenant attempting to reconcile foreign outreach",
+        }
+      );
+
+      assert.equal(res.success, false);
+      assert.match(res.error, /Cross-tenant reconciliation violation|not found for tenant/);
+    } finally {
+      outreachRepository.findOutreachById = originalFindOutreach;
+    }
+  });
+
+  it("16. Fabricated provider evidence and wrong-account message IDs are rejected", async () => {
+    const testUserId = "a0d29ad3-4c93-4bcd-a4d0-b45804017cf2";
+    const outreachId = "outreach_recon_test_16";
+
+    const originalFindOutreach = outreachRepository.findOutreachById;
+    outreachRepository.findOutreachById = async (id) => ({
+      outreachId: id,
+      userId: testUserId,
+      channel: "email",
+      status: "queued",
+      deliveryOutcome: "reconciliation_required",
+      business: { name: "Test", email: "owner@targetbiz.com" },
+    });
+
+    const validAdminContext = {
+      adminUserId: testUserId,
+      tenantId: testUserId,
+      isAdmin: true,
+      isHuman: true,
+    };
+
+    try {
+      // 16a. Dummy / fake message ID
+      const fakeRes = await GmailEmailProvider.reconcileOutreachDispatch(
+        outreachId,
+        "confirm_provider_accepted",
+        {
+          adminContext: validAdminContext,
+          verifiedExternalMessageId: "fake_id_12345",
+          reason: "Admin supplied unverified placeholder message ID",
+        }
+      );
+      assert.equal(fakeRes.success, false);
+      assert.match(fakeRes.error, /Fabricated provider message ID evidence rejected/);
+
+      // 16b. Evidence with mismatching recipient
+      const mismatchRes = await GmailEmailProvider.reconcileOutreachDispatch(
+        outreachId,
+        "confirm_provider_accepted",
+        {
+          adminContext: validAdminContext,
+          verifiedExternalMessageId: "msg_real_looking_id_999",
+          reason: "Admin provided evidence from wrong email thread",
+          serverVerificationEvidence: {
+            verifiedRecipient: "completely_different_person@other.com",
+          },
+        }
+      );
+      assert.equal(mismatchRes.success, false);
+      assert.match(mismatchRes.error, /Evidence recipient mismatch/);
+    } finally {
+      outreachRepository.findOutreachById = originalFindOutreach;
+    }
+  });
+
+  it("17. Reset to approved requires explicit certifiedNotDispatched human certification", async () => {
+    const testUserId = "a0d29ad3-4c93-4bcd-a4d0-b45804017cf2";
+    const outreachId = "outreach_recon_test_17";
+
+    const originalFindOutreach = outreachRepository.findOutreachById;
+    outreachRepository.findOutreachById = async (id) => ({
+      outreachId: id,
+      userId: testUserId,
+      channel: "email",
+      status: "queued",
+      deliveryOutcome: "reconciliation_required",
+      business: { name: "Test", email: "test@example.com" },
+    });
+
+    const validAdminContext = {
+      adminUserId: testUserId,
+      tenantId: testUserId,
+      isAdmin: true,
+      isHuman: true,
+    };
+
+    try {
+      // Without certifiedNotDispatched: true
+      const res = await GmailEmailProvider.reconcileOutreachDispatch(
+        outreachId,
+        "reset_to_approved",
+        {
+          adminContext: validAdminContext,
+          reason: "Trying to reset uncertain dispatch without certifying non-delivery",
+        }
+      );
+
+      assert.equal(res.success, false);
+      assert.match(res.error, /Reset to approved requires explicit human-admin certification.*certifiedNotDispatched: true/);
+    } finally {
+      outreachRepository.findOutreachById = originalFindOutreach;
+    }
+  });
+
+  it("18. Duplicate recovery on already-sent dispatch is strictly prevented", async () => {
+    const testUserId = "a0d29ad3-4c93-4bcd-a4d0-b45804017cf2";
+    const outreachId = "outreach_recon_test_18";
+
+    const originalFindOutreach = outreachRepository.findOutreachById;
+    outreachRepository.findOutreachById = async (id) => ({
+      outreachId: id,
+      userId: testUserId,
+      channel: "email",
+      status: "sent",
+      externalMessageId: "msg_already_recorded_123",
+      deliveryOutcome: "provider_accepted",
+      business: { name: "Test", email: "test@example.com" },
+    });
+
+    const validAdminContext = {
+      adminUserId: testUserId,
+      tenantId: testUserId,
+      isAdmin: true,
+      isHuman: true,
+    };
+
+    try {
+      const res = await GmailEmailProvider.reconcileOutreachDispatch(
+        outreachId,
+        "confirm_provider_accepted",
+        {
+          adminContext: validAdminContext,
+          verifiedExternalMessageId: "msg_duplicate_456",
+          reason: "Duplicate recovery attempt on already sent message",
+        }
+      );
+
+      assert.equal(res.success, false);
+      assert.match(res.error, /Duplicate recovery prevented/);
+    } finally {
+      outreachRepository.findOutreachById = originalFindOutreach;
     }
   });
 });

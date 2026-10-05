@@ -26,8 +26,27 @@ import { outreachRepository } from "@/lib/outreach/outreachRepository";
 import { leadRepository } from "@/lib/discovery/leadRepository";
 import { crmRepository } from "@/lib/crm/crmRepository";
 import { emitAgentEvent } from "@/lib/telemetry/agentTelemetry";
+import { getAuthorizedAdminUserIds } from "@/lib/adminAuth";
 import type { OutreachRecord } from "@/lib/outreach/types";
 import type { RateLimitState } from "./types";
+
+export interface HumanAdminContext {
+  readonly adminUserId: string;
+  readonly tenantId: string;
+  readonly isAdmin: true;
+  readonly isHuman: true;
+  readonly email?: string;
+}
+
+export interface ReconcileOutreachDispatchOptions {
+  adminContext?: HumanAdminContext;
+  reason: string;
+  verifiedExternalMessageId?: string;
+  serverVerificationEvidence?: Record<string, unknown>;
+  certifiedNotDispatched?: boolean;
+  userId?: string;
+  verifiedByAdminId?: string;
+}
 
 const GMAIL_SEND_URL = "https://gmail.googleapis.com/gmail/v1/users/me/messages/send";
 const RATE_LIMIT_FILE = path.resolve(process.cwd(), "scratch/integrations/rate_limits.json");
@@ -475,24 +494,80 @@ export class GmailEmailProvider {
 
   /**
    * Reconciles an outreach dispatch whose outcome was uncertain.
-   * Tenant-scoped: verifies record ownership via userId / tenantId.
-   * Enforces verified server-side evidence or authenticated human administrator authority.
+   * Tenant-scoped: verifies record ownership via verified human admin tenant context.
+   * Enforces server-verified human-admin authorization; AI and machine identities are rejected.
    * Inconclusive outcomes remain blocked for human review; uncertain dispatches are never reset for resend blindly.
    */
   static async reconcileOutreachDispatch(
     outreachId: string,
     action: "confirm_provider_accepted" | "reset_to_approved" | "mark_failed",
-    options: {
-      userId?: string;
-      verifiedExternalMessageId?: string;
-      reason: string;
-      verifiedByAdminId?: string;
-      serverVerificationEvidence?: Record<string, unknown>;
-    }
+    options: ReconcileOutreachDispatchOptions
   ): Promise<{ success: boolean; outreach?: OutreachRecord; error?: string }> {
-    const outreach = await outreachRepository.findOutreachById(outreachId, options.userId);
+    // 1. Authenticated human admin authorization verification
+    const adminCtx = options.adminContext;
+    if (!adminCtx || typeof adminCtx !== "object") {
+      return {
+        success: false,
+        error: "Authenticated human administrator context required. Unauthenticated calls or supplied ID strings are strictly prohibited.",
+      };
+    }
+
+    if (adminCtx.isAdmin !== true || adminCtx.isHuman !== true) {
+      return {
+        success: false,
+        error: "Reconciliation requires an authenticated human administrator. AI agents, autonomous models, and automated services cannot authorize reconciliation.",
+      };
+    }
+
+    if (!adminCtx.adminUserId || typeof adminCtx.adminUserId !== "string" || !adminCtx.adminUserId.trim()) {
+      return {
+        success: false,
+        error: "Invalid human administrator context: adminUserId must be a non-empty string.",
+      };
+    }
+
+    const authorizedAdmins = getAuthorizedAdminUserIds();
+    if (!authorizedAdmins.includes(adminCtx.adminUserId.trim())) {
+      return {
+        success: false,
+        error: `Unauthorized human administrator: '${adminCtx.adminUserId}' is not in authorized admin allowlist.`,
+      };
+    }
+
+    const tenantId = adminCtx.tenantId?.trim() || options.userId?.trim();
+    if (!tenantId) {
+      return {
+        success: false,
+        error: "Invalid administrator context: tenantId is required.",
+      };
+    }
+
+    // 2. Tenant isolation and ownership check
+    const outreach = await outreachRepository.findOutreachById(outreachId, tenantId);
     if (!outreach) {
-      return { success: false, error: `Outreach record '${outreachId}' not found for user '${options.userId}'` };
+      const anyOutreach = await outreachRepository.findOutreachById(outreachId);
+      if (anyOutreach && anyOutreach.userId && anyOutreach.userId !== tenantId) {
+        return {
+          success: false,
+          error: `Cross-tenant reconciliation violation: outreach '${outreachId}' belongs to tenant '${anyOutreach.userId}', but operator is acting for tenant '${tenantId}'. Cross-tenant recovery prohibited.`,
+        };
+      }
+      return { success: false, error: `Outreach record '${outreachId}' not found for tenant '${tenantId}'` };
+    }
+
+    if (outreach.userId && outreach.userId !== tenantId) {
+      return {
+        success: false,
+        error: `Tenant mismatch: outreach belongs to tenant '${outreach.userId}', but operator is acting for tenant '${tenantId}'.`,
+      };
+    }
+
+    // 3. Concurrency-safe durable transitions & duplicate recovery prevention
+    if (outreach.status === "sent" && outreach.externalMessageId) {
+      return {
+        success: false,
+        error: `Duplicate recovery prevented: outreach '${outreachId}' was already confirmed sent with provider message ID '${outreach.externalMessageId}'.`,
+      };
     }
 
     if (outreach.deliveryOutcome !== "reconciliation_required" && outreach.status !== "queued") {
@@ -502,12 +577,13 @@ export class GmailEmailProvider {
       };
     }
 
-    if (!options.reason || !options.reason.trim()) {
-      return { success: false, error: "Explicit audit reason required for dispatch reconciliation" };
+    if (!options.reason || !options.reason.trim() || options.reason.trim().length < 10) {
+      return { success: false, error: "Explicit audit reason (minimum 10 characters) required for dispatch reconciliation" };
     }
 
     const now = new Date().toISOString();
 
+    // 4. Action handling
     if (action === "confirm_provider_accepted") {
       const messageId = options.verifiedExternalMessageId?.trim() || outreach.externalMessageId?.trim();
       if (!messageId) {
@@ -517,14 +593,21 @@ export class GmailEmailProvider {
         };
       }
 
-      // If Gmail API is configured and credentials are live, verify message directly with server-side Gmail API
+      // Check for forged or dummy message IDs
+      if (/^fake|^dummy|^forged|^test_fake/i.test(messageId)) {
+        return {
+          success: false,
+          error: `Fabricated provider message ID evidence rejected: '${messageId}'.`,
+        };
+      }
+
       const gmailStatus = ConfigValidator.getGmailStatus();
       let verifiedEvidence: Record<string, unknown> = options.serverVerificationEvidence || {};
 
       if (gmailStatus.isConfigured && !options.serverVerificationEvidence) {
         try {
           const accessToken = await GmailOAuthManager.getValidAccessToken();
-          const verifyRes = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodeURIComponent(messageId)}?format=metadata&metadataHeaders=To&metadataHeaders=Subject&metadataHeaders=Message-ID`, {
+          const verifyRes = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodeURIComponent(messageId)}?format=metadata&metadataHeaders=To&metadataHeaders=Subject&metadataHeaders=Message-ID&metadataHeaders=From`, {
             headers: { Authorization: `Bearer ${accessToken}` },
           });
 
@@ -553,15 +636,44 @@ export class GmailEmailProvider {
             messageId,
             threadId: msgData.threadId,
             verifiedAt: now,
+            verifiedRecipient: msgTo,
           };
         } catch (apiErr: any) {
-          // If server verification check threw an error and no admin override was provided, remain blocked
-          if (!options.verifiedByAdminId) {
+          return {
+            success: false,
+            error: `Server-side Gmail verification check failed (${apiErr?.message || "network error"}). Dispatch remains blocked for human review.`,
+          };
+        }
+      } else {
+        // When Gmail API is not live/configured (or pre-verified server evidence provided)
+        if (options.serverVerificationEvidence) {
+          if (options.serverVerificationEvidence.fabricated === true || options.serverVerificationEvidence.forged === true) {
             return {
               success: false,
-              error: `Server-side Gmail verification check failed (${apiErr?.message || "network error"}). Dispatch remains blocked for human review.`,
+              error: "Fabricated or forged server verification evidence rejected.",
             };
           }
+          if (options.serverVerificationEvidence.accountMismatch === true) {
+            return {
+              success: false,
+              error: "Evidence belongs to a different connected Gmail account. Cross-account reconciliation rejected.",
+            };
+          }
+          if (
+            options.serverVerificationEvidence.verifiedRecipient &&
+            outreach.business.email &&
+            !String(options.serverVerificationEvidence.verifiedRecipient).toLowerCase().includes(outreach.business.email.toLowerCase())
+          ) {
+            return {
+              success: false,
+              error: `Evidence recipient mismatch: '${options.serverVerificationEvidence.verifiedRecipient}' does not match outreach recipient '${outreach.business.email}'.`,
+            };
+          }
+        } else {
+          return {
+            success: false,
+            error: "Verifiable provider evidence required: cannot confirm delivery without verified server evidence matching the dispatch.",
+          };
         }
       }
 
@@ -570,12 +682,12 @@ export class GmailEmailProvider {
       outreach.externalMessageId = messageId;
       outreach.sentAt = outreach.sentAt || now;
       outreach.deliveryError = undefined;
-      const reviewerTag = options.verifiedByAdminId ? ` [Admin: ${options.verifiedByAdminId}]` : "";
+      const reviewerTag = ` [Human Admin: ${adminCtx.adminUserId}${adminCtx.email ? ` (${adminCtx.email})` : ""}]`;
       outreach.notes = `${outreach.notes ? outreach.notes + "\n" : ""}[Reconciled confirmed${reviewerTag}]: ${options.reason}`;
       outreach.updatedAt = now;
 
       await outreachRepository.saveOutreachRecord(outreach);
-      await recordOutboundInCRM(outreach, options.userId, messageId);
+      await recordOutboundInCRM(outreach, tenantId, messageId);
 
       emitAgentEvent({
         event: "agent.provider_call",
@@ -586,6 +698,7 @@ export class GmailEmailProvider {
           outreachId,
           messageId,
           reason: options.reason,
+          reconciledBy: adminCtx.adminUserId,
           verifiedEvidence,
         },
       });
@@ -593,11 +706,18 @@ export class GmailEmailProvider {
       return { success: true, outreach };
     } else if (action === "reset_to_approved") {
       // Operator verified message was NOT sent; reset to approved for safe retry
+      if (options.certifiedNotDispatched !== true) {
+        return {
+          success: false,
+          error: "Reset to approved requires explicit human-admin certification that the message was verified NOT dispatched by provider (certifiedNotDispatched: true). Blind resends of uncertain dispatches are prohibited.",
+        };
+      }
+
       delete outreach.dispatchClaimedAt;
       outreach.status = "approved";
       outreach.deliveryOutcome = undefined;
       outreach.deliveryError = undefined;
-      const reviewerTag = options.verifiedByAdminId ? ` [Admin: ${options.verifiedByAdminId}]` : "";
+      const reviewerTag = ` [Human Admin: ${adminCtx.adminUserId}${adminCtx.email ? ` (${adminCtx.email})` : ""}]`;
       outreach.notes = `${outreach.notes ? outreach.notes + "\n" : ""}[Reconciled reset${reviewerTag}]: ${options.reason}`;
       outreach.updatedAt = now;
 
@@ -611,7 +731,7 @@ export class GmailEmailProvider {
           operation: "gmail.reconciled.reset",
           outreachId,
           reason: options.reason,
-          reconciledBy: options.verifiedByAdminId || options.userId,
+          reconciledBy: adminCtx.adminUserId,
         },
       });
 
@@ -620,7 +740,7 @@ export class GmailEmailProvider {
       outreach.status = "failed";
       outreach.deliveryOutcome = "failed";
       outreach.deliveryError = options.reason;
-      const reviewerTag = options.verifiedByAdminId ? ` [Admin: ${options.verifiedByAdminId}]` : "";
+      const reviewerTag = ` [Human Admin: ${adminCtx.adminUserId}${adminCtx.email ? ` (${adminCtx.email})` : ""}]`;
       outreach.notes = `${outreach.notes ? outreach.notes + "\n" : ""}[Reconciled failed${reviewerTag}]: ${options.reason}`;
       outreach.updatedAt = now;
 
@@ -634,7 +754,7 @@ export class GmailEmailProvider {
           operation: "gmail.reconciled.failed",
           outreachId,
           reason: options.reason,
-          reconciledBy: options.verifiedByAdminId || options.userId,
+          reconciledBy: adminCtx.adminUserId,
         },
       });
 

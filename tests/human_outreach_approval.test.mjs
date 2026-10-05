@@ -49,6 +49,7 @@ test('actual Gmail dispatch stops before OAuth/fetch on denied claim and keeps s
     '@/lib/discovery/leadRepository': { leadRepository: {} },
     '@/lib/crm/crmRepository': { crmRepository: new Proxy({}, { get: () => () => { crmCalls++; throw new Error('Simulation cannot write CRM'); } }) },
     '@/lib/telemetry/agentTelemetry': { emitAgentEvent() {} },
+    '@/lib/adminAuth': { getAuthorizedAdminUserIds: () => ['a0d29ad3-4c93-4bcd-a4d0-b45804017cf2'] },
   }, { process: { cwd: () => '/isolated', env }, Buffer,
     fetch: async () => { fetchCalls++; if (response) return response; throw new Error('Uncertain transport outcome'); } }).GmailEmailProvider;
   provider.verifyPreFlight = async () => ({ canSend: true, outreach: structuredClone({ ...durableDraft, status: 'approved' }) });
