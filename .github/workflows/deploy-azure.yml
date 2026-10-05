@@ -159,6 +159,12 @@ jobs:
             if [ -n "$DB_HOST" ]; then export AZURE_DB_HOST="$DB_HOST"; fi
             if [ -n "$DB_USER" ]; then export AZURE_DB_USER="$DB_USER"; fi
           fi
+          if [ -z "$AZURE_DB_PASSWORD" ] && [ -z "$DATABASE_URL" ]; then
+            echo "Attempting to resolve AZURE_DB_PASSWORD from Container App secret..."
+            DB_PW=$(az containerapp secret show --name "$CONTAINER_APP_NAME" --resource-group "$RESOURCE_GROUP" --secret-name azure-db-password --query value -o tsv 2>/dev/null || echo "")
+            if [ -n "$DB_PW" ]; then export AZURE_DB_PASSWORD="$DB_PW"; fi
+          fi
+          echo "DB Target Host: ${AZURE_DB_HOST:-default}, User: ${AZURE_DB_USER:-unset}, Password set: $([ -n "$AZURE_DB_PASSWORD" ] && echo 'yes' || echo 'no')"
           node scripts/run_migrations.mjs
 
       - name: Deploy Image & Configure Azure Environment
