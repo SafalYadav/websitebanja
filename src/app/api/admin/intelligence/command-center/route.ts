@@ -47,10 +47,10 @@ export async function GET(req: Request) {
       );
     }
 
-    // Reject unauthorized workspace access if caller specifies an alien tenant they do not own
-    if (requestedTenant && requestedTenant !== auth.userId && !auth.isAdmin) {
+    // Restrict this endpoint strictly to the caller's own tenant. Cross-tenant access is prohibited
+    if (requestedTenant && requestedTenant !== auth.userId) {
       return NextResponse.json(
-        { success: false, message: "Forbidden: Unauthorized workspace access." },
+        { success: false, message: "Forbidden: Cross-tenant workspace access prohibited. You may only view your own workspace." },
         { status: 403 }
       );
     }

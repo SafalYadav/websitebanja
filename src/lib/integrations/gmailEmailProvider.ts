@@ -645,36 +645,12 @@ export class GmailEmailProvider {
           };
         }
       } else {
-        // When Gmail API is not live/configured (or pre-verified server evidence provided)
-        if (options.serverVerificationEvidence) {
-          if (options.serverVerificationEvidence.fabricated === true || options.serverVerificationEvidence.forged === true) {
-            return {
-              success: false,
-              error: "Fabricated or forged server verification evidence rejected.",
-            };
-          }
-          if (options.serverVerificationEvidence.accountMismatch === true) {
-            return {
-              success: false,
-              error: "Evidence belongs to a different connected Gmail account. Cross-account reconciliation rejected.",
-            };
-          }
-          if (
-            options.serverVerificationEvidence.verifiedRecipient &&
-            outreach.business.email &&
-            !String(options.serverVerificationEvidence.verifiedRecipient).toLowerCase().includes(outreach.business.email.toLowerCase())
-          ) {
-            return {
-              success: false,
-              error: `Evidence recipient mismatch: '${options.serverVerificationEvidence.verifiedRecipient}' does not match outreach recipient '${outreach.business.email}'.`,
-            };
-          }
-        } else {
-          return {
-            success: false,
-            error: "Verifiable provider evidence required: cannot confirm delivery without verified server evidence matching the dispatch.",
-          };
-        }
+        // When Gmail API is unconfigured/unavailable, reconciliation cannot confirm provider acceptance.
+        // Caller-supplied verification evidence is strictly rejected as an authority in all production branches.
+        return {
+          success: false,
+          error: "Gmail API integration is unconfigured or unavailable. Verifiable provider acceptance cannot be confirmed without live server-side provider verification. Dispatch remains blocked for human review.",
+        };
       }
 
       outreach.status = "sent";

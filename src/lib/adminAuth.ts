@@ -348,7 +348,17 @@ async function syncAdminRoleToDatabase(userId?: string, email?: string): Promise
  * and confirms whether the user's email is explicitly listed in authorized admin allowlist
  * or contains an administrative role (admin/superadmin) in app_metadata.
  */
+let testVerifier: ((req: Request) => Promise<AdminAuthResult>) | null = null;
+
+export function setTestAdminAuthVerifier(verifier: ((req: Request) => Promise<AdminAuthResult>) | null) {
+  if (process.env.NODE_ENV === "production") return;
+  testVerifier = verifier;
+}
+
 export async function verifyAdminAuth(req: Request): Promise<AdminAuthResult> {
+  if (process.env.NODE_ENV !== "production" && testVerifier) {
+    return testVerifier(req);
+  }
   try {
     const authHeader = req.headers.get("authorization") || req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {

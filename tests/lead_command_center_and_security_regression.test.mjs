@@ -19,6 +19,9 @@ const jiti = createJiti(__dirname, {
   interopDefault: true,
 });
 
+// Import services
+const adminAuthModule = jiti("@/lib/adminAuth");
+
 // Import route handlers
 const commandCenterRoute = jiti("@/app/api/admin/intelligence/command-center/route.ts");
 const reviewQueueRoute = jiti("@/app/api/automation/leads/review-queue/route.ts");
@@ -70,13 +73,30 @@ describe("CEO Command Center & Lead Command Center Security Regressions", () => 
       assert.equal(data.success, false);
     });
 
-    test("commandCenterRoute rejects alien workspace access from non-admin caller", async () => {
-      // Mock request with non-admin session
-      const req = new Request("http://localhost:3000/api/admin/intelligence/command-center?tenantId=alien-workspace-id", {
-        headers: { Authorization: "Bearer invalid_token" },
-      });
-      const res = await commandCenterRoute.GET(req);
-      assert.ok(res.status === 401 || res.status === 403);
+    test("commandCenterRoute rejects alien workspace access from authenticated caller", async () => {
+      adminAuthModule.setTestAdminAuthVerifier(async () => ({
+        isAdmin: true,
+        userId: TEST_ADMIN_ID,
+        email: "admin@websitebanja.com",
+      }));
+
+      try {
+        const req = new Request(
+          `http://localhost:3000/api/admin/intelligence/command-center?tenantId=alien-workspace-id`,
+          {
+            headers: {
+              Authorization: "Bearer test-admin-token",
+            },
+          }
+        );
+        const res = await commandCenterRoute.GET(req);
+        const data = await res.json();
+        assert.equal(res.status, 403);
+        assert.equal(data.success, false);
+        assert.match(data.message, /Cross-tenant workspace access prohibited/);
+      } finally {
+        adminAuthModule.setTestAdminAuthVerifier(null);
+      }
     });
   });
 
@@ -225,7 +245,8 @@ describe("CEO Command Center & Lead Command Center Security Regressions", () => 
       };
 
       outreachRepository.findOutreachById = async (id, uid) => {
-        return { ...mockOutreach, outreachId: id, userId: uid };
+        if (uid && uid !== TEST_ADMIN_ID) return null;
+        return { ...mockOutreach, outreachId: id, userId: TEST_ADMIN_ID };
       };
       outreachRepository.saveOutreachRecord = async (record) => record;
     });
@@ -250,8 +271,9 @@ describe("CEO Command Center & Lead Command Center Security Regressions", () => 
       assert.match(res.error, /Fabricated provider message ID evidence rejected/);
     });
 
-    test("rejects client-supplied forged serverVerificationEvidence", async () => {
-      const res = await GmailEmailProvider.reconcileOutreachDispatch(
+    test("rejects client-supplied evidence when Gmail is unconfigured", async () => {
+      // Empty evidence {}
+      const res1 = await GmailEmailProvider.reconcileOutreachDispatch(
         "outreach_test_2",
         "confirm_provider_accepted",
         {
@@ -261,21 +283,17 @@ describe("CEO Command Center & Lead Command Center Security Regressions", () => 
             isAdmin: true,
             isHuman: true,
           },
-          reason: "Manual verification",
+          reason: "Manual verification with empty evidence",
           verifiedExternalMessageId: "real_msg_id_998877",
-          serverVerificationEvidence: {
-            forged: true,
-          },
+          serverVerificationEvidence: {},
         }
       );
+      assert.equal(res1.success, false);
+      assert.match(res1.error, /Gmail API integration is unconfigured or unavailable/);
 
-      assert.equal(res.success, false);
-      assert.match(res.error, /Fabricated or forged/);
-    });
-
-    test("rejects cross-account reconciliation evidence", async () => {
-      const res = await GmailEmailProvider.reconcileOutreachDispatch(
-        "outreach_test_3",
+      // Plausible fabricated evidence without forged flags
+      const res2 = await GmailEmailProvider.reconcileOutreachDispatch(
+        "outreach_test_2",
         "confirm_provider_accepted",
         {
           adminContext: {
@@ -284,16 +302,83 @@ describe("CEO Command Center & Lead Command Center Security Regressions", () => 
             isAdmin: true,
             isHuman: true,
           },
-          reason: "Cross-account test",
+          reason: "Manual verification with plausible evidence",
           verifiedExternalMessageId: "real_msg_id_998877",
           serverVerificationEvidence: {
-            accountMismatch: true,
+            verifiedVia: "caller_claimed_check",
+            verifiedRecipient: "wine@example.com",
+            timestamp: new Date().toISOString(),
           },
         }
       );
+      assert.equal(res2.success, false);
+      assert.match(res2.error, /Gmail API integration is unconfigured or unavailable/);
+    });
 
+    test("rejects cross-tenant reconciliation attempts", async () => {
+      const res = await GmailEmailProvider.reconcileOutreachDispatch(
+        "outreach_test_3",
+        "confirm_provider_accepted",
+        {
+          adminContext: {
+            adminUserId: TEST_ADMIN_ID,
+            tenantId: "cceafe47-a710-49e9-a894-16f592dc8e64", // authorized admin but different tenant than outreach
+            isAdmin: true,
+            isHuman: true,
+          },
+          reason: "Cross-tenant recovery attempt",
+          verifiedExternalMessageId: "real_msg_id_998877",
+        }
+      );
       assert.equal(res.success, false);
-      assert.match(res.error, /Cross-account reconciliation rejected/);
+      assert.match(res.error, /Cross-tenant reconciliation violation|Tenant mismatch|not found/);
+    });
+
+    test("reset_to_approved rejects uncertain dispatches without explicit human certification", async () => {
+      const res = await GmailEmailProvider.reconcileOutreachDispatch(
+        "outreach_test_reset",
+        "reset_to_approved",
+        {
+          adminContext: {
+            adminUserId: TEST_ADMIN_ID,
+            tenantId: TEST_ADMIN_ID,
+            isAdmin: true,
+            isHuman: true,
+          },
+          reason: "Uncertain dispatch reset",
+          certifiedNotDispatched: false,
+        }
+      );
+      assert.equal(res.success, false);
+      assert.match(res.error, /certifiedNotDispatched/);
+    });
+
+    test("prevents duplicate recovery on already sent outreach", async () => {
+      outreachRepository.findOutreachById = async (id, uid) => ({
+        outreachId: id,
+        userId: uid,
+        status: "sent",
+        externalMessageId: "msg_already_sent_123",
+        deliveryOutcome: "provider_accepted",
+        business: { name: "Test Wine Store", email: "wine@example.com" },
+      });
+
+      const res = await GmailEmailProvider.reconcileOutreachDispatch(
+        "outreach_already_sent",
+        "confirm_provider_accepted",
+        {
+          adminContext: {
+            adminUserId: TEST_ADMIN_ID,
+            tenantId: TEST_ADMIN_ID,
+            isAdmin: true,
+            isHuman: true,
+          },
+          reason: "Duplicate recovery attempt",
+          verifiedExternalMessageId: "msg_already_sent_123",
+        }
+      );
+      assert.equal(res.success, false);
+      assert.match(res.error, /Duplicate recovery prevented/);
     });
   });
 

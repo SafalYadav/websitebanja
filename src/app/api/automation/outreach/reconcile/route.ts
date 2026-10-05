@@ -21,7 +21,6 @@ const ReconcileSchema = z.object({
   reason: z.string().min(10, { message: "Audit reason must be at least 10 characters" }).max(5000),
   verifiedExternalMessageId: z.string().max(300).optional(),
   certifiedNotDispatched: z.boolean().optional(),
-  serverVerificationEvidence: z.record(z.string(), z.unknown()).optional(),
   isHuman: z.literal(true, {
     message: "Only authenticated human administrators can authorize dispatch reconciliation.",
   }),
@@ -88,7 +87,6 @@ export async function POST(req: Request) {
         adminContext,
         reason: parsedBody.reason,
         verifiedExternalMessageId: parsedBody.verifiedExternalMessageId,
-        serverVerificationEvidence: parsedBody.serverVerificationEvidence,
         certifiedNotDispatched: parsedBody.certifiedNotDispatched,
       }
     );
