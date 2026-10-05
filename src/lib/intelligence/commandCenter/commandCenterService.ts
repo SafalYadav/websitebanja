@@ -388,14 +388,14 @@ export class CommandCenterService {
         tacticsCount: Array.isArray(s.tactics) ? s.tactics.length : 0,
         status: s.status,
       })),
-      relevantExperienceMemory: (await memoryStore.listRuns(10)).map((r) => ({
+      relevantExperienceMemory: (await memoryStore.listRuns(tenantId, 10)).map((r) => ({
         runId: r.id,
         domain: r.domain,
         objective: r.objective,
         success: r.status === "success",
         timestamp: r.createdAt,
       })),
-      recentMemoryUpdates: (await memoryStore.listRuns(5)).map((r) => ({
+      recentMemoryUpdates: (await memoryStore.listRuns(tenantId, 5)).map((r) => ({
         id: r.id,
         type: "RUN_EXECUTION",
         title: r.objective,

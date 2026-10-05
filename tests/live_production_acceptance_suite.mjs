@@ -221,29 +221,39 @@ async function run() {
 
     // 3. Step 1: Business Details
     console.log("  Filling Step 1 (Business Details)...");
-    // Switch to structured details if in agent mode
-    const structuredCard = page.locator('button[role="radio"]:has-text("Structured Details"), button:has-text("Business Details")').first();
-    if (await structuredCard.isVisible()) {
+    
+    // Dismiss cookie banner if present
+    const acceptCookies = page.locator('button:has-text("Accept All")');
+    if (await acceptCookies.isVisible({ timeout: 2000 }).catch(() => false)) {
+      console.log("  Dismissing cookie banner...");
+      await acceptCookies.click();
+      await page.waitForTimeout(500);
+    }
+
+    // Switch to structured details if in card mode
+    const structuredCard = page.locator('button:has-text("Use Business Details"), button[role="radio"]:has-text("Structured Details"), button:has-text("Business Details")').first();
+    if (await structuredCard.isVisible({ timeout: 3000 }).catch(() => false)) {
+      console.log("  Selecting 'Use Business Details' card...");
       await structuredCard.click();
       await page.waitForTimeout(500);
     }
 
     // Fill form inputs
-    const nameInput = page.locator('input[placeholder*="Name"], input[name="businessName"], #businessName').first();
+    const nameInput = page.locator('input[placeholder*="Acme Tech Solutions"], input[placeholder*="Name"], input[name="businessName"], #businessName').first();
     if (await nameInput.isVisible()) {
       await nameInput.fill("G-Town Wines");
     }
 
-    const descInput = page.locator('textarea, input[placeholder*="describe"], #description').first();
+    const descInput = page.locator('textarea[placeholder*="Describe what your business does"], textarea, input[placeholder*="describe"], #description').first();
     if (await descInput.isVisible()) {
       await descInput.fill(
         "G-Town Wines is a premier liquor, wine, and craft beer retail outlet located adjacent to The Bristol Hotel on MG Road, DLF Phase 1, Gurugram. We offer an extensive collection of imported spirits, fine wines, and domestic beverages for walk-in retail patrons, party catering, and corporate events."
       );
     }
 
-    const nextBtn1 = page.locator('button:has-text("Next"), button:has-text("Save & Continue"), button:has-text("Continue")').first();
+    const nextBtn1 = page.locator('button:has-text("Continue"), button:has-text("Next"), button:has-text("Save & Continue")').first();
     await nextBtn1.click();
-    console.log("  Clicked Next from Business Details...");
+    console.log("  Clicked Continue from Business Details...");
 
     // Wait for step 2 (branding) or step navigation
     await page.waitForTimeout(1500);
