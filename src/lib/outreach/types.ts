@@ -72,11 +72,18 @@ export interface OutreachRecord {
   updatedAt: string;
   reviewedAt?: string;
   approvedAt?: string;
+  approvedBy?: string;
+  approvedContentHash?: string;
+  dispatchClaimedAt?: string;
+  approvalRequest?: import("@/lib/intelligence/pipeline/approvalGate").StoredApprovalRecord;
+  approvalHistory?: import("@/lib/intelligence/pipeline/approvalGate").StoredApprovalRecord[];
   rejectedAt?: string;
   simulatedAt?: string;
   sentAt?: string;
   externalMessageId?: string;
   threadId?: string;
+  deliveryOutcome?: "provider_accepted" | "delivered" | "reconciliation_required" | "failed";
+  deliveryError?: string;
 
   userId?: string;
   handoffPhase: "phase12_reply_intelligence_crm";
@@ -99,6 +106,8 @@ export interface DraftOutreachRequest {
 
 export interface DraftOutreachResponse {
   success: boolean;
+  researchId?: string;
+  status?: import("@/lib/intelligence/orchestration/types").CanonicalGenerationResponse["status"];
   outreach?: OutreachRecord;
   reusedExisting?: boolean;
   handoffPhase: "phase12_reply_intelligence_crm";
@@ -117,6 +126,9 @@ export interface UpdateOutreachStatusRequest {
   recipientEmail?: string;
   notes?: string;
   userId?: string;
+  expectedReviewedMessage?: string;
+  expectedReviewedSubject?: string;
+  expectedReviewedRecipient?: string;
 }
 
 export interface UpdateOutreachStatusResponse {

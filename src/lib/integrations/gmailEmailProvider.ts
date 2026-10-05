@@ -181,35 +181,44 @@ export class GmailEmailProvider {
       return { canSend: false, reason: `Outreach channel is '${outreach.channel}', expected 'email'.` };
     }
 
-    // 2. Lead exists
+    // 2. Reconciliation & In-flight check (must block immediately before querying external dependencies)
+    if (outreach.deliveryOutcome === "reconciliation_required") {
+      return { canSend: false, reason: `Outreach email has uncertain delivery outcome and requires manual reconciliation before retry.` };
+    }
+    if (outreach.status === "queued") {
+      return { canSend: false, reason: `Outreach email is currently queued or in-flight; concurrent or duplicate send is blocked.` };
+    }
+    if (outreach.status === "sent" || outreach.sentAt) {
+      return { canSend: false, reason: `Outreach email has already been sent for lead '${outreach.leadId}'.` };
+    }
+
+    // 3. Lead exists
     const lead = await leadRepository.findLeadById(outreach.leadId, userId);
     if (!lead) {
       return { canSend: false, reason: `Associated lead '${outreach.leadId}' not found.` };
     }
 
-    // 3. Lead is not DO_NOT_CONTACT
+    // 4. Lead is not DO_NOT_CONTACT
     const crmState = await crmRepository.getLeadCRMState(outreach.leadId, userId);
     if (crmState?.status === "DO_NOT_CONTACT" || lead.qualificationStatus === "DISQUALIFIED") {
       return { canSend: false, reason: "Lead is marked as DO_NOT_CONTACT or DISQUALIFIED." };
     }
 
-    // 4. Valid recipient email
-    const recipient = outreach.business.email || lead.email;
+    // 5. Valid recipient email
+    const recipient = outreach.business.email;
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!recipient || !emailRegex.test(recipient)) {
       return { canSend: false, reason: `Invalid or missing recipient email: '${recipient}'.` };
     }
-
-    // 5. Human approval & duplicate check
-    if ((outreach as any).status === "sent" || (outreach as any).sentAt) {
-      return { canSend: false, reason: `Outreach email has already been sent for lead '${outreach.leadId}'.` };
+    if (/[\r\n]/.test(recipient) || /[\r\n]/.test(outreach.subject || "")) {
+      return { canSend: false, reason: "Email headers contain invalid line breaks." };
     }
     if (outreach.status !== "approved") {
       return { canSend: false, reason: `Outreach status is '${outreach.status}'. Only 'approved' drafts may be sent.` };
     }
 
     // 6. Draft passed factual validation
-    if (outreach.validation && !outreach.validation.isValid) {
+    if (!outreach.validation?.isValid) {
       return { canSend: false, reason: `Outreach draft failed factual validation checks.` };
     }
 
@@ -255,11 +264,10 @@ export class GmailEmailProvider {
     }
 
     const outreach = preFlight.outreach;
-    const lead = preFlight.lead;
-    const recipient = outreach.business.email || lead.email;
+    const recipient = outreach.business.email;
 
     // Idempotency check: prevent duplicate send
-    if ((outreach as any).status === "sent" || (outreach as any).sentAt) {
+    if (outreach.status === "sent" || outreach.sentAt) {
       return {
         success: false,
         error: {
@@ -276,20 +284,29 @@ export class GmailEmailProvider {
       process.env.AUTO_SEND_ENABLED !== "true" && !options.forceSend ||
       !gmailStatus.isConfigured;
 
+    // Claim before any external dispatch. CAS verifies the exact human-reviewed
+    // payload and permits only one worker to move approved -> queued.
+    // An uncertain provider outcome remains queued: never blindly resend it.
+    try {
+      outreach.status = "queued";
+      await outreachRepository.saveOutreachRecord(outreach);
+    } catch {
+      return { success: false, error: { code: "DISPATCH_CLAIM_DENIED", message: "Approval changed or another worker claimed this dispatch. Reload the original outreach." } };
+    }
+
     if (isDryRun) {
       // Execute safe local mock dispatch
       const simulatedMsgId = `mock_gmail_${Date.now()}_${crypto.randomBytes(4).toString("hex")}`;
       const now = new Date().toISOString();
 
-      outreach.status = "sent" as any;
-      (outreach as any).externalMessageId = simulatedMsgId;
-      (outreach as any).sentAt = now;
+      outreach.status = "simulated_sent";
+      outreach.externalMessageId = simulatedMsgId;
+      outreach.simulatedAt = now;
       outreach.updatedAt = now;
       await outreachRepository.saveOutreachRecord(outreach);
 
-      await recordOutboundInCRM(outreach, options.userId, simulatedMsgId);
-
-      incrementRateLimitCount();
+      // A simulation is not an outbound delivery and must not advance CRM
+      // delivery/follow-up state or consume the live provider rate counter.
 
       emitAgentEvent({
         event: "agent.provider_call",
@@ -314,8 +331,13 @@ export class GmailEmailProvider {
     try {
       const accessToken = await GmailOAuthManager.getValidAccessToken();
 
+      // Pre-flight claim: transition to queued to prevent concurrent duplicate sends
+      outreach.status = "queued";
+      outreach.dispatchClaimedAt = new Date().toISOString();
+      outreach.updatedAt = new Date().toISOString();
+      await outreachRepository.saveOutreachRecord(outreach);
+
       // RFC 2822 message construction
-      const boundary = `boundary_${Date.now()}`;
       const subject = outreach.subject || `Personalized Website Preview for ${outreach.business.name}`;
       const messageBody = outreach.message;
 
@@ -349,6 +371,14 @@ export class GmailEmailProvider {
 
       if (!response.ok) {
         const errorText = await response.text();
+        outreach.status = "failed";
+        outreach.deliveryOutcome = "failed";
+        outreach.deliveryError = `Gmail send failed (${response.status}): ${errorText}`;
+        outreach.updatedAt = new Date().toISOString();
+        try {
+          await outreachRepository.saveOutreachRecord(outreach);
+        } catch {}
+
         ConfigValidator.updateInternalState((state) => {
           state.gmail.lastError = `Gmail send failed (${response.status}): ${errorText}`;
         });
@@ -364,15 +394,38 @@ export class GmailEmailProvider {
         };
       }
 
-      const sendResult = await response.json();
+      const sendResult: unknown = await response.json();
+      if (!sendResult || typeof sendResult !== "object" || !("id" in sendResult) ||
+        typeof sendResult.id !== "string" || !sendResult.id.trim()) {
+        outreach.status = "queued"; // remain claimed to prevent retry
+        outreach.deliveryOutcome = "reconciliation_required";
+        outreach.deliveryError = "Gmail returned no verifiable message ID. Dispatch remains claimed; reconcile before any resend.";
+        try {
+          await outreachRepository.saveOutreachRecord(outreach);
+        } catch {}
+        return { success: false, error: { code: "DELIVERY_OUTCOME_UNCERTAIN",
+          message: "Gmail returned no verifiable message ID. Dispatch remains claimed; reconcile before any resend." } };
+      }
+      const threadId = "threadId" in sendResult && typeof sendResult.threadId === "string" ? sendResult.threadId : undefined;
       const now = new Date().toISOString();
 
-      outreach.status = "sent" as any;
-      (outreach as any).externalMessageId = sendResult.id;
-      (outreach as any).threadId = sendResult.threadId;
-      (outreach as any).sentAt = now;
+      outreach.status = "sent";
+      outreach.deliveryOutcome = "provider_accepted";
+      outreach.externalMessageId = sendResult.id;
+      outreach.threadId = threadId;
+      outreach.sentAt = now;
       outreach.updatedAt = now;
-      await outreachRepository.saveOutreachRecord(outreach);
+
+      try {
+        await outreachRepository.saveOutreachRecord(outreach);
+      } catch (persistErr: any) {
+        outreach.deliveryOutcome = "reconciliation_required";
+        outreach.deliveryError = `Provider accepted message ID ${sendResult.id}, but local record persistence failed: ${persistErr?.message}`;
+        try {
+          await outreachRepository.saveOutreachRecord(outreach);
+        } catch {}
+        throw new Error(`Outreach sent with message ID ${sendResult.id}, but persistence failed. Reconciliation required.`);
+      }
 
       // Record in CRM
       await recordOutboundInCRM(outreach, options.userId, sendResult.id);
@@ -392,25 +445,145 @@ export class GmailEmailProvider {
           operation: "gmail.send.success",
           outreachId,
           messageId: sendResult.id,
-          threadId: sendResult.threadId,
+          threadId,
         },
       });
 
       return {
         success: true,
         messageId: sendResult.id,
-        threadId: sendResult.threadId,
+        threadId,
         isSimulated: false,
       };
-    } catch (err: any) {
-      const msg = err.message || "Failed to dispatch email via Gmail API.";
+    } catch (err: unknown) {
+      const msg = "Dispatch outcome requires reconciliation. The original outreach remains claimed; do not resend automatically.";
+      outreach.status = "queued"; // remain claimed
+      outreach.deliveryOutcome = "reconciliation_required";
+      outreach.deliveryError = err instanceof Error ? err.message : String(err);
+      try {
+        await outreachRepository.saveOutreachRecord(outreach);
+      } catch {}
       ConfigValidator.updateInternalState((state) => {
         state.gmail.lastError = msg;
       });
       return {
         success: false,
-        error: { code: "GMAIL_DISPATCH_EXCEPTION", message: msg },
+        error: { code: "DELIVERY_OUTCOME_UNCERTAIN", message: msg },
       };
     }
+  }
+
+  /**
+   * Reconciles an outreach dispatch whose outcome was uncertain.
+   * Tenant-scoped: verifies record ownership via userId.
+   * Uses provider message evidence or administrative reconciliation decision.
+   */
+  static async reconcileOutreachDispatch(
+    outreachId: string,
+    action: "confirm_provider_accepted" | "reset_to_approved" | "mark_failed",
+    options: {
+      userId?: string;
+      verifiedExternalMessageId?: string;
+      reason: string;
+    }
+  ): Promise<{ success: boolean; outreach?: OutreachRecord; error?: string }> {
+    const outreach = await outreachRepository.findOutreachById(outreachId, options.userId);
+    if (!outreach) {
+      return { success: false, error: `Outreach record '${outreachId}' not found for user '${options.userId}'` };
+    }
+
+    if (outreach.deliveryOutcome !== "reconciliation_required" && outreach.status !== "queued") {
+      return {
+        success: false,
+        error: `Outreach '${outreachId}' does not require reconciliation (status: ${outreach.status}, outcome: ${outreach.deliveryOutcome})`,
+      };
+    }
+
+    if (!options.reason || !options.reason.trim()) {
+      return { success: false, error: "Explicit audit reason required for dispatch reconciliation" };
+    }
+
+    const now = new Date().toISOString();
+
+    if (action === "confirm_provider_accepted") {
+      const messageId = options.verifiedExternalMessageId?.trim() || outreach.externalMessageId?.trim();
+      if (!messageId) {
+        return {
+          success: false,
+          error: "Cannot confirm delivery without verified provider message ID evidence.",
+        };
+      }
+
+      outreach.status = "sent";
+      outreach.deliveryOutcome = "provider_accepted";
+      outreach.externalMessageId = messageId;
+      outreach.sentAt = outreach.sentAt || now;
+      outreach.deliveryError = undefined;
+      outreach.notes = `${outreach.notes ? outreach.notes + "\n" : ""}[Reconciled confirmed]: ${options.reason}`;
+      outreach.updatedAt = now;
+
+      await outreachRepository.saveOutreachRecord(outreach);
+      await recordOutboundInCRM(outreach, options.userId, messageId);
+
+      emitAgentEvent({
+        event: "agent.provider_call",
+        agent: "mitra",
+        provider: "gmail",
+        metadata: {
+          operation: "gmail.reconciled.accepted",
+          outreachId,
+          messageId,
+          reason: options.reason,
+        },
+      });
+
+      return { success: true, outreach };
+    } else if (action === "reset_to_approved") {
+      // Operator verified message was NOT sent; reset to approved for safe retry
+      delete outreach.dispatchClaimedAt;
+      outreach.status = "approved";
+      outreach.deliveryOutcome = undefined;
+      outreach.deliveryError = undefined;
+      outreach.notes = `${outreach.notes ? outreach.notes + "\n" : ""}[Reconciled reset]: ${options.reason}`;
+      outreach.updatedAt = now;
+
+      await outreachRepository.saveOutreachRecord(outreach);
+
+      emitAgentEvent({
+        event: "agent.provider_call",
+        agent: "mitra",
+        provider: "gmail",
+        metadata: {
+          operation: "gmail.reconciled.reset",
+          outreachId,
+          reason: options.reason,
+        },
+      });
+
+      return { success: true, outreach };
+    } else if (action === "mark_failed") {
+      outreach.status = "failed";
+      outreach.deliveryOutcome = "failed";
+      outreach.deliveryError = options.reason;
+      outreach.notes = `${outreach.notes ? outreach.notes + "\n" : ""}[Reconciled failed]: ${options.reason}`;
+      outreach.updatedAt = now;
+
+      await outreachRepository.saveOutreachRecord(outreach);
+
+      emitAgentEvent({
+        event: "agent.provider_call",
+        agent: "mitra",
+        provider: "gmail",
+        metadata: {
+          operation: "gmail.reconciled.failed",
+          outreachId,
+          reason: options.reason,
+        },
+      });
+
+      return { success: true, outreach };
+    }
+
+    return { success: false, error: `Invalid reconciliation action '${action}'` };
   }
 }

@@ -1,0 +1,114 @@
+{
+  "version": 1,
+  "description": "WebsiteBanja dependency-ordered database migration manifest",
+  "migrations": [
+    {
+      "id": "01_azure_schema_baseline",
+      "path": "azure-migration/01_azure_schema_baseline.sql",
+      "sha256": "a15b47677c7f2b9108677c2b3c5a893eed452bec44b08064d3a222db55f8a0c8",
+      "description": "Azure PostgreSQL baseline schema (profiles, projects, versions, auth.uid)"
+    },
+    {
+      "id": "02_leads_schema",
+      "path": "azure-migration/02_leads_schema.sql",
+      "sha256": "e567901092834487b1e8ffe678ea3e20e200eeb26f4f99a87f7b0f3b1f2b454e",
+      "description": "Leads tracking and discovery schema"
+    },
+    {
+      "id": "03_lead_audits_schema",
+      "path": "azure-migration/03_lead_audits_schema.sql",
+      "sha256": "cd676e1c7fa52eab51a211d1f79fa4fb5c8ed028bbc991cd47888e1ee6ab7b0d",
+      "description": "Lead audits schema"
+    },
+    {
+      "id": "04_growth_retention_maintenance",
+      "path": "azure-migration/04_growth_retention_maintenance.sql",
+      "sha256": "e984dc35c716ed832411124c8b7c9ab0e24f7f77daf4ae6cb9f7b40fc5698c9b",
+      "description": "Growth and retention maintenance"
+    },
+    {
+      "id": "05_agent_telemetry_baseline",
+      "path": "azure-migration/05_agent_telemetry_baseline.sql",
+      "sha256": "aa81db10e6023e582ed17eb3b652c43dd6602c160a1b02042f0b921b7ae8fded",
+      "description": "Agent telemetry baseline"
+    },
+    {
+      "id": "06_uniqueness_verification",
+      "path": "azure-migration/06_uniqueness_verification.sql",
+      "sha256": "8f38690d60e21fd6e2a88b22439a968a66eaa2aea699d6f692707f1769839b56",
+      "description": "Uniqueness verification and fingerprints"
+    },
+    {
+      "id": "07_admin_access_control_audit",
+      "path": "azure-migration/07_admin_access_control_audit.sql",
+      "sha256": "6abbd40a4eb57401675bca0655a04a3a36249d929b08d2698d7f4f2811b45a25",
+      "description": "Admin access control and audit logging"
+    },
+    {
+      "id": "08_agent_memory_learning_baseline",
+      "path": "azure-migration/08_agent_memory_learning_baseline.sql",
+      "sha256": "035ce46f4337e4b02956765f8c7f519ef58778e9893f78b8c5d1d5402e4f6dec",
+      "description": "Agent memory and learning baseline schema"
+    },
+    {
+      "id": "09_crm_outreach_pipeline_schema",
+      "path": "azure-migration/09_crm_outreach_pipeline_schema.sql",
+      "sha256": "99f52702e77960b605583207fab6a3b9d97dbc68bd5f540b6a9eced3d9b704e0",
+      "description": "Autonomous pipeline runs and CRM schema"
+    },
+    {
+      "id": "20261004_generation_research",
+      "path": "migrations/20261004_generation_research.sql",
+      "sha256": "2de6e0dbbfcf2d944d2844b41c7b4f8651af7af17f20d472fe92cecc4c99bd62",
+      "description": "Governed generation research and resumes"
+    },
+    {
+      "id": "20261004_pipeline_governance",
+      "path": "migrations/20261004_pipeline_governance.sql",
+      "sha256": "568d26a38166656414cbde1a689e929f3eea964b4da0ec474fdbfaa950e17464",
+      "description": "Pipeline governance ownership columns"
+    },
+    {
+      "id": "20261004_pipeline_execution_fences",
+      "path": "migrations/20261004_pipeline_execution_fences.sql",
+      "sha256": "09e5524ca2ed4ac137f933ae8d60527e74c4dd848e5fa5919f47e205f20edc5d",
+      "description": "Pipeline execution fences and stage results"
+    },
+    {
+      "id": "20261004_pipeline_research_continuations",
+      "path": "migrations/20261004_pipeline_research_continuations.sql",
+      "sha256": "f702205c20d62e185d8c85aa06c05c7e6410e9d2bb46df861c368e30b68fc08b",
+      "description": "Pipeline research continuation outbox"
+    },
+    {
+      "id": "20261004_governed_autonomous_runs",
+      "path": "migrations/20261004_governed_autonomous_runs.sql",
+      "sha256": "8615836ded70ba868bf94537c8e600ce5f10096ee9306bc485cc8fa885cd7a42",
+      "description": "Governed autonomous runs record store"
+    },
+    {
+      "id": "20261004_governed_autonomous_runs_02_fences",
+      "path": "migrations/20261004_governed_autonomous_runs_02_fences.sql",
+      "sha256": "fb02b3428bcfe0777e29f2d34ba33d49ffb366c0162a20079f05b946f452f12e",
+      "description": "Governed autonomous runs leases and fences"
+    },
+    {
+      "id": "20261004_governed_outreach_records",
+      "path": "migrations/20261004_governed_outreach_records.sql",
+      "sha256": "5b7ffad1ada58640ac03d76518f15d37731e6eff3645ef0bb962194adcff0cde",
+      "description": "Governed outreach records store"
+    },
+    {
+      "id": "20261005_research_review_provenance",
+      "path": "migrations/20261005_research_review_provenance.sql",
+      "sha256": "e2e6fc9354517d16f7250db0711206777de57dba97929087aa2e7650ca81934e",
+      "description": "Research review provenance and hash verification"
+    },
+    {
+      "id": "20261005_tenant_memory_records",
+      "path": "migrations/20261005_tenant_memory_records.sql",
+      "sha256": "fdbe3a8467233abbfa045282f595a732920110ff11f16fa248ef4ee4a553649e",
+      "description": "Authoritative tenant memory records store with revision concurrency"
+    }
+  ]
+}

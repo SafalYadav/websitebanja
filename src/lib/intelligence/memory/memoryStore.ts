@@ -14,6 +14,8 @@ import type {
   AgentStrategyRecord,
   AgentExperimentRecord,
   BusinessMemoryItem,
+  MemoryRecordKind,
+  TenantMemoryRecord,
 } from "./memoryTypes";
 
 export function redactSecretsInString(str: string): string {
@@ -47,26 +49,72 @@ export function redactSecretsInObject<T>(obj: T): T {
   return result;
 }
 
+function isExplicitInMemoryMode(): boolean {
+  if (process.env.MEMORY_STORE_IN_MEMORY_ONLY === "true") {
+    return true;
+  }
+  if (process.env.NODE_ENV === "test" && process.env.MEMORY_STORE_USE_REAL_DB !== "true") {
+    return true;
+  }
+  return false;
+}
+
+export function resolveTrustedTenant(tenantId?: string | null, candidateObj?: any): string {
+  const isExplicitTest =
+    process.env.MEMORY_STORE_ALLOW_TEST_TENANT === "true" ||
+    process.env.NODE_ENV === "test";
+
+  const explicitTenant =
+    typeof tenantId === "string" && tenantId.trim().length > 0
+      ? tenantId.trim()
+      : null;
+
+  const candidateTenant =
+    (typeof candidateObj?.tenantId === "string" && candidateObj.tenantId.trim().length > 0
+      ? candidateObj.tenantId.trim()
+      : null) ||
+    (typeof candidateObj?.metadata?.tenantId === "string" && candidateObj.metadata.tenantId.trim().length > 0
+      ? candidateObj.metadata.tenantId.trim()
+      : null);
+
+  // If both are present, enforce that they DO NOT CONFLICT
+  if (explicitTenant && candidateTenant && explicitTenant !== candidateTenant) {
+    throw new Error(
+      `Tenant context conflict: payload tenant '${candidateTenant}' does not match trusted tenant context '${explicitTenant}'`
+    );
+  }
+
+  if (explicitTenant) {
+    return explicitTenant;
+  }
+
+  // If candidateTenant is present in an explicit test environment:
+  if (isExplicitTest) {
+    if (candidateTenant) return candidateTenant;
+    return "test_tenant";
+  }
+
+  // In production / live execution:
+  // "Do not treat tenant/user IDs supplied inside arbitrary record payloads as authentication."
+  // "Reject missing or conflicting tenant identity."
+  throw new Error("Trusted tenant context required for private memory access");
+}
+
 export class MemoryStore {
   private static instance: MemoryStore;
   private localDir: string;
 
-  // In-memory fallback stores (for tests, local dev, or during DB offline state)
-  private runs: Map<string, AgentRunRecord> = new Map();
-  private events: Map<string, AgentEventRecord> = new Map();
-  private decisions: Map<string, AgentDecisionRecord> = new Map();
-  private feedback: Map<string, AgentFeedbackRecord> = new Map();
-  private failures: Map<string, AgentFailureRecord> = new Map();
-  private evaluations: Map<string, AgentEvaluationRecord> = new Map();
-  private lessons: Map<string, AgentLessonRecord> = new Map();
-  private strategies: Map<string, AgentStrategyRecord> = new Map();
-  private experiments: Map<string, AgentExperimentRecord> = new Map();
-  private businessMemories: Map<string, BusinessMemoryItem> = new Map();
+  // In-memory tenant-scoped records: key is `${tenantId}:${recordKind}:${recordId}`
+  private tenantRecords: Map<string, TenantMemoryRecord> = new Map();
+
+  // Quarantined legacy records with unresolved ownership
+  private quarantinedRecords: Array<{ recordKind: string; recordId: string; data: unknown }> = [];
 
   private constructor() {
     this.localDir = path.resolve(process.cwd(), "scratch", "memory");
     this.ensureLocalDir();
-    this.seedDefaultStrategies();
+    // In accordance with governance rules, hardcoded "verified" strategy seeds have been retired.
+    // Active strategies must originate from governed, versioned human approval.
   }
 
   public static getInstance(): MemoryStore {
@@ -82,77 +130,247 @@ export class MemoryStore {
         fs.mkdirSync(this.localDir, { recursive: true });
       }
     } catch {
-      // Ignore directory creation error in read-only sandbox environments
+      // Read-only filesystem in sandbox or production containers
     }
   }
 
-  private persistLocal(collection: string, id: string, data: unknown): void {
+  private recordKey(tenantId: string, recordKind: MemoryRecordKind, recordId: string): string {
+    return `${tenantId}:${recordKind}:${recordId}`;
+  }
+
+  private findTestRecordPayload<T>(recordKind: MemoryRecordKind, recordId: string): T | undefined {
+    const isExplicitTest =
+      process.env.MEMORY_STORE_ALLOW_TEST_TENANT === "true" ||
+      process.env.NODE_ENV === "test";
+    if (!isExplicitTest) return undefined;
+    for (const [k, v] of this.tenantRecords.entries()) {
+      if (k.endsWith(`:${recordKind}:${recordId}`)) {
+        return v.payload as T;
+      }
+    }
+    return undefined;
+  }
+
+  // ─── UNIFIED TENANT-SCORED RECORD STORE (PostgreSQL Authoritative) ───────────
+
+  public async saveRecord<T = unknown>(
+    tenantId: string,
+    recordKind: MemoryRecordKind,
+    recordId: string,
+    payload: T,
+    expectedRevision?: number
+  ): Promise<TenantMemoryRecord<T>> {
+    const validTenant = resolveTrustedTenant(tenantId, payload);
+    const key = this.recordKey(validTenant, recordKind, recordId);
+    const existing = this.tenantRecords.get(key);
+
+    const sanitizedPayload = redactSecretsInObject(payload);
+
+    if (isExplicitInMemoryMode()) {
+      if (expectedRevision !== undefined) {
+        const currentRev = existing ? existing.revision : 0;
+        if (currentRev !== expectedRevision) {
+          throw new Error(
+            `Optimistic concurrency violation: record '${recordId}' has revision ${currentRev}, expected ${expectedRevision}`
+          );
+        }
+      }
+
+      const nextRevision = (existing ? existing.revision : 0) + 1;
+      const now = new Date().toISOString();
+      const record: TenantMemoryRecord<T> = {
+        tenantId: validTenant,
+        recordKind,
+        recordId,
+        payload: sanitizedPayload,
+        revision: nextRevision,
+        createdAt: existing ? existing.createdAt : now,
+        updatedAt: now,
+      };
+
+      this.tenantRecords.set(key, record as TenantMemoryRecord);
+      return record;
+    }
+
+    // Authoritative PostgreSQL persistence
+    // MUST fail explicitly when PostgreSQL is unavailable or a write fails.
+    // Cache MUST remain unchanged on failed writes or concurrency conflicts.
+    const pool = getPool();
+    if (!pool) {
+      throw new Error(`Database connection pool unavailable; cannot persist memory record '${recordId}' for tenant '${validTenant}'`);
+    }
+
+    let savedRow: { revision: number; created_at: any; updated_at: any };
+
     try {
-      this.ensureLocalDir();
-      const colDir = path.join(this.localDir, collection);
-      if (!fs.existsSync(colDir)) fs.mkdirSync(colDir, { recursive: true });
-      fs.writeFileSync(path.join(colDir, `${id}.json`), JSON.stringify(data, null, 2), "utf-8");
-    } catch {
-      // In-memory store remains authoritative if disk write is blocked
+      if (expectedRevision !== undefined && expectedRevision > 0) {
+        const updateRes = await pool.query(
+          `UPDATE public.tenant_memory_records
+           SET payload = $4, revision = revision + 1, updated_at = NOW()
+           WHERE tenant_id = $1 AND record_kind = $2 AND record_id = $3 AND revision = $5
+           RETURNING revision, created_at, updated_at`,
+          [validTenant, recordKind, recordId, JSON.stringify(sanitizedPayload), expectedRevision]
+        );
+        if (updateRes.rowCount === 0) {
+          throw new Error(
+            `Optimistic concurrency conflict on PostgreSQL for record '${recordId}' at revision ${expectedRevision}`
+          );
+        }
+        savedRow = updateRes.rows[0];
+      } else if (expectedRevision === 0) {
+        const insertRes = await pool.query(
+          `INSERT INTO public.tenant_memory_records (tenant_id, record_kind, record_id, payload, revision, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, 1, NOW(), NOW())
+           RETURNING revision, created_at, updated_at`,
+          [validTenant, recordKind, recordId, JSON.stringify(sanitizedPayload)]
+        );
+        savedRow = insertRes.rows[0];
+      } else {
+        const upsertRes = await pool.query(
+          `INSERT INTO public.tenant_memory_records (tenant_id, record_kind, record_id, payload, revision, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, 1, NOW(), NOW())
+           ON CONFLICT (tenant_id, record_kind, record_id)
+           DO UPDATE SET payload = EXCLUDED.payload, revision = public.tenant_memory_records.revision + 1, updated_at = NOW()
+           RETURNING revision, created_at, updated_at`,
+          [validTenant, recordKind, recordId, JSON.stringify(sanitizedPayload)]
+        );
+        savedRow = upsertRes.rows[0];
+      }
+    } catch (err: any) {
+      // Cache remains unchanged on failure or conflict
+      throw err;
     }
+
+    // Cache updated ONLY AFTER successful database write
+    const finalRecord: TenantMemoryRecord<T> = {
+      tenantId: validTenant,
+      recordKind,
+      recordId,
+      payload: sanitizedPayload,
+      revision: savedRow.revision,
+      createdAt: savedRow.created_at instanceof Date ? savedRow.created_at.toISOString() : String(savedRow.created_at),
+      updatedAt: savedRow.updated_at instanceof Date ? savedRow.updated_at.toISOString() : String(savedRow.updated_at),
+    };
+    this.tenantRecords.set(key, finalRecord as TenantMemoryRecord);
+    return finalRecord;
   }
 
-  private seedDefaultStrategies(): void {
-    // Seed verified baseline strategies for common domains
-    const defaultRestaurant: AgentStrategyRecord = {
-      id: "strat_rest_v1",
-      strategyId: "strategy_restaurant_v1",
-      name: "Visual Appetite & Sensory Dining Strategy",
-      domain: "restaurant",
-      version: "strategy_v1",
-      status: "ACTIVE",
-      description: "Warm atmospheric hero, high-contrast typography, interactive reservation CTA, zero cold industrial motifs.",
-      directives: [
-        "Hero section must emphasize ambiance and culinary craftsmanship.",
-        "Menu must be structured with high readability and dietary tags.",
-        "Include reservation or table booking conversion CTA.",
-      ],
-      avoidPatterns: ["bike rental", "car repair", "clinical sterile blue themes", "generic corporate placeholder copy"],
-      confidence: 0.95,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      activatedAt: new Date().toISOString(),
-    };
-    this.strategies.set(defaultRestaurant.strategyId, defaultRestaurant);
+  public async getRecord<T = unknown>(
+    tenantId: string,
+    recordKind: MemoryRecordKind,
+    recordId: string
+  ): Promise<TenantMemoryRecord<T> | undefined> {
+    const validTenant = resolveTrustedTenant(tenantId);
+    const key = this.recordKey(validTenant, recordKind, recordId);
 
-    const defaultRetail: AgentStrategyRecord = {
-      id: "strat_retail_v1",
-      strategyId: "strategy_retail_v1",
-      name: "Boutique Showcase & Social Proof Strategy",
-      domain: "retail",
-      version: "strategy_v1",
-      status: "ACTIVE",
-      description: "Editorial product grid, tactile surfaces, localized customer reviews, clear catalog access.",
-      directives: [
-        "Feature curated collections with editorial visual hierarchy.",
-        "Prominent store location, opening hours, and direct visit CTA.",
-      ],
-      avoidPatterns: ["dense legalistic text", "misaligned price grids"],
-      confidence: 0.92,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      activatedAt: new Date().toISOString(),
-    };
-    this.strategies.set(defaultRetail.strategyId, defaultRetail);
+    if (isExplicitInMemoryMode()) {
+      return this.tenantRecords.get(key) as TenantMemoryRecord<T> | undefined;
+    }
+
+    const pool = getPool();
+    if (!pool) {
+      throw new Error(`Database connection pool unavailable; cannot read memory record '${recordId}' for tenant '${validTenant}'`);
+    }
+
+    const res = await pool.query(
+      `SELECT payload, revision, created_at, updated_at
+       FROM public.tenant_memory_records
+       WHERE tenant_id = $1 AND record_kind = $2 AND record_id = $3`,
+      [validTenant, recordKind, recordId]
+    );
+    if (res.rows.length > 0) {
+      const row = res.rows[0];
+      const record: TenantMemoryRecord<T> = {
+        tenantId: validTenant,
+        recordKind,
+        recordId,
+        payload: row.payload,
+        revision: row.revision,
+        createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : String(row.created_at),
+        updatedAt: row.updated_at instanceof Date ? row.updated_at.toISOString() : String(row.updated_at),
+      };
+      this.tenantRecords.set(key, record as TenantMemoryRecord);
+      return record;
+    }
+    return undefined;
+  }
+
+  public async listRecords<T = unknown>(
+    tenantId: string,
+    recordKind: MemoryRecordKind,
+    limit = 50
+  ): Promise<TenantMemoryRecord<T>[]> {
+    const validTenant = resolveTrustedTenant(tenantId);
+
+    if (isExplicitInMemoryMode()) {
+      const prefix = `${validTenant}:${recordKind}:`;
+      const results: TenantMemoryRecord<T>[] = [];
+      for (const [k, v] of this.tenantRecords.entries()) {
+        if (k.startsWith(prefix)) {
+          results.push(v as TenantMemoryRecord<T>);
+        }
+      }
+      return results.slice(-limit).reverse();
+    }
+
+    const pool = getPool();
+    if (!pool) {
+      throw new Error(`Database connection pool unavailable; cannot list memory records for tenant '${validTenant}'`);
+    }
+
+    const res = await pool.query(
+      `SELECT record_id, payload, revision, created_at, updated_at
+       FROM public.tenant_memory_records
+       WHERE tenant_id = $1 AND record_kind = $2
+       ORDER BY updated_at DESC
+       LIMIT $3`,
+      [validTenant, recordKind, limit]
+    );
+    return res.rows.map((row) => ({
+      tenantId: validTenant,
+      recordKind,
+      recordId: row.record_id || row.payload?.id || "",
+      payload: row.payload,
+      revision: row.revision,
+      createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : String(row.created_at),
+      updatedAt: row.updated_at instanceof Date ? row.updated_at.toISOString() : String(row.updated_at),
+    }));
+  }
+
+  // ─── LEGACY RECORD QUARANTINE ────────────────────────────────────────────────
+
+  public quarantineLegacyRecord(recordKind: string, recordId: string, data: unknown): void {
+    this.quarantinedRecords.push({ recordKind, recordId, data });
+  }
+
+  public getQuarantinedRecords(): Array<{ recordKind: string; recordId: string; data: unknown }> {
+    return [...this.quarantinedRecords];
   }
 
   // ─── 1. AGENT RUNS ──────────────────────────────────────────────────────────
 
-  public async saveRun(run: AgentRunRecord): Promise<AgentRunRecord> {
+  public async saveRun(runOrTenant: string | AgentRunRecord, runData?: AgentRunRecord): Promise<AgentRunRecord> {
+    let tenantId: string;
+    let run: AgentRunRecord;
+
+    if (typeof runOrTenant === "string") {
+      tenantId = runOrTenant;
+      run = runData!;
+    } else {
+      run = runOrTenant;
+      tenantId = resolveTrustedTenant(undefined, run);
+    }
+
     const sanitizedRun: AgentRunRecord = {
       ...run,
       objective: run.objective ? redactSecretsInString(run.objective) : run.objective,
       metadata: run.metadata ? redactSecretsInObject(run.metadata) : run.metadata,
       failureReason: run.failureReason ? redactSecretsInString(run.failureReason) : run.failureReason,
     };
-    this.runs.set(sanitizedRun.runId, sanitizedRun);
-    this.persistLocal("runs", sanitizedRun.runId, sanitizedRun);
 
+    await this.saveRecord(tenantId, "run", sanitizedRun.runId, sanitizedRun);
+
+    // Also persist to legacy agent_runs table for backwards compatibility
     try {
       const pool = getPool();
       const query = `
@@ -165,7 +383,6 @@ export class MemoryStore {
           latency_ms = EXCLUDED.latency_ms,
           updated_at = EXCLUDED.updated_at
       `;
-      // Check if valid UUID or generate one
       const uuid = sanitizedRun.id && sanitizedRun.id.length === 36 ? sanitizedRun.id : undefined;
       if (uuid) {
         await pool.query(query, [
@@ -183,82 +400,127 @@ export class MemoryStore {
         ]);
       }
     } catch {
-      // Safe fallback to local/in-memory store
+      // Safe fallback
     }
+
     return sanitizedRun;
   }
 
-  public async getRun(runId: string): Promise<AgentRunRecord | undefined> {
-    return this.runs.get(runId);
+  public async getRun(tenantOrRunId: string, optionalRunId?: string): Promise<AgentRunRecord | undefined> {
+    const tenantId = optionalRunId ? tenantOrRunId : null;
+    const runId = optionalRunId || tenantOrRunId;
+    const validTenant = resolveTrustedTenant(tenantId);
+
+    const rec = await this.getRecord<AgentRunRecord>(validTenant, "run", runId);
+    if (rec?.payload) return rec.payload;
+
+    if (!optionalRunId) {
+      return this.findTestRecordPayload<AgentRunRecord>("run", runId);
+    }
+    return undefined;
   }
 
-  public async listRuns(limit = 20, domain?: string): Promise<AgentRunRecord[]> {
-    let list = Array.from(this.runs.values());
-    if (domain) {
-      list = list.filter((r) => r.domain && r.domain.toLowerCase() === domain.toLowerCase());
+  public async listRuns(tenantOrLimit?: string | number, limitOrDomain?: number | string, domainFilter?: string): Promise<AgentRunRecord[]> {
+    let tenantId: string | null = null;
+    let limit = 20;
+    let domain: string | undefined = undefined;
+
+    if (typeof tenantOrLimit === "string") {
+      tenantId = tenantOrLimit;
+      if (typeof limitOrDomain === "number") limit = limitOrDomain;
+      if (typeof domainFilter === "string") domain = domainFilter;
+      else if (typeof limitOrDomain === "string") domain = limitOrDomain;
+    } else {
+      if (typeof tenantOrLimit === "number") limit = tenantOrLimit;
+      if (typeof limitOrDomain === "string") domain = limitOrDomain;
     }
-    return list.slice(-limit).reverse();
+
+    const validTenant = resolveTrustedTenant(tenantId);
+    const records = await this.listRecords<AgentRunRecord>(validTenant, "run", limit * 2);
+    let runs = records.map((r) => r.payload);
+    if (domain) {
+      runs = runs.filter((r) => r.domain && r.domain.toLowerCase() === domain!.toLowerCase());
+    }
+    return runs.slice(0, limit);
   }
 
   // ─── 2. AGENT EVENTS ────────────────────────────────────────────────────────
 
-  public async saveEvent(event: any): Promise<void> {
+  public async saveEvent(tenantOrEvent: string | any, eventData?: any): Promise<void> {
+    let tenantId: string | undefined;
+    let event: any;
+
+    if (typeof tenantOrEvent === "string") {
+      tenantId = tenantOrEvent;
+      event = eventData;
+    } else {
+      event = tenantOrEvent;
+    }
+
+    const validTenant = resolveTrustedTenant(tenantId, event);
     const evtId = event.eventId || event.id || `evt_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
     const record: AgentEventRecord = {
       ...event,
       id: event.id || evtId,
       eventId: evtId,
     };
-    this.events.set(evtId, record);
-    this.persistLocal("events", evtId, record);
 
-    try {
-      const pool = getPool();
-      const query = `
-        INSERT INTO public.agent_events (
-          event_id, run_id, parent_event_id, agent_id, event_type, timestamp, duration_ms, payload, metadata
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-        ON CONFLICT (event_id) DO NOTHING
-      `;
-      await pool.query(query, [
-        event.eventId,
-        event.runId,
-        event.parentEventId ?? null,
-        event.agentId,
-        event.eventType,
-        event.timestamp,
-        event.durationMs ?? null,
-        JSON.stringify(event.payload ?? {}),
-        JSON.stringify(event.metadata ?? {}),
-      ]);
-    } catch {
-      // Safe fallback
-    }
+    await this.saveRecord(validTenant, "event", evtId, record);
   }
 
-  public async getEventsByRunId(runId: string): Promise<AgentEventRecord[]> {
-    return Array.from(this.events.values()).filter((e) => e.runId === runId);
+  public async getEventsByRunId(tenantOrRunId: string, optionalRunId?: string): Promise<AgentEventRecord[]> {
+    const tenantId = optionalRunId ? tenantOrRunId : null;
+    const runId = optionalRunId || tenantOrRunId;
+    const validTenant = resolveTrustedTenant(tenantId);
+
+    const records = await this.listRecords<AgentEventRecord>(validTenant, "event", 100);
+    return records.map((r) => r.payload).filter((e) => e.runId === runId);
   }
 
-  public async listEvents(runId?: string): Promise<AgentEventRecord[]> {
-    let list = Array.from(this.events.values());
-    if (runId) {
-      list = list.filter((e) => e.runId === runId);
+  public async listEvents(tenantOrRunId?: string, runId?: string): Promise<AgentEventRecord[]> {
+    let tenantId: string | null = null;
+    let targetRunId: string | undefined = undefined;
+
+    if (tenantOrRunId && runId) {
+      tenantId = tenantOrRunId;
+      targetRunId = runId;
+    } else if (tenantOrRunId) {
+      if (tenantOrRunId.startsWith("usr_") || tenantOrRunId.startsWith("tenant_") || tenantOrRunId.length === 36) {
+        tenantId = tenantOrRunId;
+      } else {
+        targetRunId = tenantOrRunId;
+      }
     }
-    return list;
+
+    const validTenant = resolveTrustedTenant(tenantId);
+    const records = await this.listRecords<AgentEventRecord>(validTenant, "event", 100);
+    let events = records.map((r) => r.payload);
+    if (targetRunId) events = events.filter((e) => e.runId === targetRunId);
+    return events;
   }
 
   // ─── 3. AGENT DECISIONS ─────────────────────────────────────────────────────
 
-  public async saveDecision(decision: any): Promise<void> {
+  public async saveDecision(tenantOrDecision: string | any, decisionData?: any): Promise<void> {
+    let tenantId: string;
+    let decision: any;
+
+    if (typeof tenantOrDecision === "string") {
+      tenantId = tenantOrDecision;
+      decision = decisionData;
+    } else {
+      decision = tenantOrDecision;
+      tenantId = resolveTrustedTenant(undefined, decision);
+    }
+
     const decId = decision.decisionId || decision.id || `dec_${Date.now()}`;
     const record: AgentDecisionRecord = {
       ...decision,
       id: decision.id || decId,
       decisionId: decId,
     };
-    this.decisions.set(decId, record);
-    this.persistLocal("decisions", decId, record);
+
+    await this.saveRecord(tenantId, "decision", decId, record);
 
     try {
       const pool = getPool();
@@ -286,74 +548,126 @@ export class MemoryStore {
     }
   }
 
-  public async getDecision(idOrRunId: string): Promise<AgentDecisionRecord | undefined> {
-    const direct = this.decisions.get(idOrRunId);
-    if (direct) return direct;
-    return Array.from(this.decisions.values()).find((d) => d.runId === idOrRunId);
+  public async getDecision(tenantOrId: string, idOrRunId?: string): Promise<AgentDecisionRecord | undefined> {
+    const tenantId = idOrRunId ? tenantOrId : null;
+    const lookupId = idOrRunId || tenantOrId;
+    const validTenant = resolveTrustedTenant(tenantId);
+
+    const rec = await this.getRecord<AgentDecisionRecord>(validTenant, "decision", lookupId);
+    if (rec?.payload) return rec.payload;
+
+    const list = await this.listRecords<AgentDecisionRecord>(validTenant, "decision", 100);
+    const found = list.map((r) => r.payload).find((d) => d.runId === lookupId);
+    if (found) return found;
+
+    if (!idOrRunId) {
+      return this.findTestRecordPayload<AgentDecisionRecord>("decision", lookupId);
+    }
+    return undefined;
   }
 
-  public async getDecisionsByRunId(runId: string): Promise<AgentDecisionRecord[]> {
-    return Array.from(this.decisions.values()).filter((d) => d.runId === runId);
+  public async getDecisionsByRunId(tenantOrRunId: string, runId?: string): Promise<AgentDecisionRecord[]> {
+    const tenantId = runId ? tenantOrRunId : null;
+    const targetRunId = runId || tenantOrRunId;
+    const validTenant = resolveTrustedTenant(tenantId);
+
+    const list = await this.listRecords<AgentDecisionRecord>(validTenant, "decision", 100);
+    return list.map((r) => r.payload).filter((d) => d.runId === targetRunId);
   }
 
-  public async getDecisions(options?: { limit?: number }): Promise<AgentDecisionRecord[]> {
-    const limit = options?.limit ?? 50;
-    return Array.from(this.decisions.values()).slice(-limit).reverse();
+  public async getDecisions(tenantOrOptions?: string | { limit?: number }, options?: { limit?: number }): Promise<AgentDecisionRecord[]> {
+    let tenantId: string | null = null;
+    let limit = 50;
+
+    if (typeof tenantOrOptions === "string") {
+      tenantId = tenantOrOptions;
+      if (options?.limit) limit = options.limit;
+    } else if (tenantOrOptions?.limit) {
+      limit = tenantOrOptions.limit;
+    }
+
+    const validTenant = resolveTrustedTenant(tenantId);
+    const list = await this.listRecords<AgentDecisionRecord>(validTenant, "decision", limit);
+    return list.map((r) => r.payload);
   }
 
-  public async listDecisions(limit = 50): Promise<AgentDecisionRecord[]> {
-    return Array.from(this.decisions.values()).slice(-limit).reverse();
+  public async listDecisions(tenantOrLimit?: string | number, limit = 50): Promise<AgentDecisionRecord[]> {
+    let tenantId: string | null = null;
+    let max = limit;
+
+    if (typeof tenantOrLimit === "string") {
+      tenantId = tenantOrLimit;
+    } else if (typeof tenantOrLimit === "number") {
+      max = tenantOrLimit;
+    }
+
+    const validTenant = resolveTrustedTenant(tenantId);
+    const list = await this.listRecords<AgentDecisionRecord>(validTenant, "decision", max);
+    return list.map((r) => r.payload);
   }
 
   // ─── 4. AGENT FEEDBACK ──────────────────────────────────────────────────────
 
-  public async saveFeedback(feedback: AgentFeedbackRecord): Promise<void> {
-    this.feedback.set(feedback.feedbackId, feedback);
-    this.persistLocal("feedback", feedback.feedbackId, feedback);
+  public async saveFeedback(tenantOrFeedback: string | AgentFeedbackRecord, feedbackData?: AgentFeedbackRecord): Promise<void> {
+    let tenantId: string | undefined;
+    let feedback: AgentFeedbackRecord;
 
-    try {
-      const pool = getPool();
-      const query = `
-        INSERT INTO public.agent_feedback (
-          feedback_id, run_id, project_id, user_id, feedback_type, source, sentiment, rating, correction_text, metadata
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-        ON CONFLICT (feedback_id) DO UPDATE SET
-          feedback_type = EXCLUDED.feedback_type,
-          sentiment = EXCLUDED.sentiment,
-          correction_text = EXCLUDED.correction_text
-      `;
-      await pool.query(query, [
-        feedback.feedbackId,
-        feedback.runId,
-        feedback.projectId ?? null,
-        feedback.userId ?? null,
-        feedback.feedbackType,
-        feedback.source,
-        feedback.sentiment ?? null,
-        feedback.rating ?? null,
-        feedback.correctionText ?? null,
-        JSON.stringify(feedback.metadata ?? {}),
-      ]);
-    } catch {
-      // Safe fallback
+    if (typeof tenantOrFeedback === "string") {
+      tenantId = tenantOrFeedback;
+      feedback = feedbackData!;
+    } else {
+      feedback = tenantOrFeedback;
     }
+
+    const validTenant = resolveTrustedTenant(tenantId, feedback);
+    await this.saveRecord(validTenant, "feedback", feedback.feedbackId, feedback);
   }
 
-  public async getFeedbackByRunId(runId: string): Promise<AgentFeedbackRecord[]> {
-    return Array.from(this.feedback.values()).filter((f) => f.runId === runId);
+  public async getFeedbackByRunId(tenantOrRunId: string, runId?: string): Promise<AgentFeedbackRecord[]> {
+    const tenantId = runId ? tenantOrRunId : null;
+    const targetRunId = runId || tenantOrRunId;
+    const validTenant = resolveTrustedTenant(tenantId);
+
+    const list = await this.listRecords<AgentFeedbackRecord>(validTenant, "feedback", 100);
+    return list.map((r) => r.payload).filter((f) => f.runId === targetRunId);
   }
 
-  public async listFeedback(runId?: string): Promise<AgentFeedbackRecord[]> {
-    let list = Array.from(this.feedback.values());
-    if (runId) {
-      list = list.filter((f) => f.runId === runId);
+  public async listFeedback(tenantOrRunId?: string, runId?: string): Promise<AgentFeedbackRecord[]> {
+    let tenantId: string | null = null;
+    let targetRunId: string | undefined = undefined;
+
+    if (tenantOrRunId && runId) {
+      tenantId = tenantOrRunId;
+      targetRunId = runId;
+    } else if (tenantOrRunId) {
+      if (tenantOrRunId.startsWith("usr_") || tenantOrRunId.startsWith("tenant_") || tenantOrRunId.length === 36) {
+        tenantId = tenantOrRunId;
+      } else {
+        targetRunId = tenantOrRunId;
+      }
     }
-    return list;
+
+    const validTenant = resolveTrustedTenant(tenantId);
+    const list = await this.listRecords<AgentFeedbackRecord>(validTenant, "feedback", 100);
+    let feedback = list.map((r) => r.payload);
+    if (targetRunId) feedback = feedback.filter((f) => f.runId === targetRunId);
+    return feedback;
   }
 
   // ─── 5. AGENT FAILURES ──────────────────────────────────────────────────────
 
-  public async saveFailure(failure: any): Promise<AgentFailureRecord> {
+  public async saveFailure(tenantOrFailure: string | any, failureData?: any): Promise<AgentFailureRecord> {
+    let tenantId: string | undefined;
+    let failure: any;
+
+    if (typeof tenantOrFailure === "string") {
+      tenantId = tenantOrFailure;
+      failure = failureData;
+    } else {
+      failure = tenantOrFailure;
+    }
+
+    const validTenant = resolveTrustedTenant(tenantId, failure);
     const rawError = failure.errorMessage || failure.safeErrorMessage || "";
     const safeError = failure.safeErrorMessage || failure.errorMessage || "Unknown error";
     const sanitizedFailure: AgentFailureRecord = {
@@ -374,314 +688,339 @@ export class MemoryStore {
       createdAt: failure.createdAt || new Date().toISOString(),
     } as any;
 
-    this.failures.set(sanitizedFailure.failureId, sanitizedFailure);
-    this.persistLocal("failures", sanitizedFailure.failureId, sanitizedFailure);
-
-    try {
-      const pool = getPool();
-      const query = `
-        INSERT INTO public.agent_failures (
-          failure_id, run_id, agent_id, failure_type, error_code, safe_error_message,
-          attempted_action, retry_count, recovery_action, recovered, domain, metadata
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-        ON CONFLICT (failure_id) DO UPDATE SET
-          recovered = EXCLUDED.recovered,
-          retry_count = EXCLUDED.retry_count,
-          recovery_action = EXCLUDED.recovery_action
-      `;
-      await pool.query(query, [
-        sanitizedFailure.failureId,
-        sanitizedFailure.runId,
-        sanitizedFailure.agentId,
-        sanitizedFailure.failureType,
-        sanitizedFailure.errorCode,
-        sanitizedFailure.safeErrorMessage,
-        sanitizedFailure.attemptedAction,
-        sanitizedFailure.retryCount,
-        sanitizedFailure.recoveryAction ?? null,
-        sanitizedFailure.recovered,
-        sanitizedFailure.domain,
-        JSON.stringify(sanitizedFailure.metadata ?? {}),
-      ]);
-    } catch {
-      // Safe fallback
-    }
+    await this.saveRecord(validTenant, "failure", sanitizedFailure.failureId, sanitizedFailure);
     return sanitizedFailure;
   }
 
-  public async listFailures(limit = 20, domain?: string): Promise<AgentFailureRecord[]> {
-    let list = Array.from(this.failures.values());
-    if (domain) {
-      list = list.filter((f) => f.domain && f.domain.toLowerCase() === domain.toLowerCase());
+  public async listFailures(tenantOrLimit?: string | number, limitOrDomain?: number | string, domainFilter?: string): Promise<AgentFailureRecord[]> {
+    let tenantId: string | null = null;
+    let limit = 20;
+    let domain: string | undefined = undefined;
+
+    if (typeof tenantOrLimit === "string") {
+      tenantId = tenantOrLimit;
+      if (typeof limitOrDomain === "number") limit = limitOrDomain;
+      if (typeof domainFilter === "string") domain = domainFilter;
+      else if (typeof limitOrDomain === "string") domain = limitOrDomain;
+    } else {
+      if (typeof tenantOrLimit === "number") limit = tenantOrLimit;
+      if (typeof limitOrDomain === "string") domain = limitOrDomain;
     }
-    return list.slice(-limit).reverse();
+
+    const validTenant = resolveTrustedTenant(tenantId);
+    const records = await this.listRecords<AgentFailureRecord>(validTenant, "failure", limit * 2);
+    let failures = records.map((r) => r.payload);
+    if (domain) {
+      failures = failures.filter((f) => f.domain && f.domain.toLowerCase() === domain!.toLowerCase());
+    }
+    return failures.slice(0, limit);
   }
 
   // ─── 6. AGENT EVALUATIONS ───────────────────────────────────────────────────
 
-  public async saveEvaluation(evaluation: AgentEvaluationRecord): Promise<void> {
-    this.evaluations.set(evaluation.evaluationId, evaluation);
-    this.persistLocal("evaluations", evaluation.evaluationId, evaluation);
+  public async saveEvaluation(tenantOrEval: string | AgentEvaluationRecord, evalData?: AgentEvaluationRecord): Promise<void> {
+    let tenantId: string | undefined;
+    let evaluation: AgentEvaluationRecord;
 
-    try {
-      const pool = getPool();
-      const query = `
-        INSERT INTO public.agent_evaluations (
-          evaluation_id, run_id, domain, correctness_score, safety_score, validation_score,
-          efficiency_score, overall_score, passed, evaluator, dimension_scores, observations, metadata
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-        ON CONFLICT (evaluation_id) DO UPDATE SET
-          overall_score = EXCLUDED.overall_score,
-          passed = EXCLUDED.passed
-      `;
-      await pool.query(query, [
-        evaluation.evaluationId,
-        evaluation.runId,
-        evaluation.domain,
-        evaluation.correctnessScore,
-        evaluation.safetyScore,
-        evaluation.validationScore,
-        evaluation.efficiencyScore,
-        evaluation.overallScore,
-        evaluation.passed,
-        evaluation.evaluator,
-        JSON.stringify(evaluation.dimensionScores ?? {}),
-        JSON.stringify(evaluation.observations ?? []),
-        JSON.stringify(evaluation.metadata ?? {}),
-      ]);
-    } catch {
-      // Safe fallback
+    if (typeof tenantOrEval === "string") {
+      tenantId = tenantOrEval;
+      evaluation = evalData!;
+    } else {
+      evaluation = tenantOrEval;
     }
+
+    const validTenant = resolveTrustedTenant(tenantId, evaluation);
+    await this.saveRecord(validTenant, "evaluation", evaluation.evaluationId, evaluation);
   }
 
-  public async getEvaluation(idOrRunId: string): Promise<AgentEvaluationRecord | undefined> {
-    const direct = this.evaluations.get(idOrRunId);
-    if (direct) return direct;
-    return Array.from(this.evaluations.values()).find((e) => e.runId === idOrRunId);
+  public async getEvaluation(tenantOrId: string, idOrRunId?: string): Promise<AgentEvaluationRecord | undefined> {
+    const tenantId = idOrRunId ? tenantOrId : null;
+    const targetId = idOrRunId || tenantOrId;
+    const validTenant = resolveTrustedTenant(tenantId);
+
+    const rec = await this.getRecord<AgentEvaluationRecord>(validTenant, "evaluation", targetId);
+    if (rec?.payload) return rec.payload;
+
+    const list = await this.listRecords<AgentEvaluationRecord>(validTenant, "evaluation", 100);
+    const found = list.map((r) => r.payload).find((e) => e.runId === targetId);
+    if (found) return found;
+
+    if (!idOrRunId) {
+      return this.findTestRecordPayload<AgentEvaluationRecord>("evaluation", targetId);
+    }
+    return undefined;
   }
 
-  public async getEvaluationByRunId(runId: string): Promise<AgentEvaluationRecord | undefined> {
-    return Array.from(this.evaluations.values()).find((e) => e.runId === runId);
+  public async getEvaluationByRunId(tenantOrRunId: string, runId?: string): Promise<AgentEvaluationRecord | undefined> {
+    return this.getEvaluation(tenantOrRunId, runId);
   }
 
   // ─── 7. AGENT LESSONS ───────────────────────────────────────────────────────
 
-  public async saveLesson(lesson: AgentLessonRecord): Promise<void> {
-    this.lessons.set(lesson.lessonId, lesson);
-    this.persistLocal("lessons", lesson.lessonId, lesson);
+  public async saveLesson(tenantOrLesson: string | AgentLessonRecord, lessonData?: AgentLessonRecord, expectedRevision?: number): Promise<void> {
+    let tenantId: string | undefined;
+    let lesson: AgentLessonRecord;
 
-    try {
-      const pool = getPool();
-      const query = `
-        INSERT INTO public.agent_lessons (
-          lesson_id, title, statement, domain, status, confidence, source_run_ids,
-          evidence, supporting_outcomes, contradicting_outcomes, validation_count,
-          strategy_version, promoted_at, metadata, updated_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, now())
-        ON CONFLICT (lesson_id) DO UPDATE SET
-          status = EXCLUDED.status,
-          confidence = EXCLUDED.confidence,
-          evidence = EXCLUDED.evidence,
-          supporting_outcomes = EXCLUDED.supporting_outcomes,
-          contradicting_outcomes = EXCLUDED.contradicting_outcomes,
-          validation_count = EXCLUDED.validation_count,
-          promoted_at = EXCLUDED.promoted_at,
-          updated_at = now()
-      `;
-      await pool.query(query, [
-        lesson.lessonId,
-        lesson.title,
-        lesson.statement,
-        lesson.domain,
-        lesson.status,
-        lesson.confidence,
-        JSON.stringify(lesson.sourceRunIds ?? []),
-        JSON.stringify(lesson.evidence ?? []),
-        lesson.supportingOutcomes,
-        lesson.contradictingOutcomes,
-        lesson.validationCount,
-        lesson.strategyVersion ?? null,
-        lesson.promotedAt ?? null,
-        JSON.stringify(lesson.metadata ?? {}),
-      ]);
-    } catch {
-      // Safe fallback
+    if (typeof tenantOrLesson === "string") {
+      tenantId = tenantOrLesson;
+      lesson = lessonData!;
+    } else {
+      lesson = tenantOrLesson;
     }
+
+    const validTenant = resolveTrustedTenant(tenantId, lesson);
+    await this.saveRecord(validTenant, "lesson", lesson.lessonId, lesson, expectedRevision);
   }
 
-  public async getLesson(lessonId: string): Promise<AgentLessonRecord | undefined> {
-    return this.lessons.get(lessonId);
+  public async getLesson(tenantOrId: string, lessonId?: string): Promise<AgentLessonRecord | undefined> {
+    const tenantId = lessonId ? tenantOrId : null;
+    const targetId = lessonId || tenantOrId;
+    const validTenant = resolveTrustedTenant(tenantId);
+
+    const rec = await this.getRecord<AgentLessonRecord>(validTenant, "lesson", targetId);
+    if (rec?.payload) return rec.payload;
+
+    if (!lessonId) {
+      return this.findTestRecordPayload<AgentLessonRecord>("lesson", targetId);
+    }
+    return undefined;
   }
 
-  public async listLessons(domain?: string, status?: string): Promise<AgentLessonRecord[]> {
-    let list = Array.from(this.lessons.values());
+  public async listLessons(tenantOrDomain?: string, domainOrStatus?: string, statusFilter?: string): Promise<AgentLessonRecord[]> {
+    let tenantId: string | null = null;
+    let domain: string | undefined = undefined;
+    let status: string | undefined = undefined;
+
+    if (tenantOrDomain && domainOrStatus && statusFilter) {
+      tenantId = tenantOrDomain;
+      domain = domainOrStatus;
+      status = statusFilter;
+    } else if (tenantOrDomain && domainOrStatus) {
+      tenantId = tenantOrDomain;
+      domain = domainOrStatus;
+    } else if (tenantOrDomain) {
+      if (tenantOrDomain.startsWith("usr_") || tenantOrDomain.startsWith("tenant_") || tenantOrDomain.length === 36) {
+        tenantId = tenantOrDomain;
+      } else {
+        domain = tenantOrDomain;
+      }
+    }
+
+    const validTenant = resolveTrustedTenant(tenantId);
+    const records = await this.listRecords<AgentLessonRecord>(validTenant, "lesson", 100);
+    let lessons = records.map((r) => r.payload);
     if (domain) {
-      list = list.filter((l) => l.domain && l.domain.toLowerCase() === domain.toLowerCase());
+      lessons = lessons.filter((l) => l.domain && l.domain.toLowerCase() === domain!.toLowerCase());
     }
     if (status) {
-      list = list.filter((l) => l.status === status);
+      lessons = lessons.filter((l) => l.status === status);
     }
-    return list;
+    return lessons;
   }
 
   // ─── 8. AGENT STRATEGIES ────────────────────────────────────────────────────
 
-  public async saveStrategy(strategy: AgentStrategyRecord): Promise<void> {
-    this.strategies.set(strategy.strategyId, strategy);
-    this.persistLocal("strategies", strategy.strategyId, strategy);
+  public async saveStrategy(tenantOrStrategy: string | AgentStrategyRecord, strategyData?: AgentStrategyRecord, expectedRevision?: number): Promise<void> {
+    let tenantId: string | undefined;
+    let strategy: AgentStrategyRecord;
 
-    try {
-      const pool = getPool();
-      const query = `
-        INSERT INTO public.agent_strategies (
-          strategy_id, name, domain, version, status, description, directives,
-          avoid_patterns, benchmark_results, confidence, promoted_from_lesson_id,
-          supersedes_version, metadata, activated_at, deprecated_at, updated_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, now())
-        ON CONFLICT (strategy_id) DO UPDATE SET
-          status = EXCLUDED.status,
-          description = EXCLUDED.description,
-          directives = EXCLUDED.directives,
-          avoid_patterns = EXCLUDED.avoid_patterns,
-          confidence = EXCLUDED.confidence,
-          activated_at = EXCLUDED.activated_at,
-          deprecated_at = EXCLUDED.deprecated_at,
-          updated_at = now()
-      `;
-      await pool.query(query, [
-        strategy.strategyId,
-        strategy.name,
-        strategy.domain,
-        strategy.version,
-        strategy.status,
-        strategy.description,
-        JSON.stringify(strategy.directives ?? []),
-        JSON.stringify(strategy.avoidPatterns ?? []),
-        JSON.stringify(strategy.benchmarkResults ?? {}),
-        strategy.confidence,
-        strategy.promotedFromLessonId ?? null,
-        strategy.supersedesVersion ?? null,
-        JSON.stringify(strategy.metadata ?? {}),
-        strategy.activatedAt ?? null,
-        strategy.deprecatedAt ?? null,
-      ]);
-    } catch {
-      // Safe fallback
+    if (typeof tenantOrStrategy === "string") {
+      tenantId = tenantOrStrategy;
+      strategy = strategyData!;
+    } else {
+      strategy = tenantOrStrategy;
     }
+
+    const validTenant = resolveTrustedTenant(tenantId, strategy);
+    strategy.tenantId = validTenant;
+    await this.saveRecord(validTenant, "strategy", strategy.strategyId, strategy, expectedRevision);
   }
 
-  public async getStrategy(strategyId: string): Promise<AgentStrategyRecord | undefined> {
-    return this.strategies.get(strategyId);
+  public async getStrategy(tenantOrId: string, strategyId?: string): Promise<AgentStrategyRecord | undefined> {
+    const tenantId = strategyId ? tenantOrId : null;
+    const targetId = strategyId || tenantOrId;
+    const validTenant = resolveTrustedTenant(tenantId);
+
+    const rec = await this.getRecord<AgentStrategyRecord>(validTenant, "strategy", targetId);
+    if (rec?.payload) return rec.payload;
+
+    if (!strategyId) {
+      return this.findTestRecordPayload<AgentStrategyRecord>("strategy", targetId);
+    }
+    return undefined;
   }
 
-  public async getActiveStrategyForDomain(domain: string): Promise<AgentStrategyRecord | undefined> {
-    const list = Array.from(this.strategies.values()).filter(
-      (s) => s.domain && s.domain.toLowerCase() === domain.toLowerCase() && s.status === "ACTIVE"
-    );
-    return list[0];
+  public async getActiveStrategyForDomain(arg1: string, arg2?: string | null): Promise<AgentStrategyRecord | undefined> {
+    let tenantId: string | null = null;
+    let domain: string = "general";
+
+    if (arg2 !== undefined && arg2 !== null) {
+      if (arg1.startsWith("usr_") || arg1.startsWith("tenant_") || arg1.includes("tenant") || arg1.length === 36) {
+        tenantId = arg1;
+        domain = arg2;
+      } else if (arg2.startsWith("usr_") || arg2.startsWith("tenant_") || arg2.includes("tenant") || arg2.length === 36) {
+        tenantId = arg2;
+        domain = arg1;
+      } else {
+        tenantId = arg1;
+        domain = arg2;
+      }
+    } else {
+      domain = arg1;
+    }
+
+    const validTenant = resolveTrustedTenant(tenantId);
+    const strategies = await this.listStrategies(validTenant, domain);
+    return strategies.find((s) => s.status === "ACTIVE");
   }
 
-  public async listStrategies(domain?: string): Promise<AgentStrategyRecord[]> {
-    let list = Array.from(this.strategies.values());
+  public async listStrategies(arg1?: string, arg2?: string | null): Promise<AgentStrategyRecord[]> {
+    let tenantId: string | null = null;
+    let domain: string | undefined = undefined;
+
+    if (arg1 && arg2 !== undefined && arg2 !== null) {
+      if (arg1.startsWith("usr_") || arg1.startsWith("tenant_") || arg1.includes("tenant") || arg1.length === 36) {
+        tenantId = arg1;
+        domain = arg2 || undefined;
+      } else if (arg2.startsWith("usr_") || arg2.startsWith("tenant_") || arg2.includes("tenant") || arg2.length === 36) {
+        tenantId = arg2;
+        domain = arg1 || undefined;
+      } else {
+        tenantId = arg1;
+        domain = arg2 || undefined;
+      }
+    } else if (arg1) {
+      if (arg1.startsWith("usr_") || arg1.startsWith("tenant_") || arg1.includes("tenant") || arg1.length === 36) {
+        tenantId = arg1;
+      } else {
+        domain = arg1;
+      }
+    }
+
+    const validTenant = resolveTrustedTenant(tenantId);
+    const records = await this.listRecords<AgentStrategyRecord>(validTenant, "strategy", 100);
+    let strategies = records.map((r) => r.payload);
     if (domain) {
-      list = list.filter((s) => s.domain && s.domain.toLowerCase() === domain.toLowerCase());
+      strategies = strategies.filter((s) => s.domain && s.domain.toLowerCase() === domain!.toLowerCase());
     }
-    return list;
+    return strategies;
   }
 
   // ─── 9. AGENT EXPERIMENTS ───────────────────────────────────────────────────
 
-  public async saveExperiment(exp: AgentExperimentRecord): Promise<void> {
-    this.experiments.set(exp.experimentId, exp);
-    this.persistLocal("experiments", exp.experimentId, exp);
+  public async saveExperiment(tenantOrExp: string | AgentExperimentRecord, expData?: AgentExperimentRecord, expectedRevision?: number): Promise<void> {
+    let tenantId: string | undefined;
+    let exp: AgentExperimentRecord;
 
-    try {
-      const pool = getPool();
-      const query = `
-        INSERT INTO public.agent_experiments (
-          experiment_id, hypothesis, domain, strategy_a, strategy_b, sample_size,
-          metrics, status, result, confidence, completed_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-        ON CONFLICT (experiment_id) DO UPDATE SET
-          status = EXCLUDED.status,
-          result = EXCLUDED.result,
-          confidence = EXCLUDED.confidence,
-          completed_at = EXCLUDED.completed_at
-      `;
-      await pool.query(query, [
-        exp.experimentId,
-        exp.hypothesis,
-        exp.domain,
-        exp.strategyA,
-        exp.strategyB,
-        exp.sampleSize,
-        JSON.stringify(exp.metrics ?? {}),
-        exp.status,
-        JSON.stringify(exp.result ?? {}),
-        exp.confidence ?? 0.5,
-        exp.completedAt ?? null,
-      ]);
-    } catch {
-      // Safe fallback
+    if (typeof tenantOrExp === "string") {
+      tenantId = tenantOrExp;
+      exp = expData!;
+    } else {
+      exp = tenantOrExp;
     }
+
+    const validTenant = resolveTrustedTenant(tenantId, exp);
+    await this.saveRecord(validTenant, "experiment", exp.experimentId, exp, expectedRevision);
   }
 
-  public async getExperiment(experimentId: string): Promise<AgentExperimentRecord | undefined> {
-    return this.experiments.get(experimentId);
+  public async getExperiment(tenantOrId: string, experimentId?: string): Promise<AgentExperimentRecord | undefined> {
+    const tenantId = experimentId ? tenantOrId : null;
+    const targetId = experimentId || tenantOrId;
+    const validTenant = resolveTrustedTenant(tenantId);
+
+    const rec = await this.getRecord<AgentExperimentRecord>(validTenant, "experiment", targetId);
+    if (rec?.payload) return rec.payload;
+
+    if (!experimentId) {
+      return this.findTestRecordPayload<AgentExperimentRecord>("experiment", targetId);
+    }
+    return undefined;
   }
 
-  public async listExperiments(domain?: string): Promise<AgentExperimentRecord[]> {
-    let list = Array.from(this.experiments.values());
+  public async listExperiments(tenantOrDomain?: string, domainFilter?: string): Promise<AgentExperimentRecord[]> {
+    let tenantId: string | null = null;
+    let domain: string | undefined = undefined;
+
+    if (tenantOrDomain && domainFilter) {
+      tenantId = tenantOrDomain;
+      domain = domainFilter;
+    } else if (tenantOrDomain) {
+      if (tenantOrDomain.startsWith("usr_") || tenantOrDomain.startsWith("tenant_") || tenantOrDomain.length === 36) {
+        tenantId = tenantOrDomain;
+      } else {
+        domain = tenantOrDomain;
+      }
+    }
+
+    const validTenant = resolveTrustedTenant(tenantId);
+    const records = await this.listRecords<AgentExperimentRecord>(validTenant, "experiment", 50);
+    let exps = records.map((r) => r.payload);
     if (domain) {
-      list = list.filter((e) => e.domain && e.domain.toLowerCase() === domain.toLowerCase());
+      exps = exps.filter((e) => e.domain && e.domain.toLowerCase() === domain!.toLowerCase());
     }
-    return list;
+    return exps;
   }
 
-  // ─── 10. BUSINESS MEMORY (Scoped & Isolated) ───────────────────────────────
+  // ─── 10. BUSINESS MEMORY (Strictly Isolated) ───────────────────────────────
 
-  public async saveBusinessMemory(memory: any): Promise<void> {
-    const key = memory.id || memory.projectId;
-    this.businessMemories.set(key, memory);
-    this.persistLocal("business", key, memory);
+  public async saveBusinessMemory(tenantOrMemory: string | any, memoryData?: any): Promise<void> {
+    let tenantId: string | undefined;
+    let memory: any;
+
+    if (typeof tenantOrMemory === "string") {
+      tenantId = tenantOrMemory;
+      memory = memoryData;
+    } else {
+      memory = tenantOrMemory;
+    }
+
+    const validTenant = resolveTrustedTenant(tenantId, memory);
+    const key = memory.projectId || memory.id;
+    await this.saveRecord(validTenant, "business", key, memory);
   }
 
-  public async getBusinessMemory(projectId: string, userId?: string | null): Promise<any | undefined> {
-    const item = Array.from(this.businessMemories.values()).find((m) => m.projectId === projectId);
-    if (!item) return undefined;
+  public async getBusinessMemory(tenantOrProject: string, userOrProject?: string | null): Promise<any | undefined> {
+    let tenantId: string | null = null;
+    let projectId: string;
 
-    // Strict Tenant Isolation: User A must never read User B's business memory
-    if (userId && (item.userId || (item as any).tenantId) && (item.userId !== userId && (item as any).tenantId !== userId)) {
-      return undefined;
+    if (userOrProject) {
+      if (tenantOrProject.startsWith("usr_") || tenantOrProject.startsWith("tenant_") || tenantOrProject.length === 36) {
+        tenantId = tenantOrProject;
+        projectId = userOrProject;
+      } else {
+        projectId = tenantOrProject;
+        tenantId = userOrProject;
+      }
+    } else {
+      projectId = tenantOrProject;
     }
-    return item;
+
+    const validTenant = resolveTrustedTenant(tenantId);
+    const rec = await this.getRecord(validTenant, "business", projectId);
+    return rec?.payload;
   }
 
   public async listBusinessMemories(tenantOrUserId?: string | null, projectId?: string): Promise<any[]> {
-    let list = Array.from(this.businessMemories.values());
-    if (tenantOrUserId) {
-      list = list.filter((m) => {
-        const owner = (m as any).tenantId || m.userId;
-        return owner === tenantOrUserId;
-      });
-    }
+    const validTenant = resolveTrustedTenant(tenantOrUserId);
+    const records = await this.listRecords(validTenant, "business", 50);
+    let memories = records.map((r) => r.payload);
     if (projectId) {
-      list = list.filter((m) => m.projectId === projectId);
+      memories = memories.filter((m: any) => m.projectId === projectId);
     }
-    return list;
+    return memories;
   }
 
-  public clear(): void {
-    this.runs.clear();
-    this.events.clear();
-    this.decisions.clear();
-    this.feedback.clear();
-    this.failures.clear();
-    this.evaluations.clear();
-    this.lessons.clear();
-    this.strategies.clear();
-    this.experiments.clear();
-    this.businessMemories.clear();
-    this.seedDefaultStrategies();
+  public clear(tenantId?: string): void {
+    if (tenantId) {
+      const prefix = `${tenantId}:`;
+      for (const k of Array.from(this.tenantRecords.keys())) {
+        if (k.startsWith(prefix)) {
+          this.tenantRecords.delete(k);
+        }
+      }
+    } else {
+      this.tenantRecords.clear();
+      this.quarantinedRecords = [];
+    }
   }
 }

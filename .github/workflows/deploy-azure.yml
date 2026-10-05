@@ -85,7 +85,6 @@ jobs:
 
       - name: Ensure External n8n Ops Agent in Azure
         id: n8n-deploy
-        continue-on-error: true
         env:
           WEBSITEBANJA_AUTOMATION_SECRET: ${{ secrets.WEBSITEBANJA_AUTOMATION_SECRET }}
         run: |
@@ -112,13 +111,13 @@ jobs:
                 N8N_DIAGNOSTICS_ENABLED="false" \
                 N8N_BLOCK_ENV_ACCESS_IN_NODE="false" \
                 AUTOMATION_SECRET="secretref:automation-secret" \
-                WEBSITEBANJA_AUTOMATION_SECRET="secretref:automation-secret" || true
+                WEBSITEBANJA_AUTOMATION_SECRET="secretref:automation-secret"
           else
             echo "Syncing secret and env vars on existing n8n-app..."
             az containerapp secret set \
               --name n8n-app \
               --resource-group "$RESOURCE_GROUP" \
-              --secrets "automation-secret=${WEBSITEBANJA_AUTOMATION_SECRET}" || true
+              --secrets "automation-secret=${WEBSITEBANJA_AUTOMATION_SECRET}"
 
             az containerapp update \
               --name n8n-app \
@@ -126,7 +125,7 @@ jobs:
               --set-env-vars \
                 N8N_BLOCK_ENV_ACCESS_IN_NODE="false" \
                 AUTOMATION_SECRET="secretref:automation-secret" \
-                WEBSITEBANJA_AUTOMATION_SECRET="secretref:automation-secret" || true
+                WEBSITEBANJA_AUTOMATION_SECRET="secretref:automation-secret"
           fi
 
           N8N_FQDN=$(az containerapp show --name n8n-app --resource-group "$RESOURCE_GROUP" --query "properties.configuration.ingress.fqdn" -o tsv 2>/dev/null || echo "")
@@ -137,6 +136,29 @@ jobs:
             echo "Setting standard managed environment webhook for n8n-app..."
             echo "N8N_OPS_AGENT_WEBHOOK_URL=https://n8n-app.calmcoast-298a6aef.centralindia.azurecontainerapps.io/webhook/wb-ops-agent" >> "$GITHUB_ENV"
           fi
+
+      - name: Run Database Migrations (Pre-Deployment Gate)
+        id: db-migrations
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          AZURE_DB_HOST: ${{ secrets.AZURE_DB_HOST }}
+          AZURE_DB_USER: ${{ secrets.AZURE_DB_USER }}
+          AZURE_DB_PASSWORD: ${{ secrets.AZURE_DB_PASSWORD }}
+          AZURE_DB_NAME: ${{ secrets.AZURE_DB_NAME }}
+          AZURE_DB_PORT: ${{ secrets.AZURE_DB_PORT }}
+          NODE_ENV: "production"
+          WEBSITEBANJA_RUNTIME_MODE: "production"
+          DATABASE_SSL_REJECT_UNAUTHORIZED: "true"
+        run: |
+          echo "Executing authoritative database migration runner with advisory locking..."
+          if [ -z "$DATABASE_URL" ] && [ -z "$AZURE_DB_USER" ]; then
+            echo "Resolving DB credentials from Azure Container App environment..."
+            DB_HOST=$(az containerapp show --name "$CONTAINER_APP_NAME" --resource-group "$RESOURCE_GROUP" --query "properties.template.containers[0].env[?name=='AZURE_DB_HOST'].value" -o tsv 2>/dev/null || echo "")
+            DB_USER=$(az containerapp show --name "$CONTAINER_APP_NAME" --resource-group "$RESOURCE_GROUP" --query "properties.template.containers[0].env[?name=='AZURE_DB_USER'].value" -o tsv 2>/dev/null || echo "")
+            if [ -n "$DB_HOST" ]; then export AZURE_DB_HOST="$DB_HOST"; fi
+            if [ -n "$DB_USER" ]; then export AZURE_DB_USER="$DB_USER"; fi
+          fi
+          node scripts/run_migrations.mjs
 
       - name: Deploy Image & Configure Azure Environment
         id: deploy
