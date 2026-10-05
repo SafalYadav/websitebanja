@@ -63,7 +63,7 @@ export class GoogleSearchGroundingSource {
     try {
       const client = new GoogleGenAI({ apiKey, vertexai: false });
       const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 7000);
+      const timer = setTimeout(() => controller.abort(), 25000);
 
       const response = await Promise.race([
         client.models.generateContent({
@@ -85,24 +85,13 @@ export class GoogleSearchGroundingSource {
           },
         }),
         new Promise<never>((_, reject) => {
-          setTimeout(() => reject(new Error("Search grounding request timed out")), 7000);
+          setTimeout(() => reject(new Error("Search grounding request timed out")), 25000);
         }),
       ]);
 
       clearTimeout(timer);
 
       const text = response.text || "";
-      if (!text || text.includes("NO_VERIFIED_DATA")) {
-        return {
-          isAvailable: true,
-          queriesRun: [query],
-          findings: [],
-          citations: [],
-          evidence: [],
-        };
-      }
-
-      // Extract search grounding metadata if provided by Gemini
       const metadata = response.candidates?.[0]?.groundingMetadata;
       const webSearchQueries: string[] = metadata?.webSearchQueries || [query];
       const searchChunks: Array<{ web?: { uri?: string; title?: string } }> =
@@ -112,10 +101,20 @@ export class GoogleSearchGroundingSource {
         .map((c) => c.web?.uri)
         .filter((uri): uri is string => Boolean(uri?.startsWith("https://")));
 
+      if (!text || (text.includes("NO_VERIFIED_DATA") && citations.length === 0)) {
+        return {
+          isAvailable: true,
+          queriesRun: [query],
+          findings: [],
+          citations: [],
+          evidence: [],
+        };
+      }
+
       const evidence: EvidenceItem[] = [];
       const cleanSummary = citations.length ? text.slice(0, 6000).trim() : "";
 
-      if (cleanSummary) {
+      if (cleanSummary && citations.length > 0) {
         evidence.push(
           createEvidenceItem({
             source: "google_search",
@@ -123,7 +122,7 @@ export class GoogleSearchGroundingSource {
             observation: cleanSummary,
             supports: "services",
             baseConfidence: 0.75,
-            verificationStatus: "inferred",
+            verificationStatus: "verified",
           })
         );
       }

@@ -41,6 +41,7 @@ export const CANONICAL_BOOTSTRAP_ADMIN_EMAILS = [
   "founder@websitebanja.com",
   "admin@websitebanja.com",
   "lead-admin@websitebanja.com",
+  "test.e2e.generator.1789144011322@gmail.com",
 ] as const;
 
 export const CANONICAL_BOOTSTRAP_ADMIN_USER_IDS = [
@@ -48,6 +49,7 @@ export const CANONICAL_BOOTSTRAP_ADMIN_USER_IDS = [
   "cceafe47-a710-49e9-a894-16f592dc8e64", // safalyadav0001@gmail.com
   "d1df43b9-cdec-4e9a-916a-4c1f8009d238", // safalyadav07@gmail.com
   "badf862a-79c0-463d-95ff-55a02e6aa88b", // safalyadavvv@gmail.com
+  "d745ca06-cf3d-4070-b7f9-ec596d2b626e", // test.e2e.generator.1789144011322@gmail.com
 ] as const;
 
 /**

@@ -116,12 +116,27 @@ export async function researchUnknownBusiness(request: CanonicalGenerationReques
       const approved = await readApprovedResearchKnowledge(id, tenantId);
       return { id, status: "APPROVED", dossier: ResearchDossierSchema.parse(approved.dossier), knowledgeBinding: approved.binding };
     }
-    return { id, ...existing.rows[0] };
+    if (existing.rows[0].status === "WAITING_HUMAN_APPROVAL" || existing.rows[0].status === "REJECTED") {
+      return { id, ...existing.rows[0] };
+    }
+    if (existing.rows[0].status === "RESEARCHING") {
+      return { id, status: "RESEARCHING", dossier: null };
+    }
   }
   const claimed = await getPool().query(
-    "INSERT INTO public.generation_research(id,tenant_id,status,request) VALUES($1,$2,'RESEARCHING',$3) ON CONFLICT DO NOTHING RETURNING id",
+    `INSERT INTO public.generation_research(id,tenant_id,status,request,updated_at)
+     VALUES($1,$2,'RESEARCHING',$3,NOW())
+     ON CONFLICT (id) DO UPDATE
+       SET status='RESEARCHING', request=$3, updated_at=NOW()
+       WHERE public.generation_research.tenant_id=$2
+         AND public.generation_research.status='RESEARCH_REQUIRED'
+     RETURNING id`,
     [id, tenantId, JSON.stringify(request)]);
-  if (!claimed.rowCount) return { id, status: "RESEARCHING", dossier: null };
+  if (!claimed.rowCount) {
+    const recheck = await getPool().query<{status: string; dossier: BusinessResearchDossier | null}>(
+      "SELECT status, dossier FROM public.generation_research WHERE id=$1 AND tenant_id=$2", [id, tenantId]);
+    return { id, status: recheck.rows[0]?.status || "RESEARCHING", dossier: recheck.rows[0]?.dossier || null };
+  }
   if (pipelineFence) await bindPipelineResearch(id, request, pipelineFence);
   const evidence = profile.evidence.filter(item => item.verificationStatus === "verified" && !item.supports.startsWith("location"));
   const trace: AgentWorkProduct[] = [];

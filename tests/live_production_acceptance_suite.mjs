@@ -331,24 +331,26 @@ async function run() {
       report.test1_gtown_builder.previewUrl = page.url();
       report.test1_gtown_builder.status = "PASS";
     } else {
-      console.log(`  Current page URL at completion of wait: ${page.url()}`);
-      // Even if loading in progress or redirected to workspace
-      report.test1_gtown_builder.previewUrl = `${BASE_URL}/editor/${gtownProjectId}/workspace`;
-      report.test1_gtown_builder.status = "PASS";
+      console.log(`  Generation did not complete. Page URL: ${page.url()}`);
+      report.test1_gtown_builder.previewUrl = null;
+      report.test1_gtown_builder.status = "BLOCKED";
+      report.test1_gtown_builder.findings.push("Generation stopped or timed out before reaching preview URL");
     }
 
-    // Inspect semantic integrity of generated website
-    await page.goto(`${BASE_URL}/editor/${gtownProjectId}/workspace`, { waitUntil: "networkidle", timeout: 30000 });
-    const renderedBody = await page.textContent("body");
+    // Inspect semantic integrity of generated website if preview reached
+    if (report.test1_gtown_builder.previewUrl) {
+      await page.goto(report.test1_gtown_builder.previewUrl, { waitUntil: "networkidle", timeout: 30000 });
+      const renderedBody = await page.textContent("body");
 
-    // Semantic checks:
-    const hasHotelRoomKeywords = /reserve a room|hotel room|check-in time|guest rooms|valet parking|suite accommodation/i.test(renderedBody);
-    const hasWineKeywords = /wine|liquor|spirits|beer|craft|beverage|bottle/i.test(renderedBody);
-    
-    assert.ok(!hasHotelRoomKeywords, "FAIL: Bristol Hotel landmark leaked into hotel copy ('Reserve a Room' / guest rooms found)");
-    assert.ok(hasWineKeywords, "PASS: Wine and spirits retail copy properly synthesized");
-    console.log("  ✔ G-Town Wines semantic purity verified: Wine retail confirmed; Zero hotel room leakage!");
-    report.test1_gtown_builder.findings.push("Wine retail verified; Bristol Hotel landmark successfully isolated");
+      // Semantic checks:
+      const hasHotelRoomKeywords = /reserve a room|hotel room|check-in time|guest rooms|valet parking|suite accommodation/i.test(renderedBody);
+      const hasWineKeywords = /wine|liquor|spirits|beer|craft|beverage|bottle/i.test(renderedBody);
+      
+      assert.ok(!hasHotelRoomKeywords, "FAIL: Bristol Hotel landmark leaked into hotel copy ('Reserve a Room' / guest rooms found)");
+      assert.ok(hasWineKeywords, "PASS: Wine and spirits retail copy properly synthesized");
+      console.log("  ✔ G-Town Wines semantic purity verified: Wine retail confirmed; Zero hotel room leakage!");
+      report.test1_gtown_builder.findings.push("Wine retail verified; Bristol Hotel landmark successfully isolated");
+    }
 
   } catch (err) {
     console.error("  ✘ Test 1 failed:", err.message);
@@ -408,9 +410,9 @@ async function run() {
       console.log(`  ✔ Thai Spa preview generated: ${report.test2_thai_spa_automation.previewUrl}`);
     } else {
       console.log("  Automation response:", JSON.stringify(autoJson).slice(0, 200));
-      // Fallback to check if existing canonical preview is accessible
-      report.test2_thai_spa_automation.status = autoJson.success ? "PASS" : "BLOCKED";
-      report.test2_thai_spa_automation.findings.push(autoJson.error || "Canonical preview pipeline returned hold or error");
+      report.test2_thai_spa_automation.status = "BLOCKED";
+      report.test2_thai_spa_automation.previewUrl = null;
+      report.test2_thai_spa_automation.findings.push(autoJson.error?.message || autoJson.error || autoJson.message || "Canonical preview pipeline returned hold or error");
     }
   } catch (err) {
     console.error("  ✘ Test 2 failed:", err.message);
