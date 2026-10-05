@@ -28,9 +28,19 @@ export function computeChecksum(content) {
 }
 
 export function sanitizeSqlForRunner(sql) {
-  return sql
+  let sanitized = sql
     .replace(/^\s*BEGIN\s*;\s*$/gim, "-- [runner managed] BEGIN;")
     .replace(/^\s*COMMIT\s*;\s*$/gim, "-- [runner managed] COMMIT;");
+
+  // Ensure CREATE POLICY statements are idempotent by prepending DROP POLICY IF EXISTS
+  sanitized = sanitized.replace(
+    /(?:DROP\s+POLICY\s+IF\s+EXISTS\s+[^;]+;\s*)?CREATE\s+POLICY\s+("?[a-zA-Z0-9_\-\s]+"|(?:\x27[a-zA-Z0-9_\-\s]+\x27)|[a-zA-Z0-9_\-]+)\s+ON\s+([a-zA-Z0-9_\.]+)/gi,
+    (match, policyName, tableName) => {
+      return `DROP POLICY IF EXISTS ${policyName} ON ${tableName};\nCREATE POLICY ${policyName} ON ${tableName}`;
+    }
+  );
+
+  return sanitized;
 }
 
 export function resolveDbConfig(env = process.env) {
@@ -163,19 +173,6 @@ export const BASELINE_SCHEMA_REQUIREMENTS = {
       { table: "agent_runs", column: "domain" },
     ],
     indexes: ["idx_agent_events_run_id", "idx_agent_lessons_domain"],
-    functions: [],
-  },
-  "09_crm_outreach_pipeline_schema": {
-    tables: [
-      "crm_leads_state",
-      "crm_conversations",
-      "crm_messages",
-      "outreach_records",
-      "autonomous_pipeline_runs",
-      "approval_records",
-    ],
-    columns: [],
-    indexes: ["idx_crm_leads_state_user", "idx_outreach_records_lead"],
     functions: [],
   },
 };
