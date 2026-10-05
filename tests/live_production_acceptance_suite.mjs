@@ -244,6 +244,11 @@ async function run() {
       await nameInput.fill("G-Town Wines");
     }
 
+    const selectCategory = page.locator('select').first();
+    if (await selectCategory.isVisible()) {
+      await page.selectOption('select', 'Restaurant');
+    }
+
     const descInput = page.locator('textarea[placeholder*="Describe what your business does"], textarea, input[placeholder*="describe"], #description').first();
     if (await descInput.isVisible()) {
       await descInput.fill(
@@ -251,61 +256,51 @@ async function run() {
       );
     }
 
-    const nextBtn1 = page.locator('button:has-text("Continue"), button:has-text("Next"), button:has-text("Save & Continue")').first();
+    const nextBtn1 = page.locator('button:has-text("Continue")').first();
     await nextBtn1.click();
-    console.log("  Clicked Continue from Business Details...");
+    console.log("  1. Clicked Continue from Business Details...");
 
-    // Wait for step 2 (branding) or step navigation
-    await page.waitForTimeout(1500);
-
-    // If on branding: click Next
-    if (page.url().includes("branding")) {
-      console.log("  Navigating through Branding step...");
-      const nextBtnBranding = page.locator('button:has-text("Next"), button:has-text("Continue")').first();
-      await nextBtnBranding.click();
-      await page.waitForTimeout(1500);
+    // Wait for step 2 (branding)
+    await page.waitForURL("**/branding", { timeout: 15000 });
+    console.log(`  2. Arrived at Branding: ${page.url()}`);
+    await page.waitForTimeout(500);
+    const styleSelect = page.locator('select').first();
+    if (await styleSelect.isVisible()) {
+      await page.selectOption('select', 'Modern');
     }
+    const pColor = page.locator('input[placeholder*="#2563eb"]').first();
+    if (await pColor.isVisible()) await pColor.fill("#1e3a8a");
+    const sColor = page.locator('input[placeholder*="#7c3aed"]').first();
+    if (await sColor.isVisible()) await sColor.fill("#d97706");
+    await page.click('button:has-text("Continue")');
 
-    // If on content: click Next
-    if (page.url().includes("content")) {
-      console.log("  Navigating through Content step...");
-      const nextBtnContent = page.locator('button:has-text("Next"), button:has-text("Continue")').first();
-      await nextBtnContent.click();
-      await page.waitForTimeout(1500);
-    }
+    // Wait for step 3 (content)
+    await page.waitForURL("**/content", { timeout: 15000 });
+    console.log(`  3. Arrived at Content: ${page.url()}`);
+    await page.waitForTimeout(500);
+    await page.click('button:has-text("Continue")');
 
-    // If on contact: fill contact info
-    if (page.url().includes("contact")) {
-      console.log("  Filling Contact step...");
-      const phoneInput = page.locator('input[type="tel"], input[placeholder*="Phone"]').first();
-      if (await phoneInput.isVisible()) await phoneInput.fill("085100 33333");
-      const addressInput = page.locator('input[placeholder*="Address"], textarea[placeholder*="Address"]').first();
-      if (await addressInput.isVisible()) await addressInput.fill("near A Block, adjacent to Bristol Hotel, Sector 28, DLF Phase 1, Gurugram, Haryana 122002, India");
-      const nextBtnContact = page.locator('button:has-text("Next"), button:has-text("Continue")').first();
-      await nextBtnContact.click();
-      await page.waitForTimeout(1500);
-    }
+    // Wait for step 4 (contact)
+    await page.waitForURL("**/contact", { timeout: 15000 });
+    console.log(`  4. Arrived at Contact: ${page.url()}`);
+    await page.waitForTimeout(500);
+    await page.click('button:has-text("Continue")');
 
-    // If on integrations: click Next
-    if (page.url().includes("integrations")) {
-      console.log("  Navigating through Integrations step...");
-      const nextBtnInt = page.locator('button:has-text("Next"), button:has-text("Continue")').first();
-      await nextBtnInt.click();
-      await page.waitForTimeout(1500);
-    }
+    // Wait for step 5 (integrations)
+    await page.waitForURL("**/integrations", { timeout: 15000 });
+    console.log(`  5. Arrived at Integrations: ${page.url()}`);
+    await page.waitForTimeout(500);
+    await page.click('button:has-text("Continue")');
 
-    // Arrived at review page
-    console.log(`  Arrived at: ${page.url()}`);
-    if (page.url().includes("review")) {
-      console.log("  On Review page. Verifying details...");
-      const reviewText = await page.textContent("body");
-      assert.ok(reviewText.includes("G-Town Wines"), "Review must display business name G-Town Wines");
+    // Wait for step 6 (review)
+    await page.waitForURL("**/review", { timeout: 15000 });
+    console.log(`  6. Arrived at Review: ${page.url()}`);
+    await page.waitForTimeout(500);
+    const reviewText = await page.textContent("body");
+    assert.ok(reviewText.includes("G-Town Wines"), "Review must display business name G-Town Wines");
 
-      // Test Planning persistence: trigger /api/plan or generate website
-      console.log("  Clicking 'Generate Website'...");
-      const genBtn = page.locator('button:has-text("Generate Website"), button:has-text("Launch Website"), button:has-text("Build Website")').first();
-      await genBtn.click();
-    }
+    console.log("  7. Clicking 'Generate My Website'...");
+    await page.click('button:has-text("Generate My Website"), button:has-text("Generate Website")');
 
     // Wait for loading screen
     await page.waitForURL("**/loading**", { timeout: 15000 });

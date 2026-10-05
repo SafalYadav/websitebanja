@@ -38,7 +38,10 @@ export async function GET(request: Request, context: RouteContext) {
     return NextResponse.json({ success: true, data: workspace });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to read workspace";
-    const status = message.includes("does not own") ? 403 : message.includes("not found") ? 404 : 500;
+    const diagnostic = ((err as any)?.diagnostic || "").toLowerCase();
+    const lowerMessage = message.toLowerCase();
+    const isNotFound = lowerMessage.includes("not found") || diagnostic.includes("not found") || diagnostic.includes("blobnotfound") || diagnostic.includes("does not exist") || diagnostic.includes("no data returned");
+    const status = lowerMessage.includes("does not own") ? 403 : isNotFound ? 404 : 500;
     return NextResponse.json({ success: false, error: message }, { status });
   }
 }
