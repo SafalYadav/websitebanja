@@ -389,6 +389,44 @@ export async function executeMigrations({
               created_at, 
               updated_at
             FROM auth.users;
+
+          -- Align pre-existing legacy CRM and autonomous pipeline tables
+          DO $$
+          BEGIN
+            IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'crm_messages') THEN
+              ALTER TABLE public.crm_messages ADD COLUMN IF NOT EXISTS message_id TEXT;
+              ALTER TABLE public.crm_messages ADD COLUMN IF NOT EXISTS sender_email TEXT;
+              ALTER TABLE public.crm_messages ADD COLUMN IF NOT EXISTS recipient_email TEXT;
+              ALTER TABLE public.crm_messages ADD COLUMN IF NOT EXISTS external_message_id TEXT;
+              ALTER TABLE public.crm_messages ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT now();
+              IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'crm_messages' AND column_name = 'id') THEN
+                UPDATE public.crm_messages SET message_id = id WHERE message_id IS NULL;
+              END IF;
+            END IF;
+
+            IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'crm_conversations') THEN
+              ALTER TABLE public.crm_conversations ADD COLUMN IF NOT EXISTS conversation_id TEXT;
+              IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'crm_conversations' AND column_name = 'id') THEN
+                UPDATE public.crm_conversations SET conversation_id = id WHERE conversation_id IS NULL;
+              END IF;
+            END IF;
+
+            IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'crm_leads_state') THEN
+              ALTER TABLE public.crm_leads_state ADD COLUMN IF NOT EXISTS qualification_status TEXT DEFAULT 'NEEDS_REVIEW';
+              ALTER TABLE public.crm_leads_state ADD COLUMN IF NOT EXISTS qualification_score NUMERIC(5,2) DEFAULT 0;
+              ALTER TABLE public.crm_leads_state ADD COLUMN IF NOT EXISTS opportunity_score NUMERIC(5,2) DEFAULT 0;
+              ALTER TABLE public.crm_leads_state ADD COLUMN IF NOT EXISTS last_contact_at TIMESTAMPTZ;
+              ALTER TABLE public.crm_leads_state ADD COLUMN IF NOT EXISTS next_action TEXT;
+              ALTER TABLE public.crm_leads_state ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT '{}'::jsonb;
+              ALTER TABLE public.crm_leads_state ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT now();
+            END IF;
+
+            IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'autonomous_pipeline_runs') THEN
+              ALTER TABLE public.autonomous_pipeline_runs ADD COLUMN IF NOT EXISTS task_id TEXT;
+              ALTER TABLE public.autonomous_pipeline_runs ADD COLUMN IF NOT EXISTS user_id TEXT;
+              ALTER TABLE public.autonomous_pipeline_runs ADD COLUMN IF NOT EXISTS tenant_id TEXT;
+            END IF;
+          END $$;
         `);
       } catch (roleErr) {
         // Safe fallback if client is mock or role creation is non-fatal
