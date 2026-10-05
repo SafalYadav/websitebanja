@@ -166,9 +166,11 @@ async function main() {
     envVarsToSet.push(`GMAIL_REFRESH_TOKEN=secretref:gmail-refresh-token`);
     envVarsToSet.push(`GOOGLE_REFRESH_TOKEN=secretref:gmail-refresh-token`);
   }
+  const automationTenantId = process.env.AUTOMATION_TENANT_ID || adminUserIds.split(",")[0]?.trim() || "a0d29ad3-4c93-4bcd-a4d0-b45804017cf2";
   if (automationSecret) {
     envVarsToSet.push(`WEBSITEBANJA_AUTOMATION_SECRET=secretref:automation-secret`);
     envVarsToSet.push(`WEBSITEBANJA_AUTOMATION_ENABLED=true`);
+    envVarsToSet.push(`AUTOMATION_TENANT_ID=${automationTenantId}`);
   }
   envVarsToSet.push(`GMAIL_CLIENT_ID=${gmailClientId}`);
   envVarsToSet.push(`GOOGLE_CLIENT_ID=${gmailClientId}`);
@@ -240,6 +242,7 @@ async function main() {
           if (automationSecret) {
             envMap.set("WEBSITEBANJA_AUTOMATION_SECRET", { name: "WEBSITEBANJA_AUTOMATION_SECRET", secretRef: "automation-secret" });
             envMap.set("WEBSITEBANJA_AUTOMATION_ENABLED", { name: "WEBSITEBANJA_AUTOMATION_ENABLED", value: "true" });
+            envMap.set("AUTOMATION_TENANT_ID", { name: "AUTOMATION_TENANT_ID", value: automationTenantId });
           }
           envMap.set("GMAIL_CLIENT_ID", { name: "GMAIL_CLIENT_ID", value: gmailClientId });
           envMap.set("GOOGLE_CLIENT_ID", { name: "GOOGLE_CLIENT_ID", value: gmailClientId });

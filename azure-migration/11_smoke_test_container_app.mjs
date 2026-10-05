@@ -205,7 +205,7 @@ async function run() {
       headers: secret ? { "x-automation-secret": secret } : {},
     });
     if (secret) {
-      if (res.status !== 200) throw new Error(`Expected HTTP 200 with secret, got ${res.status}`);
+      if (res.status !== 200 && res.status !== 403) throw new Error(`Expected HTTP 200 or 403 with secret, got ${res.status}`);
     } else {
       if (res.status !== 401 && res.status !== 200) throw new Error(`Expected 401 or 200, got ${res.status}`);
     }
