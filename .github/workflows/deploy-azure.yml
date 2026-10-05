@@ -152,23 +152,88 @@ jobs:
           DATABASE_SSL_REJECT_UNAUTHORIZED: "true"
         run: |
           echo "Executing authoritative database migration runner with advisory locking..."
+          
+          # 1. Resolve host/user/database/port from Container App if not provided via secrets
           if [ -z "$DATABASE_URL" ] && [ -z "$AZURE_DB_USER" ]; then
-            echo "Resolving DB credentials from Azure Container App environment..."
-            DB_HOST=$(az containerapp show --name "$CONTAINER_APP_NAME" --resource-group "$RESOURCE_GROUP" --query "properties.template.containers[0].env[?name=='AZURE_DB_HOST'].value" -o tsv 2>/dev/null || echo "")
-            DB_USER=$(az containerapp show --name "$CONTAINER_APP_NAME" --resource-group "$RESOURCE_GROUP" --query "properties.template.containers[0].env[?name=='AZURE_DB_USER'].value" -o tsv 2>/dev/null || echo "")
-            if [ -n "$DB_HOST" ]; then export AZURE_DB_HOST="$DB_HOST"; fi
-            if [ -n "$DB_USER" ]; then export AZURE_DB_USER="$DB_USER"; fi
+            echo "Resolving DB configuration from Azure Container App environment..."
+            APP_JSON=$(az containerapp show --name "$CONTAINER_APP_NAME" --resource-group "$RESOURCE_GROUP" -o json 2>/dev/null || echo "{}")
+            RESOLVED_HOST=$(echo "$APP_JSON" | jq -r '.properties.template.containers[0].env[]? | select(.name=="AZURE_DB_HOST") | .value // empty' 2>/dev/null || echo "")
+            RESOLVED_USER=$(echo "$APP_JSON" | jq -r '.properties.template.containers[0].env[]? | select(.name=="AZURE_DB_USER") | .value // empty' 2>/dev/null || echo "")
+            RESOLVED_DB=$(echo "$APP_JSON" | jq -r '.properties.template.containers[0].env[]? | select(.name=="AZURE_DB_NAME") | .value // empty' 2>/dev/null || echo "")
+            RESOLVED_PORT=$(echo "$APP_JSON" | jq -r '.properties.template.containers[0].env[]? | select(.name=="AZURE_DB_PORT") | .value // empty' 2>/dev/null || echo "")
+            
+            if [ -n "$RESOLVED_HOST" ]; then export AZURE_DB_HOST="$RESOLVED_HOST"; fi
+            if [ -n "$RESOLVED_USER" ]; then export AZURE_DB_USER="$RESOLVED_USER"; fi
+            if [ -n "$RESOLVED_DB" ]; then export AZURE_DB_NAME="$RESOLVED_DB"; fi
+            if [ -n "$RESOLVED_PORT" ]; then export AZURE_DB_PORT="$RESOLVED_PORT"; fi
           fi
+
+          # Safe defaults for Azure Flexible Server if still unset
+          if [ -z "$AZURE_DB_HOST" ]; then export AZURE_DB_HOST="websitebanja-db.postgres.database.azure.com"; fi
+          if [ -z "$AZURE_DB_USER" ]; then export AZURE_DB_USER="websitebanjaadmin"; fi
+          if [ -z "$AZURE_DB_NAME" ]; then export AZURE_DB_NAME="postgres"; fi
+          if [ -z "$AZURE_DB_PORT" ]; then export AZURE_DB_PORT="5432"; fi
+
+          # 2. Resolve database password from Container App secret store with --show-values
           if [ -z "$AZURE_DB_PASSWORD" ] && [ -z "$DATABASE_URL" ]; then
-            echo "Attempting to resolve AZURE_DB_PASSWORD from Container App secret..."
-            DB_PW=$(az containerapp secret show --name "$CONTAINER_APP_NAME" --resource-group "$RESOURCE_GROUP" --secret-name azure-db-password --query value -o tsv 2>/dev/null || echo "")
+            echo "Resolving AZURE_DB_PASSWORD from Container App secret store..."
+            SECRETS_JSON=$(az containerapp secret list --name "$CONTAINER_APP_NAME" --resource-group "$RESOURCE_GROUP" --show-values -o json 2>/dev/null || echo "[]")
+            DB_PW=$(echo "$SECRETS_JSON" | jq -r '.[]? | select(.name=="azure-db-password") | .value // empty' 2>/dev/null || echo "")
+            if [ -z "$DB_PW" ]; then
+              DB_PW=$(az containerapp secret show --name "$CONTAINER_APP_NAME" --resource-group "$RESOURCE_GROUP" --secret-name azure-db-password --show-values --query value -o tsv 2>/dev/null || echo "")
+            fi
             if [ -n "$DB_PW" ]; then export AZURE_DB_PASSWORD="$DB_PW"; fi
           fi
-          echo "DB Target Host: ${AZURE_DB_HOST:-default}, User: ${AZURE_DB_USER:-unset}, Password set: $([ -n "$AZURE_DB_PASSWORD" ] && echo 'yes' || echo 'no')"
+
+          # 3. Setup trusted Root CA for PostgreSQL TLS verification (enforce rejectUnauthorized: true)
+          echo "Setting up trusted CA for production PostgreSQL TLS verification..."
+          mkdir -p /tmp/certs
+          curl -fsSL https://dl.cacerts.digicert.com/DigiCertGlobalRootCA.crt.pem -o /tmp/certs/DigiCertGlobalRootCA.crt.pem 2>/dev/null || true
+          curl -fsSL https://cacerts.digicert.com/DigiCertGlobalRootG2.crt.pem -o /tmp/certs/DigiCertGlobalRootG2.crt.pem 2>/dev/null || true
+          if ls /tmp/certs/*.crt.pem 1>/dev/null 2>&1; then
+            cat /tmp/certs/*.crt.pem > /tmp/azure-pg-ca.pem
+            export DATABASE_SSL_CA="$(cat /tmp/azure-pg-ca.pem)"
+            echo "Loaded trusted DigiCert Root CA bundle for Azure PostgreSQL."
+          fi
+          export DATABASE_SSL_REJECT_UNAUTHORIZED="true"
+
+          # 4. Ensure firewall access on Azure Database for PostgreSQL Flexible Server for GitHub runner
+          SERVER_NAME="websitebanja-db"
+          RUNNER_IP=$(curl -fsSL https://api.ipify.org 2>/dev/null || curl -fsSL https://ifconfig.me 2>/dev/null || echo "")
+          ADDED_FIREWALL_RULE=0
+          if [ -n "$RUNNER_IP" ]; then
+            echo "Adding temporary Azure PostgreSQL firewall rule for runner IP: $RUNNER_IP..."
+            if az postgres flexible-server firewall-rule create \
+              --resource-group "$RESOURCE_GROUP" \
+              --name "$SERVER_NAME" \
+              --rule-name "gh-actions-runner-gate" \
+              --start-ip-address "$RUNNER_IP" \
+              --end-ip-address "$RUNNER_IP" 2>/dev/null; then
+              ADDED_FIREWALL_RULE=1
+              echo "Firewall rule created."
+            else
+              echo "Firewall rule creation skipped or not needed (Azure network rules already apply)."
+            fi
+          fi
+
+          echo "Target Host: $AZURE_DB_HOST, User: $AZURE_DB_USER, DB: $AZURE_DB_NAME, Port: $AZURE_DB_PORT, Password set: $([ -n "$AZURE_DB_PASSWORD" ] && echo 'yes' || echo 'no')"
+
+          # Execute Authoritative Migration Runner
           set +e
           node scripts/run_migrations.mjs 2>&1 | tee /tmp/migration_output.log
           MIG_EXIT=${PIPESTATUS[0]}
           set -e
+
+          # Cleanup temporary firewall rule if created
+          if [ "$ADDED_FIREWALL_RULE" -eq 1 ]; then
+            echo "Removing temporary firewall rule..."
+            az postgres flexible-server firewall-rule delete \
+              --resource-group "$RESOURCE_GROUP" \
+              --name "$SERVER_NAME" \
+              --rule-name "gh-actions-runner-gate" \
+              --yes 2>/dev/null || true
+          fi
+
           if [ "$MIG_EXIT" -ne 0 ]; then
             echo "MIGRATION_ERROR<<EOF" >> "$GITHUB_ENV"
             tail -n 40 /tmp/migration_output.log >> "$GITHUB_ENV"

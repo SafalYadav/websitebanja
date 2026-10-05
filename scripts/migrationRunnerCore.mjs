@@ -40,8 +40,16 @@ export function resolveDbConfig(env = process.env) {
     env.DIRECT_DATABASE_URL ||
     null;
 
-  const isProduction = env.NODE_ENV === "production" || env.WEBSITEBANJA_RUNTIME_MODE === "production";
-  const rejectUnauthorized = env.DATABASE_SSL_REJECT_UNAUTHORIZED !== "false";
+  const host = env.AZURE_DB_HOST || env.PGHOST || "websitebanja-db.postgres.database.azure.com";
+  const user = env.AZURE_DB_USER || env.PGUSER || "websitebanjaadmin";
+  const password = env.AZURE_DB_PASSWORD || env.PGPASSWORD;
+  const database = env.AZURE_DB_NAME || env.PGDATABASE || "postgres";
+  const port = parseInt(env.AZURE_DB_PORT || env.PGPORT || "5432", 10);
+
+  const isAzureHost = Boolean(host && host.includes("postgres.database.azure.com"));
+  const isProduction = env.NODE_ENV === "production" || env.WEBSITEBANJA_RUNTIME_MODE === "production" || isAzureHost;
+  // Enforce certificate verification in production. RejectUnauthorized must be true for Azure production.
+  const rejectUnauthorized = isAzureHost ? true : (env.DATABASE_SSL_REJECT_UNAUTHORIZED !== "false");
   const sslConfig = {
     rejectUnauthorized: isProduction ? rejectUnauthorized : false,
     ...(env.DATABASE_SSL_CA ? { ca: env.DATABASE_SSL_CA } : {}),
@@ -53,12 +61,6 @@ export function resolveDbConfig(env = process.env) {
       ssl: sslConfig,
     };
   }
-
-  const host = env.AZURE_DB_HOST || env.PGHOST || "websitebanja-db.postgres.database.azure.com";
-  const user = env.AZURE_DB_USER || env.PGUSER;
-  const password = env.AZURE_DB_PASSWORD || env.PGPASSWORD;
-  const database = env.AZURE_DB_NAME || env.PGDATABASE || "postgres";
-  const port = parseInt(env.AZURE_DB_PORT || env.PGPORT || "5432", 10);
 
   if (user && password) {
     return {
