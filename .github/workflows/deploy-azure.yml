@@ -165,7 +165,16 @@ jobs:
             if [ -n "$DB_PW" ]; then export AZURE_DB_PASSWORD="$DB_PW"; fi
           fi
           echo "DB Target Host: ${AZURE_DB_HOST:-default}, User: ${AZURE_DB_USER:-unset}, Password set: $([ -n "$AZURE_DB_PASSWORD" ] && echo 'yes' || echo 'no')"
-          node scripts/run_migrations.mjs
+          set +e
+          node scripts/run_migrations.mjs 2>&1 | tee /tmp/migration_output.log
+          MIG_EXIT=${PIPESTATUS[0]}
+          set -e
+          if [ "$MIG_EXIT" -ne 0 ]; then
+            echo "MIGRATION_ERROR<<EOF" >> "$GITHUB_ENV"
+            tail -n 40 /tmp/migration_output.log >> "$GITHUB_ENV"
+            echo "EOF" >> "$GITHUB_ENV"
+            exit "$MIG_EXIT"
+          fi
 
       - name: Deploy Image & Configure Azure Environment
         id: deploy
@@ -267,3 +276,10 @@ jobs:
           echo "| **Resource Group** | \`$RESOURCE_GROUP\` |" >> "$GITHUB_STEP_SUMMARY"
           echo "| **Failed Commit SHA** | \`${{ github.sha }}\` |" >> "$GITHUB_STEP_SUMMARY"
           echo "| **Status** | ❌ Failed (Previous healthy revision preserved) |" >> "$GITHUB_STEP_SUMMARY"
+          if [ -n "$MIGRATION_ERROR" ]; then
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "#### Database Migration Diagnostics:" >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            echo "$MIGRATION_ERROR" >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+          fi
